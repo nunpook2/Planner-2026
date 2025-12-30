@@ -359,7 +359,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                 </div>
                                 <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-100 dark:border-emerald-900/50 shadow-sm flex flex-col items-center justify-center">
                                     <span className="text-[14px] font-black text-emerald-600 dark:text-emerald-400 leading-none tracking-tighter">{globalStats.exec}</span>
-                                    <span className="text-[6px] font-black text-emerald-500/70 uppercase tracking-widest mt-1">Test</span>
+                                    <span className="text-[6px] font-black text-base-400 uppercase tracking-widest mt-1">Test</span>
                                 </div>
                             </div>
 
