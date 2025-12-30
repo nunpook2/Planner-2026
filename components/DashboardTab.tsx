@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Tester, AssignedTask, RawTask, ShiftReport, DailySchedule, AssignedPrepareTask, CategorizedTask } from '../types';
 import { TaskStatus, TaskCategory } from '../types';
@@ -355,11 +354,11 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                 </div>
                                 <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-100 dark:border-amber-900/50 shadow-sm flex flex-col items-center justify-center">
                                     <span className="text-[14px] font-black text-amber-600 dark:text-amber-400 leading-none tracking-tighter">{globalStats.prep}</span>
-                                    <span className="text-[6px] font-black text-base-400 uppercase tracking-widest mt-1">Prep</span>
+                                    <span className="text-[6px] font-black text-amber-500/70 uppercase tracking-widest mt-1">Prep</span>
                                 </div>
                                 <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-100 dark:border-emerald-900/50 shadow-sm flex flex-col items-center justify-center">
                                     <span className="text-[14px] font-black text-emerald-600 dark:text-emerald-400 leading-none tracking-tighter">{globalStats.exec}</span>
-                                    <span className="text-[6px] font-black text-base-400 uppercase tracking-widest mt-1">Test</span>
+                                    <span className="text-[6px] font-black text-emerald-500/70 uppercase tracking-widest mt-1">Test</span>
                                 </div>
                             </div>
 
