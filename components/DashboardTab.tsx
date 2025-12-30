@@ -10,7 +10,7 @@ import {
     UserGroupIcon, RefreshIcon, 
     BeakerIcon, CalendarIcon,
     SunIcon, MoonIcon, DownloadIcon,
-    ChevronDownIcon, ClipboardListIcon, SparklesIcon
+    ChevronDownIcon, SparklesIcon
 } from './common/Icons';
 
 declare const XLSX: any;
@@ -90,7 +90,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
     const [notification, setNotification] = useState<{message: string, isError: boolean} | null>(null);
     const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
     
-    // Accordion State
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
     const fetchData = useCallback(async () => {
@@ -143,7 +142,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
 
         const processTaskFlags = (t: RawTask, cat: TaskCategory) => {
             const spec = getSpecialStatus(t, cat);
-            // Priority Hierarchy Logic: LSP > Sprint > Urgent > PoCat
+            // Priority Hierarchy: LSP > Sprint > Urgent > PoCat
             if (spec.isLSP) {
                 lspCount++;
             } else if (spec.isSprint) {
@@ -155,22 +154,20 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
             }
         };
 
-        // Counting for Special Ops flags ONLY from Execution (Test) tasks
+        // COUNTING ONLY FROM TEST (EXECUTION) TASKS
         assignedTasks.forEach(group => {
-            exec += group.tasks.length;
+            exec += (group.tasks || []).length;
             group.tasks.forEach(t => processTaskFlags(t, group.category));
         });
 
-        // Preparation tasks only count towards volume total, not special flags per requirement
+        // PREPARATION TASKS ONLY COUNT TOWARDS TOTAL
         prepareTasks.forEach(group => {
-            prep += group.tasks.length;
+            prep += (group.tasks || []).length;
         });
 
         total = exec + prep;
         return { 
-            total, 
-            prep, 
-            exec, 
+            total, prep, exec, 
             lsp: lspCount, 
             sprint: sprintCount, 
             urgent: urgentCount, 
@@ -231,23 +228,17 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
             });
         };
 
-        assignedTasks.forEach(g => g.tasks.forEach(t => addActivity(g.testerName, t, g.category, t.status === TaskStatus.Done)));
-        prepareTasks.forEach(g => g.tasks.forEach(t => addActivity(g.assistantName, t, g.category, t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing')));
+        assignedTasks.forEach(g => (g.tasks || []).forEach(t => addActivity(g.testerName, t, g.category, t.status === TaskStatus.Done)));
+        prepareTasks.forEach(g => (g.tasks || []).forEach(t => addActivity(g.assistantName, t, g.category, t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing')));
         poolTasks.forEach(group => {
             const returnerName = group.returnedBy;
             if (returnerName && stats[returnerName]) {
-                group.tasks.forEach(t => addActivity(returnerName, t, group.category, false));
+                (group.tasks || []).forEach(t => addActivity(returnerName, t, group.category, false));
             }
         });
 
         return Object.values(stats).sort((a, b) => b.pendingTasks - a.pendingTasks);
     }, [assignedTasks, prepareTasks, poolTasks, schedule, testers, selectedShift]);
-
-    useEffect(() => {
-        if (selectedPersonId) {
-            setExpandedGroups(new Set());
-        }
-    }, [selectedPersonId]);
 
     const activePerson = processedPersonnel.find(p => p.id === selectedPersonId);
 
@@ -315,9 +306,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                 .person-avatar { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); }
                 .person-avatar.assistant { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); }
                 .active-glow { box-shadow: 0 0 20px -5px rgba(99, 102, 241, 0.4); }
-                .full-click-date-input::-webkit-calendar-picker-indicator {
-                    position: absolute; top: 0; left: 0; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; cursor: pointer;
-                }
                 @keyframes glow-issue {
                     0% { box-shadow: 0 0 5px rgba(220, 38, 38, 0.2); }
                     50% { box-shadow: 0 0 15px rgba(220, 38, 38, 0.6); }
@@ -325,8 +313,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                 }
                 .issue-badge-premium {
                     animation: glow-issue 1.5s ease-in-out infinite;
-                    text-rendering: optimizeLegibility;
-                    -webkit-font-smoothing: antialiased;
                 }
             `}</style>
 
@@ -338,7 +324,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                         <div className="w-2 h-2 rounded-full bg-primary-500 animate-pulse shadow-sm"></div>
                     </div>
                     
-                    {/* Person List Area */}
                     <div className="flex-grow overflow-y-auto no-scrollbar p-2.5 space-y-1.5 min-h-0">
                         {processedPersonnel.map(person => {
                             const isActive = selectedPersonId === person.id;
@@ -347,12 +332,8 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                 <button key={person.id} onClick={() => setSelectedPersonId(person.id)} className={`w-full group flex items-center gap-3 p-3 rounded-[1.3rem] transition-all duration-300 border text-left ${isActive ? 'bg-gradient-to-r from-primary-600 to-indigo-600 border-primary-500 text-white shadow-lg active-glow scale-[1.02]' : 'bg-white/40 dark:bg-base-900/40 hover:bg-white dark:hover:bg-base-800 border-transparent hover:border-base-200 dark:hover:border-base-700'}`}>
                                     <div className={`w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-[11px] font-black shadow-inner ${isAssistant ? 'person-avatar assistant' : 'person-avatar'} ${isActive ? 'ring-2 ring-white/40' : 'text-white'}`}>{person.name.substring(0, 2).toUpperCase()}</div>
                                     <div className="flex-grow min-w-0">
-                                        <span className={`block text-[14px] font-black tracking-tight leading-tight ${isActive ? 'text-white' : 'text-base-800 dark:text-base-100'}`}>
-                                            {person.name}
-                                        </span>
-                                        <span className={`text-[8px] font-bold uppercase tracking-widest mt-1 block ${isActive ? 'text-white/60' : 'text-base-400'}`}>
-                                            {isAssistant ? 'Assistant' : 'Analyst'}
-                                        </span>
+                                        <span className={`block text-[14px] font-black tracking-tight leading-tight ${isActive ? 'text-white' : 'text-base-800 dark:text-base-100'}`}>{person.name}</span>
+                                        <span className={`text-[8px] font-bold uppercase tracking-widest mt-1 block ${isActive ? 'text-white/60' : 'text-base-400'}`}>{isAssistant ? 'Assistant' : 'Analyst'}</span>
                                     </div>
                                     {person.pendingTasks > 0 && <div className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[8px] font-black ${isActive ? 'bg-white text-primary-600 shadow-md' : 'bg-red-500 text-white shadow-sm'}`}>{person.pendingTasks}</div>}
                                 </button>
@@ -360,73 +341,52 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                         })}
                     </div>
 
-                    {/* NEW: Redesigned Shift Stats Summary Box (Partitions) */}
                     <div className="p-4 bg-white/40 dark:bg-base-950/40 border-t border-white dark:border-base-800 shrink-0 space-y-3">
                         <div className="flex items-center gap-2 mb-1 px-1">
                             <SparklesIcon className="h-3.5 w-3.5 text-primary-500" />
-                            <h4 className="text-[9px] font-black text-base-400 uppercase tracking-widest">Shift Performance</h4>
+                            <h4 className="text-[9px] font-black text-base-400 uppercase tracking-widest">Performance Insight</h4>
                         </div>
                         
                         <div className="space-y-2">
-                            {/* Main Counts Row */}
                             <div className="grid grid-cols-3 gap-2">
-                                <div className="p-2.5 bg-white dark:bg-base-900 rounded-xl border border-white dark:border-base-800 shadow-sm flex flex-col items-center justify-center text-center">
+                                <div className="p-2.5 bg-white dark:bg-base-900 rounded-xl border border-white dark:border-base-800 shadow-sm flex flex-col items-center justify-center">
                                     <span className="text-[14px] font-black text-slate-900 dark:text-white leading-none tracking-tighter">{globalStats.total}</span>
                                     <span className="text-[6px] font-black text-base-400 uppercase tracking-widest mt-1">Total</span>
                                 </div>
-                                <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-100 dark:border-amber-900/50 shadow-sm flex flex-col items-center justify-center text-center">
+                                <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-100 dark:border-amber-900/50 shadow-sm flex flex-col items-center justify-center">
                                     <span className="text-[14px] font-black text-amber-600 dark:text-amber-400 leading-none tracking-tighter">{globalStats.prep}</span>
                                     <span className="text-[6px] font-black text-amber-500/70 uppercase tracking-widest mt-1">Prep</span>
                                 </div>
-                                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-100 dark:border-emerald-900/50 shadow-sm flex flex-col items-center justify-center text-center">
+                                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-100 dark:border-emerald-900/50 shadow-sm flex flex-col items-center justify-center">
                                     <span className="text-[14px] font-black text-emerald-600 dark:text-emerald-400 leading-none tracking-tighter">{globalStats.exec}</span>
                                     <span className="text-[6px] font-black text-emerald-500/70 uppercase tracking-widest mt-1">Test</span>
                                 </div>
                             </div>
 
-                            {/* Redesigned Special Ops Box - 4 Partitions by Priority Hierarchy */}
                             <div className="bg-indigo-50/50 dark:bg-indigo-950/20 rounded-2xl border-2 border-indigo-100 dark:border-indigo-900/50 p-3 shadow-inner overflow-hidden">
-                                <div className="flex justify-between items-center mb-2.5 border-b border-indigo-100/50 dark:border-indigo-900/50 pb-1.5 px-0.5">
-                                    <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">Special Missions (Test Only)</span>
+                                <div className="flex justify-between items-center mb-2 border-b border-indigo-100/50 dark:border-indigo-900/50 pb-1.5 px-0.5">
+                                    <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">Special Operations (Test)</span>
                                     <span className="text-[14px] font-black text-indigo-700 dark:text-indigo-400 tracking-tighter">{globalStats.totalSpecial}</span>
                                 </div>
                                 <div className="space-y-1.5">
-                                    {/* 1. LSP - Highest Priority */}
-                                    <div className="flex items-center justify-between px-2 py-1.5 bg-white dark:bg-base-900/50 rounded-lg shadow-sm">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-cyan-500"></div>
-                                            <span className="text-[8px] font-black text-base-500 uppercase tracking-widest">LSP Focus</span>
-                                        </div>
-                                        <span className="text-[12px] font-black text-cyan-600 dark:text-cyan-400 leading-none">{globalStats.lsp}</span>
+                                    <div className="flex items-center justify-between px-2 py-1 bg-white dark:bg-base-900/50 rounded-lg shadow-sm">
+                                        <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-cyan-500"></div><span className="text-[8px] font-black text-base-500 uppercase tracking-widest">LSP Focus</span></div>
+                                        <span className="text-[12px] font-black text-cyan-600 dark:text-cyan-400">{globalStats.lsp}</span>
                                     </div>
-                                    {/* 2. Sprint */}
-                                    <div className="flex items-center justify-between px-2 py-1.5 bg-white dark:bg-base-900/50 rounded-lg shadow-sm">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div>
-                                            <span className="text-[8px] font-black text-base-500 uppercase tracking-widest">Sprint Ops</span>
-                                        </div>
-                                        <span className="text-[12px] font-black text-rose-600 dark:text-rose-400 leading-none">{globalStats.sprint}</span>
+                                    <div className="flex items-center justify-between px-2 py-1 bg-white dark:bg-base-900/50 rounded-lg shadow-sm">
+                                        <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div><span className="text-[8px] font-black text-base-500 uppercase tracking-widest">Sprint Ops</span></div>
+                                        <span className="text-[12px] font-black text-rose-600 dark:text-rose-400">{globalStats.sprint}</span>
                                     </div>
-                                    {/* 3. Urgent */}
-                                    <div className="flex items-center justify-between px-2 py-1.5 bg-white dark:bg-base-900/50 rounded-lg shadow-sm">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-orange-500"></div>
-                                            <span className="text-[8px] font-black text-base-500 uppercase tracking-widest">Urgent List</span>
-                                        </div>
-                                        <span className="text-[12px] font-black text-orange-600 dark:text-orange-400 leading-none">{globalStats.urgent}</span>
+                                    <div className="flex items-center justify-between px-2 py-1 bg-white dark:bg-base-900/50 rounded-lg shadow-sm">
+                                        <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-orange-500"></div><span className="text-[8px] font-black text-base-500 uppercase tracking-widest">Urgent List</span></div>
+                                        <span className="text-[12px] font-black text-orange-600 dark:text-orange-400">{globalStats.urgent}</span>
                                     </div>
-                                    {/* 4. PoCat - Final Priority */}
-                                    <div className="flex items-center justify-between px-2 py-1.5 bg-white dark:bg-base-900/50 rounded-lg shadow-sm">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-violet-500"></div>
-                                            <span className="text-[8px] font-black text-base-500 uppercase tracking-widest">PoCat Work</span>
-                                        </div>
-                                        <span className="text-[12px] font-black text-violet-600 dark:text-violet-400 leading-none">{globalStats.pocat}</span>
+                                    <div className="flex items-center justify-between px-2 py-1 bg-white dark:bg-base-900/50 rounded-lg shadow-sm">
+                                        <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-violet-500"></div><span className="text-[8px] font-black text-base-500 uppercase tracking-widest">PoCat Work</span></div>
+                                        <span className="text-[12px] font-black text-violet-600 dark:text-violet-400">{globalStats.pocat}</span>
                                     </div>
                                 </div>
-                                <p className="text-[5.5px] font-bold text-indigo-400 uppercase tracking-widest text-center mt-2 opacity-60 italic">
-                                    Hierarchy: LSP > Sprint > Urgent > PoCat
-                                </p>
+                                <p className="text-[5.5px] font-bold text-indigo-400 uppercase tracking-widest text-center mt-2 opacity-60">Hierarchy: LSP > Sprint > Urgent > PoCat</p>
                             </div>
                         </div>
                     </div>
@@ -469,10 +429,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
 
                                             return (
                                                 <div key={idx} className={`rounded-[1.8rem] border-2 overflow-hidden transition-all duration-300 shadow-lg ${isComplete ? 'bg-emerald-50/10 border-emerald-100/50' : hasError ? 'bg-white dark:bg-base-800 border-red-200' : 'bg-white dark:bg-base-800 border-base-200 dark:border-base-700'}`}>
-                                                    <button 
-                                                        onClick={() => toggleGroup(sum.desc)}
-                                                        className={`w-full text-left px-6 py-4 border-b-2 flex justify-between items-start transition-colors ${isComplete ? 'bg-emerald-50/40 hover:bg-emerald-100/40' : hasError ? 'bg-red-50/40 hover:bg-red-100/40' : 'bg-base-50/50 hover:bg-base-100/50'}`}
-                                                    >
+                                                    <button onClick={() => toggleGroup(sum.desc)} className={`w-full text-left px-6 py-4 border-b-2 flex justify-between items-start transition-colors ${isComplete ? 'bg-emerald-50/40 hover:bg-emerald-100/40' : hasError ? 'bg-red-50/40 hover:bg-red-100/40' : 'bg-base-50/50 hover:bg-base-100/50'}`}>
                                                         <div className="min-w-0 pr-4 flex items-start gap-4">
                                                             <ChevronDownIcon className={`h-5 w-5 mt-1.5 text-base-400 transition-transform duration-300 ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
                                                             <div>
@@ -481,20 +438,16 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                                                     {sum.isUrgent && <span className="bg-rose-500 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">URGENT</span>}
                                                                     {sum.isLSP && <span className="bg-cyan-600 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">LSP</span>}
                                                                     {sum.isPoCat && <span className="bg-violet-600 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">POCAT</span>}
-                                                                    {sum.isManual && <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">MANUAL</span>}
                                                                 </div>
-                                                                <h3 className={`text-[16px] font-black tracking-tight uppercase whitespace-normal leading-tight transition-colors ${isComplete ? 'text-emerald-900 opacity-60' : 'text-base-950 dark:text-white'}`}>{sum.desc}</h3>
+                                                                <h3 className={`text-[16px] font-black tracking-tight uppercase whitespace-normal leading-tight ${isComplete ? 'text-emerald-900 opacity-60' : 'text-base-950 dark:text-white'}`}>{sum.desc}</h3>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-6 flex-shrink-0 mt-1">
                                                             <div className="flex flex-col items-end">
-                                                                <span className={`text-[24px] font-black tracking-tighter leading-none ${isComplete ? 'text-emerald-700' : hasError ? 'text-red-700' : 'text-primary-700'}`}>
-                                                                    {sum.done}<span className="text-base-300 mx-1 font-normal text-lg">/</span>{sum.total}
-                                                                </span>
-                                                                {isComplete && <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest mt-1 opacity-80">Mission: OK</span>}
+                                                                <span className={`text-[24px] font-black tracking-tighter leading-none ${isComplete ? 'text-emerald-700' : hasError ? 'text-red-700' : 'text-primary-700'}`}>{sum.done}<span className="text-base-300 mx-1 font-normal text-lg">/</span>{sum.total}</span>
                                                             </div>
                                                             <div className="w-24 h-2 bg-base-100 dark:bg-base-700 rounded-full overflow-hidden shadow-inner ring-1 ring-black/5 hidden sm:block">
-                                                                <div className={`h-full transition-all duration-700 ${isComplete ? 'bg-emerald-500' : hasError ? 'bg-red-500' : 'bg-primary-500'}`} style={{width: `${(sum.done/sum.total)*100}%`}}></div>
+                                                                <div className={`h-full transition-all duration-700 ${isComplete ? 'bg-emerald-500' : hasError ? 'bg-red-500' : 'bg-primary-50'}`} style={{width: `${(sum.done/sum.total)*100}%`}}></div>
                                                             </div>
                                                         </div>
                                                     </button>
@@ -502,20 +455,17 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                                     {isExpanded && (
                                                         <div className="p-2 space-y-1.5 bg-white/30 dark:bg-base-900/20 animate-fade-in">
                                                             {sum.samples.map((s, si) => (
-                                                                <div key={si} className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-6 py-4 bg-white dark:bg-base-900/40 rounded-[1.3rem] border border-base-100 dark:border-base-800 hover:bg-primary-50/30 dark:hover:bg-base-800 transition-colors shadow-sm gap-4">
+                                                                <div key={si} className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-6 py-4 bg-white dark:bg-base-900/40 rounded-[1.3rem] border border-base-100 dark:border-base-800 transition-colors shadow-sm gap-4">
                                                                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6 flex-grow min-w-0 w-full">
                                                                         <span className="text-[14px] font-black text-base-950 dark:text-base-100 uppercase tracking-tight whitespace-normal leading-tight min-w-0 sm:min-w-[180px]">{s.name}</span>
                                                                         <div className="flex items-center gap-3 shrink-0">
                                                                             <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-xl text-[10px] font-black">x{s.qty}</span>
                                                                             <span className="text-[11px] font-extrabold text-base-800 dark:text-base-400 uppercase flex items-center gap-1.5"><span className="text-primary-600 opacity-50 font-black">D:</span> {s.detail}</span>
                                                                         </div>
-                                                                        
                                                                         {s.reason && (
                                                                             <div className="flex items-center gap-2.5 px-4 py-2 bg-red-700 text-white rounded-[12px] sm:ml-auto issue-badge-premium border border-red-500 shrink-0 shadow-lg w-full sm:w-auto">
                                                                                 <AlertTriangleIcon className="h-4 w-4 shrink-0" />
-                                                                                <span className="text-[11px] font-black uppercase tracking-tight font-black uppercase tracking-tight leading-none whitespace-normal">
-                                                                                    Issue: {s.reason}
-                                                                                </span>
+                                                                                <span className="text-[11px] font-black uppercase tracking-tight leading-none">Issue: {s.reason}</span>
                                                                             </div>
                                                                         )}
                                                                     </div>
