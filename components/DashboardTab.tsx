@@ -354,7 +354,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                 </div>
                                 <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-100 dark:border-amber-900/50 shadow-sm flex flex-col items-center justify-center">
                                     <span className="text-[14px] font-black text-amber-600 dark:text-amber-400 leading-none tracking-tighter">{globalStats.prep}</span>
-                                    <span className="text-[6px] font-black text-amber-500/70 uppercase tracking-widest mt-1">Prep</span>
+                                    <span className="text-[6px] font-black text-base-400 uppercase tracking-widest mt-1">Prep</span>
                                 </div>
                                 <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-100 dark:border-emerald-900/50 shadow-sm flex flex-col items-center justify-center">
                                     <span className="text-[14px] font-black text-emerald-600 dark:text-emerald-400 leading-none tracking-tighter">{globalStats.exec}</span>
@@ -386,7 +386,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                     </div>
                                 </div>
                                 <p className="text-[5.5px] font-bold text-indigo-400 uppercase tracking-widest text-center mt-2 opacity-60 italic">
-                                    Hierarchy: LSP &gt; Sprint &gt; Urgent &gt; PoCat
+                                    {'Hierarchy: LSP > Sprint > Urgent > PoCat'}
                                 </p>
                             </div>
                         </div>
