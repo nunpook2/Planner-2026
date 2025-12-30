@@ -891,6 +891,9 @@ Staff: ${staffList.join(', ')}`;
                     </div>
                  )}
             </div>
+            <div className="px-4 py-2 bg-base-50 dark:bg-base-950 border-t border-base-200 dark:border-base-800 text-[9px] font-bold text-base-400 text-center uppercase tracking-widest">
+                Hierarchy: LSP &gt; Sprint &gt; Urgent &gt; PoCat
+            </div>
         </div>
     );
 };
