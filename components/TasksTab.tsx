@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import type { Tester, CategorizedTask, DailySchedule, RawTask, AssignedTask, TestMapping } from '../types';
@@ -149,7 +150,7 @@ const ManualTaskModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: 
 
     return (
         <div className="fixed inset-0 bg-base-900/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in" onClick={!isProcessing ? onClose : undefined}>
-            <div className="bg-white dark:bg-base-800 rounded-[2rem] shadow-2xl p-8 w-full max-md m-4 space-y-5 animate-slide-in-up border border-base-200 dark:border-base-700" onClick={e => e.stopPropagation()}>
+            <div className="bg-white dark:bg-base-800 rounded-[2rem] shadow-2xl p-8 w-full max-w-md m-4 space-y-5 animate-slide-in-up border border-base-200 dark:border-base-700" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-4 mb-2">
                     <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600">
                         <PlusIcon className="h-6 w-6" />
@@ -190,7 +191,7 @@ const ManualTaskModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: 
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4">
-                    <button onClick={onClose} disabled={isProcessing} className="px-6 py-3 text-[11px] font-black text-base-400 hover:text-base-800 dark:hover:text-white uppercase tracking-widest transition-colors">Cancel</button>
+                    <button onClick={onClose} className="px-6 py-3 text-[11px] font-black text-base-400 hover:text-base-800 dark:hover:text-white uppercase tracking-widest transition-colors">Cancel</button>
                     <button 
                         onClick={() => onSave({ jobId, description, quantity })} 
                         disabled={isProcessing || !jobId.trim() || !description.trim()}
@@ -232,7 +233,7 @@ const AssignmentModal: React.FC<{ isOpen: boolean; onClose: () => void; onAssign
                         )) : <li className="p-4 text-center text-xs text-base-400 italic font-bold">No testers on shift</li>}
                     </ul>
                 </div>
-                <div className="pt-2 flex justify-center"><button onClick={onClose} disabled={isProcessing} className="px-6 py-2.5 text-xs font-black text-base-400 hover:text-base-800 transition-colors uppercase tracking-[0.2em]">Cancel</button></div>
+                <div className="pt-2 flex justify-center"><button onClick={onClose} className="px-6 py-2.5 text-xs font-black text-base-400 hover:text-base-800 transition-colors uppercase tracking-[0.2em]">Cancel</button></div>
             </div>
         </div>
     );
@@ -530,6 +531,7 @@ const TasksTab: React.FC<{
         });
     }, [categorizedTasks, activeCategory, filterRequestId]);
 
+    // สำหรับแสดงผลตาราง Grid หลัก (เฉพาะงาน LIMS)
     const gridData = useMemo(() => {
         const mergedRows: Record<string, {
             requestId: string; 
@@ -541,7 +543,7 @@ const TasksTab: React.FC<{
         }> = {};
         
         filteredTasks.forEach(taskGroup => {
-            if (taskGroup.category === TaskCategory.Manual) return; 
+            if (taskGroup.category === TaskCategory.Manual) return; // ข้ามงาน Manual สำหรับตาราง Grid
 
             const rid = taskGroup.id;
             if (!mergedRows[rid]) {
@@ -580,7 +582,8 @@ const TasksTab: React.FC<{
         return Object.values(mergedRows).sort((a, b) => a.minDueDate - b.minDueDate);
     }, [filteredTasks, testMappings]);
 
-    const manualTasks = useMemo(() => {
+    // สำหรับแสดงผลรายการงาน Manual (ตารางแยก)
+    const manualTasksList = useMemo(() => {
         return filteredTasks.filter(t => t.category === TaskCategory.Manual);
     }, [filteredTasks]);
 
@@ -728,6 +731,17 @@ Staff: ${staffList.join(', ')}`;
         } catch (err) { setNotification({ message: "Failed.", isError: true }); } finally { setIsSavingManual(false); }
     };
 
+    const handleDeleteTask = async (docId: string) => {
+        if (!confirm('Are you sure you want to delete this task?')) return;
+        try {
+            await deleteCategorizedTask(docId);
+            setNotification({ message: "Task deleted." });
+            fetchData();
+        } catch (e) {
+            setNotification({ message: "Delete failed.", isError: true });
+        }
+    };
+
     const handleSelectItem = useCallback((docId: string, taskIndex: number, isChecked: boolean) => {
         setSelectedItems(prev => {
             const newSelection = { ...prev };
@@ -806,7 +820,7 @@ Staff: ${staffList.join(', ')}`;
                         <div className="flex flex-wrap gap-2.5">
                             {['all', TaskCategory.Urgent, TaskCategory.Normal, TaskCategory.PoCat, TaskCategory.Manual].map(c => (
                                 <button key={c} onClick={() => setActiveCategory(c)} className={`px-5 py-2 text-xs font-black rounded-xl transition-all border-2 uppercase tracking-[0.1em] shadow-md active:scale-95 ${activeCategory === c ? 'bg-primary-700 text-white border-primary-600' : 'bg-white dark:bg-base-800 text-base-800 dark:text-base-100 border-base-200 dark:border-base-700'}`}>
-                                    {c === 'all' ? 'Show All' : c} <span className={`ml-2 px-2 py-0.5 rounded-lg text-[10px] ${activeCategory === c ? 'bg-white/20' : 'bg-base-100 dark:bg-base-900 text-primary-600'}`}>{filteredTasks.filter(t => c === 'all' ? true : t.category === c).length}</span>
+                                    {c === 'all' ? 'Show All' : c} <span className={`ml-2 px-2 py-0.5 rounded-lg text-[10px] ${activeCategory === c ? 'bg-white/20' : 'bg-base-100 dark:bg-base-900 text-primary-600'}`}>{categorizedTasks.filter(t => c === 'all' ? true : t.category === c).length}</span>
                                 </button>
                             ))}
                         </div>
@@ -826,67 +840,139 @@ Staff: ${staffList.join(', ')}`;
                 </div>
             </div>
 
-            <div className="flex-grow min-h-0 overflow-hidden border-2 border-base-200 dark:border-base-700 rounded-3xl bg-white dark:bg-base-900 shadow-2xl relative flex flex-col mx-4 mb-4">
+            <div className="flex-grow min-h-0 overflow-auto border-2 border-base-200 dark:border-base-700 rounded-3xl bg-white dark:bg-base-900 shadow-2xl relative flex flex-col mx-4 mb-4 custom-scrollbar">
                  {isLoading ? (
                     <div className="flex flex-col items-center justify-center h-full text-base-500 font-black gap-4 uppercase tracking-[0.4em] bg-base-50 dark:bg-base-950">
                         <RefreshIcon className="animate-spin h-14 w-14 text-primary-500"/>Syncing Deployment Grid...
                     </div>
                  ) : (
-                    <div className="overflow-auto flex-grow custom-scrollbar">
-                        <table className="min-w-full text-xs text-left border-collapse border-spacing-0 table-fixed">
-                            <thead className="bg-slate-900 text-white sticky top-0 z-40">
-                                <tr>
-                                    <th rowSpan={2} style={{ width: `${COL_DUE_WIDTH}px`, minWidth: `${COL_DUE_WIDTH}px` }} className="px-5 py-4 font-black text-[11px] uppercase tracking-widest border-r border-white/10 bg-slate-900 sticky left-0 z-[60] text-center text-slate-300">Due</th>
-                                    <th rowSpan={2} style={{ width: `${COL_RID_WIDTH}px`, minWidth: `${COL_RID_WIDTH}px` }} className="px-5 py-4 font-black text-[11px] uppercase tracking-widest border-r border-white/10 bg-slate-900 sticky left-[80px] z-[60] text-center text-slate-300">Request ID & Status</th>
-                                    {activeGridHeaders.map(([group, subKeys], i) => {
-                                        const theme = HEADER_THEMES[i % HEADER_THEMES.length];
-                                        return <th key={group} colSpan={subKeys.length} className={`px-4 py-3.5 font-black text-[13px] text-center border-b border-r border-white/10 uppercase tracking-[0.25em] ${theme.headerBg} ${theme.headerText} shadow-inner`}>{group}</th>;
-                                    })}
-                                    <th rowSpan={2} className="px-6 py-4 font-black text-[13px] uppercase tracking-[0.2em] bg-slate-800 dark:bg-base-950 w-48 text-center border-l border-white/10 text-slate-300">Unmapped</th>
-                                </tr>
-                                <tr>
-                                    {activeGridHeaders.flatMap(([group, subKeys], i) => {
-                                        const theme = HEADER_THEMES[i % HEADER_THEMES.length];
-                                        return subKeys.map(key => <th key={key} className={`p-3 font-black text-[11px] text-center border-b border-r border-white/5 uppercase tracking-tighter w-24 ${theme.subHeaderBg} ${theme.subHeaderText} opacity-90`}>{key.split('|')[1]}</th>);
-                                    })}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y-2 divide-base-100 dark:divide-base-800 bg-white dark:bg-base-900">
-                                {gridData.map(row => (
-                                    <tr key={row.requestId} className="hover:bg-primary-50/30 dark:hover:bg-primary-900/10 transition-colors group">
-                                        <td style={{ width: `${COL_DUE_WIDTH}px`, minWidth: `${COL_DUE_WIDTH}px` }} className="p-1 border-r border-base-200 dark:border-base-800 bg-base-50/95 dark:bg-base-900 sticky left-0 z-30 shadow-sm">{renderDueDateCell(row.minDueDate)}</td>
-                                        <td style={{ width: `${COL_RID_WIDTH}px`, minWidth: `${COL_RID_WIDTH}px` }} className="px-4 py-3 font-black text-[15px] text-base-950 dark:text-base-50 border-r border-base-200 dark:border-base-800 bg-base-50/95 dark:bg-base-900 sticky left-[80px] z-30 shadow-sm">
-                                            <div className="flex items-center justify-between gap-4 w-full">
-                                                <span className="tracking-tight shrink-0 font-black text-[16px] text-slate-900 dark:text-slate-100">{row.requestId.replace(/^RS1-/, '')}</span>
-                                                <div className="flex flex-col gap-1 items-end min-w-[70px]">
-                                                    {/* REMOVED: row.isReturned Badge from Request ID column as requested */}
-                                                    {row.isSprint && <span className="px-2 py-0.5 bg-rose-500 text-white text-[8px] rounded-md uppercase font-black tracking-widest shadow-sm ring-1 ring-rose-400 w-full text-center">Sprint</span>}
-                                                    {row.isUrgent && <span className="px-2 py-0.5 bg-orange-500 text-white text-[8px] rounded-md uppercase font-black tracking-widest shadow-sm ring-1 ring-orange-400 w-full text-center">Urgent</span>}
-                                                    {row.isLSP && <span className="px-2 py-0.5 bg-cyan-500 text-white text-[8px] rounded-md uppercase font-black tracking-widest shadow-sm ring-1 ring-cyan-400 w-full text-center">LSP</span>}
-                                                    {row.isPoCat && <span className="px-2 py-0.5 bg-violet-600 text-white text-[8px] rounded-md uppercase font-black tracking-widest shadow-sm ring-1 ring-violet-500 w-full text-center">PoCat</span>}
+                    <div className="space-y-8 p-4">
+                        {/* SECTION 1: LIMS GRID (Hidden if Manual Filter is active) */}
+                        {activeCategory !== TaskCategory.Manual && gridData.length > 0 && (
+                            <div className="border-2 border-base-100 dark:border-base-800 rounded-[2.5rem] overflow-hidden bg-white dark:bg-base-950">
+                                <div className="overflow-auto max-h-[600px] custom-scrollbar">
+                                    <table className="min-w-full text-xs text-left border-collapse border-spacing-0 table-fixed">
+                                        <thead className="bg-slate-900 text-white sticky top-0 z-40">
+                                            <tr>
+                                                <th rowSpan={2} style={{ width: `${COL_DUE_WIDTH}px`, minWidth: `${COL_DUE_WIDTH}px` }} className="px-5 py-4 font-black text-[11px] uppercase tracking-widest border-r border-white/10 bg-slate-900 sticky left-0 z-[60] text-center text-slate-300">Due</th>
+                                                <th rowSpan={2} style={{ width: `${COL_RID_WIDTH}px`, minWidth: `${COL_RID_WIDTH}px` }} className="px-5 py-4 font-black text-[11px] uppercase tracking-widest border-r border-white/10 bg-slate-900 sticky left-[80px] z-[60] text-center text-slate-300">Request ID & Status</th>
+                                                {activeGridHeaders.map(([group, subKeys], i) => {
+                                                    const theme = HEADER_THEMES[i % HEADER_THEMES.length];
+                                                    return <th key={group} colSpan={subKeys.length} className={`px-4 py-3.5 font-black text-[13px] text-center border-b border-r border-white/10 uppercase tracking-[0.25em] ${theme.headerBg} ${theme.headerText} shadow-inner`}>{group}</th>;
+                                                })}
+                                                <th rowSpan={2} className="px-6 py-4 font-black text-[13px] uppercase tracking-[0.2em] bg-slate-800 dark:bg-base-950 w-48 text-center border-l border-white/10 text-slate-300">Unmapped</th>
+                                            </tr>
+                                            <tr>
+                                                {activeGridHeaders.flatMap(([group, subKeys], i) => {
+                                                    const theme = HEADER_THEMES[i % HEADER_THEMES.length];
+                                                    return subKeys.map(key => <th key={key} className={`p-3 font-black text-[11px] text-center border-b border-r border-white/5 uppercase tracking-tighter w-24 ${theme.subHeaderBg} ${theme.subHeaderText} opacity-90`}>{key.split('|')[1]}</th>);
+                                                })}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y-2 divide-base-100 dark:divide-base-800 bg-white dark:bg-base-900">
+                                            {gridData.map(row => (
+                                                <tr key={row.requestId} className="hover:bg-primary-50/30 dark:hover:bg-primary-900/10 transition-colors group">
+                                                    <td style={{ width: `${COL_DUE_WIDTH}px`, minWidth: `${COL_DUE_WIDTH}px` }} className="p-1 border-r border-base-200 dark:border-base-800 bg-base-50/95 dark:bg-base-900 sticky left-0 z-30 shadow-sm">{renderDueDateCell(row.minDueDate)}</td>
+                                                    <td style={{ width: `${COL_RID_WIDTH}px`, minWidth: `${COL_RID_WIDTH}px` }} className="px-4 py-3 font-black text-[15px] text-base-950 dark:text-base-50 border-r border-base-200 dark:border-base-800 bg-base-50/95 dark:bg-base-900 sticky left-[80px] z-30 shadow-sm">
+                                                        <div className="flex items-center justify-between gap-4 w-full">
+                                                            <span className="tracking-tight shrink-0 font-black text-[16px] text-slate-900 dark:text-slate-100">{row.requestId.replace(/^RS1-/, '')}</span>
+                                                            <div className="flex flex-col gap-1 items-end min-w-[70px]">
+                                                                {row.isSprint && <span className="px-2 py-0.5 bg-rose-500 text-white text-[8px] rounded-md uppercase font-black tracking-widest shadow-sm ring-1 ring-rose-400 w-full text-center">Sprint</span>}
+                                                                {row.isUrgent && <span className="px-2 py-0.5 bg-orange-500 text-white text-[8px] rounded-md uppercase font-black tracking-widest shadow-sm ring-1 ring-orange-400 w-full text-center">Urgent</span>}
+                                                                {row.isLSP && <span className="px-2 py-0.5 bg-cyan-500 text-white text-[8px] rounded-md uppercase font-black tracking-widest shadow-sm ring-1 ring-cyan-400 w-full text-center">LSP</span>}
+                                                                {row.isPoCat && <span className="px-2 py-0.5 bg-violet-600 text-white text-[8px] rounded-md uppercase font-black tracking-widest shadow-sm ring-1 ring-violet-500 w-full text-center">PoCat</span>}
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    {activeColumnKeys.map(header => (
+                                                        <ExpandableCell 
+                                                            key={header} headerKey={header} 
+                                                            items={row.cells[header] || []} 
+                                                            isGroupEnd={lastKeysOfGroups.has(header)}
+                                                            expandedCell={expandedCell} setExpandedCell={setExpandedCell}
+                                                            selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems}
+                                                            isAssigningToPrepare={isAssigningToPrepare} noteEditor={noteEditor} setNoteEditor={setNoteEditor} handleUpdatePlannerNote={handleUpdatePlannerNote}
+                                                        />
+                                                    ))}
+                                                    <ExpandableCell 
+                                                        headerKey="unmapped" items={row.unmappedItems}
+                                                        expandedCell={expandedCell} setExpandedCell={setExpandedCell}
+                                                        selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems}
+                                                        isAssigningToPrepare={isAssigningToPrepare} noteEditor={noteEditor} setNoteEditor={setNoteEditor} handleUpdatePlannerNote={handleUpdatePlannerNote}
+                                                    />
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* SECTION 2: MANUAL MISSIONS LIST (Simplified View) */}
+                        {(activeCategory === 'all' || activeCategory === TaskCategory.Manual) && manualTasksList.length > 0 && (
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3 ml-2">
+                                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-xl">
+                                        <PlusIcon className="h-5 w-5" />
+                                    </div>
+                                    <h3 className="text-xl font-black text-base-950 dark:text-base-50 tracking-tight uppercase">Manual Mission Queue</h3>
+                                </div>
+                                <div className="grid grid-cols-1 gap-4">
+                                    {manualTasksList.map((group) => (
+                                        <div key={group.docId} className="bg-white dark:bg-base-800 border-2 border-purple-100 dark:border-purple-900/30 rounded-[2rem] shadow-lg overflow-hidden group/manual hover:border-purple-400 transition-all">
+                                            <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                                <div className="flex items-center gap-5 flex-grow">
+                                                    <div className="h-14 w-14 bg-purple-50 dark:bg-purple-950/40 text-purple-600 rounded-2xl flex items-center justify-center font-black text-sm shadow-inner shrink-0">
+                                                        M
+                                                    </div>
+                                                    <div className="min-w-0 flex-grow">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-lg font-black text-slate-900 dark:text-white tracking-tight">{group.id}</span>
+                                                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-[9px] font-black rounded-lg uppercase tracking-widest">Manual</span>
+                                                        </div>
+                                                        <div className="mt-1 space-y-1">
+                                                            {group.tasks.map((t, ti) => (
+                                                                <div key={ti} className="flex flex-col sm:flex-row sm:items-center gap-3">
+                                                                    <p className="text-[14px] font-bold text-slate-600 dark:text-slate-400 leading-tight">{getTaskValue(t, 'Description')}</p>
+                                                                    <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-black rounded-lg shrink-0 w-fit">QTY: {getTaskValue(t, 'Quantity')}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3 self-end md:self-auto shrink-0">
+                                                    <div className="flex items-center gap-2 mr-2">
+                                                        {group.tasks.map((_, ti) => (
+                                                            <input 
+                                                                key={ti}
+                                                                type="checkbox" 
+                                                                className="h-6 w-6 rounded-xl text-primary-600 focus:ring-0 cursor-pointer border-2 border-base-200" 
+                                                                checked={selectedItems[group.docId!]?.has(ti) || false} 
+                                                                onChange={e => handleSelectItem(group.docId!, ti, e.target.checked)}
+                                                            />
+                                                        ))}
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select for assignment</span>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => handleDeleteTask(group.docId!)}
+                                                        className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-2xl transition-all"
+                                                    >
+                                                        <TrashIcon className="h-6 w-6" />
+                                                    </button>
                                                 </div>
                                             </div>
-                                        </td>
-                                        {activeColumnKeys.map(header => (
-                                            <ExpandableCell 
-                                                key={header} headerKey={header} 
-                                                items={row.cells[header] || []} 
-                                                isGroupEnd={lastKeysOfGroups.has(header)}
-                                                expandedCell={expandedCell} setExpandedCell={setExpandedCell}
-                                                selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems}
-                                                isAssigningToPrepare={isAssigningToPrepare} noteEditor={noteEditor} setNoteEditor={setNoteEditor} handleUpdatePlannerNote={handleUpdatePlannerNote}
-                                            />
-                                        ))}
-                                        <ExpandableCell 
-                                            headerKey="unmapped" items={row.unmappedItems}
-                                            expandedCell={expandedCell} setExpandedCell={setExpandedCell}
-                                            selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems}
-                                            isAssigningToPrepare={isAssigningToPrepare} noteEditor={noteEditor} setNoteEditor={setNoteEditor} handleUpdatePlannerNote={handleUpdatePlannerNote}
-                                        />
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        
+                        {filteredTasks.length === 0 && (
+                            <div className="flex flex-col items-center justify-center py-32 opacity-20 text-slate-300">
+                                <BeakerIcon className="h-24 w-24 mb-4" />
+                                <span className="text-xl font-black uppercase tracking-[0.5em]">No Missions in Queue</span>
+                            </div>
+                        )}
                     </div>
                  )}
             </div>
