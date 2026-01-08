@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Tester, AssignedTask, RawTask, ShiftReport, DailySchedule, AssignedPrepareTask, CategorizedTask } from '../types';
 import { TaskStatus, TaskCategory } from '../types';
@@ -37,10 +38,10 @@ interface SummaryItemStats {
     done: number; 
     failed: number; 
     returned: number;
+    isInProcess: boolean;
     isSprint: boolean;
     isUrgent: boolean;
     isLSP: boolean;
-    isPoCat: boolean;
     isManual: boolean;
     samples: SampleDetail[];
 }
@@ -64,10 +65,10 @@ const getSpecialStatus = (task: RawTask, category: TaskCategory) => {
     const allContent = Object.values(task).map(v => String(v).toLowerCase()).join(' ');
     
     return {
+        isInProcess: category === TaskCategory.InProcess || allContent.includes('in process'),
         isSprint: allContent.includes('sprint'),
         isUrgent: category === TaskCategory.Urgent || allContent.includes('urgent'),
         isLSP: allContent.includes('lsp'),
-        isPoCat: category === TaskCategory.PoCat || allContent.includes('pocat') || allContent.includes('po cat'),
         isManual: task.ManualEntry === true || category === TaskCategory.Manual
     };
 };
@@ -134,32 +135,29 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         let total = 0;
         let prep = 0;
         let exec = 0;
+        let inProcessCount = 0;
         let lspCount = 0;
         let sprintCount = 0;
         let urgentCount = 0;
-        let pocatCount = 0;
 
         const processTaskFlags = (t: RawTask, cat: TaskCategory) => {
             const spec = getSpecialStatus(t, cat);
-            // Priority Hierarchy: LSP > Sprint > Urgent > PoCat
-            if (spec.isLSP) {
+            if (spec.isInProcess) {
+                inProcessCount++;
+            } else if (spec.isLSP) {
                 lspCount++;
             } else if (spec.isSprint) {
                 sprintCount++;
             } else if (spec.isUrgent) {
                 urgentCount++;
-            } else if (spec.isPoCat) {
-                pocatCount++;
             }
         };
 
-        // COUNTING ONLY FROM TEST (EXECUTION) TASKS
         assignedTasks.forEach(group => {
             exec += (group.tasks || []).length;
             group.tasks.forEach(t => processTaskFlags(t, group.category));
         });
 
-        // PREPARATION TASKS ONLY COUNT TOWARDS TOTAL
         prepareTasks.forEach(group => {
             prep += (group.tasks || []).length;
         });
@@ -167,11 +165,11 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         total = exec + prep;
         return { 
             total, prep, exec, 
+            inProcess: inProcessCount,
             lsp: lspCount, 
             sprint: sprintCount, 
             urgent: urgentCount, 
-            pocat: pocatCount, 
-            totalSpecial: lspCount + sprintCount + urgentCount + pocatCount 
+            totalSpecial: inProcessCount + lspCount + sprintCount + urgentCount
         };
     }, [assignedTasks, prepareTasks]);
 
@@ -367,7 +365,11 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                     <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">Special Operations (Test)</span>
                                     <span className="text-[14px] font-black text-indigo-700 dark:text-indigo-400 tracking-tighter">{globalStats.totalSpecial}</span>
                                 </div>
-                                <div className="space-y-1.5">
+                                <div className="space-y-1.5 overflow-y-auto max-h-[120px] custom-scrollbar">
+                                    <div className="flex items-center justify-between px-2 py-1 bg-fuchsia-100 dark:bg-fuchsia-950/40 rounded-lg shadow-sm">
+                                        <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-fuchsia-600"></div><span className="text-[8px] font-black text-fuchsia-800 dark:text-fuchsia-300 uppercase tracking-widest">In Process</span></div>
+                                        <span className="text-[12px] font-black text-fuchsia-900 dark:text-fuchsia-200">{globalStats.inProcess}</span>
+                                    </div>
                                     <div className="flex items-center justify-between px-2 py-1 bg-white dark:bg-base-900/50 rounded-lg shadow-sm">
                                         <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-cyan-500"></div><span className="text-[8px] font-black text-base-500 uppercase tracking-widest">LSP Focus</span></div>
                                         <span className="text-[12px] font-black text-cyan-600 dark:text-cyan-400">{globalStats.lsp}</span>
@@ -380,13 +382,9 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                         <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-orange-500"></div><span className="text-[8px] font-black text-base-500 uppercase tracking-widest">Urgent List</span></div>
                                         <span className="text-[12px] font-black text-orange-600 dark:text-orange-400">{globalStats.urgent}</span>
                                     </div>
-                                    <div className="flex items-center justify-between px-2 py-1 bg-white dark:bg-base-900/50 rounded-lg shadow-sm">
-                                        <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-violet-500"></div><span className="text-[8px] font-black text-base-500 uppercase tracking-widest">PoCat Work</span></div>
-                                        <span className="text-[12px] font-black text-violet-600 dark:text-violet-400">{globalStats.pocat}</span>
-                                    </div>
                                 </div>
                                 <p className="text-[5.5px] font-bold text-indigo-400 uppercase tracking-widest text-center mt-2 opacity-60 italic">
-                                    {'Hierarchy: LSP > Sprint > Urgent > PoCat'}
+                                    {'Hierarchy: In Process > LSP > Sprint > Urgent > Normal'}
                                 </p>
                             </div>
                         </div>
@@ -435,10 +433,10 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                                             <ChevronDownIcon className={`h-5 w-5 mt-1.5 text-base-400 transition-transform duration-300 ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
                                                             <div>
                                                                 <div className="flex flex-wrap gap-2 mb-2 mt-1">
+                                                                    {sum.isInProcess && <span className="bg-fuchsia-700 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm animate-pulse">IN PROCESS</span>}
                                                                     {sum.isSprint && <span className="bg-red-600 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">SPRINT</span>}
                                                                     {sum.isUrgent && <span className="bg-rose-500 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">URGENT</span>}
                                                                     {sum.isLSP && <span className="bg-cyan-600 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">LSP</span>}
-                                                                    {sum.isPoCat && <span className="bg-violet-600 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">POCAT</span>}
                                                                 </div>
                                                                 <h3 className={`text-[16px] font-black tracking-tight uppercase whitespace-normal leading-tight ${isComplete ? 'text-emerald-900 opacity-60' : 'text-base-950 dark:text-white'}`}>{sum.desc}</h3>
                                                             </div>

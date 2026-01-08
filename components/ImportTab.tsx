@@ -1,5 +1,6 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
+import { GoogleGenAI, Type } from "@google/genai";
 import type { RawTask, GroupedTask } from '../types';
 import { TaskCategory } from '../types';
 import { addCategorizedTask } from '../services/dataService';
@@ -60,6 +61,7 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
     const [headers, setHeaders] = useState<string[]>([]);
     const [excludedColumns, setExcludedColumns] = useState<Set<string>>(new Set());
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isAiProcessing, setIsAiProcessing] = useState(false);
     const [groupedTasks, setGroupedTasks] = useState<GroupedTask[]>([]);
     const [fileName, setFileName] = useState('');
     const [globalFilter, setGlobalFilter] = useState('');
@@ -145,13 +147,57 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
         setIsProcessing(false);
     }, [rawTasks, excludedColumns]);
 
+    const handleAiTriage = async () => {
+        if (groupedTasks.length === 0) return;
+        setIsAiProcessing(true);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const promptData = groupedTasks.map(gt => ({
+                id: gt.id,
+                descriptions: gt.tasks.map(t => getTaskValue(t, 'Description')).join(', ')
+            }));
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: `Analyze these laboratory Request IDs and categorize them into: 'inprocess' (tasks explicitly marked as such or ongoing complex extraction), 'urgent' (emergency or sprint requests), 'manual' (low volume special prep), or 'normal' (standard testing).
+                
+                Data: ${JSON.stringify(promptData)}
+                
+                Return a JSON object where keys are Request IDs and values are the categories.`,
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: Type.OBJECT,
+                        properties: promptData.reduce((acc: any, curr) => {
+                            acc[curr.id] = { type: Type.STRING, enum: ['inprocess', 'urgent', 'normal', 'manual'] };
+                            return acc;
+                        }, {})
+                    }
+                }
+            });
+
+            const results = JSON.parse(response.text || '{}');
+            
+            // Apply triage automatically for the first 50 results to avoid massive batch writes
+            const entries = Object.entries(results);
+            for (const [id, category] of entries) {
+                const group = groupedTasks.find(gt => gt.id === id);
+                if (group) {
+                    await handleCategorize(group, category as TaskCategory);
+                }
+            }
+        } catch (error) {
+            console.error("AI Triage Error:", error);
+        } finally {
+            setIsAiProcessing(false);
+        }
+    };
+
     const filteredGroupedTasks = useMemo(() => {
         if (!globalFilter.trim()) return groupedTasks;
         const search = globalFilter.toLowerCase();
         return groupedTasks.filter(gt => {
-            // Check ID
             if (gt.id.toLowerCase().includes(search)) return true;
-            // Check any column in any task
             return gt.tasks.some(task => 
                 Object.values(task).some(val => String(val).toLowerCase().includes(search))
             );
@@ -185,11 +231,23 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                     <h2 className="text-3xl font-black text-base-950 dark:text-base-50 tracking-tighter">Mission Intake</h2>
                     <p className="text-base-500 mt-1 font-medium">Import new laboratory requests and triage them into deployment categories.</p>
                 </div>
-                {groupedTasks.length > 0 && (
-                    <button onClick={handleExport} className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-base-800 border-2 border-base-200 dark:border-base-700 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-base-50 transition-all shadow-md active:scale-95">
-                        <DownloadIcon className="h-4 w-4" /> Export Pre-Triaged
-                    </button>
-                )}
+                <div className="flex gap-3">
+                    {groupedTasks.length > 0 && (
+                        <button 
+                            onClick={handleAiTriage} 
+                            disabled={isAiProcessing}
+                            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-xl shadow-indigo-500/20 active:scale-95 disabled:opacity-50"
+                        >
+                            <SparklesIcon className={`h-4 w-4 ${isAiProcessing ? 'animate-spin' : ''}`} /> 
+                            {isAiProcessing ? 'AI Analyzing...' : 'AI Smart Triage'}
+                        </button>
+                    )}
+                    {groupedTasks.length > 0 && (
+                        <button onClick={handleExport} className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-base-800 border-2 border-base-200 dark:border-base-700 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-base-50 transition-all shadow-md active:scale-95">
+                            <DownloadIcon className="h-4 w-4" /> Export Pre-Triaged
+                        </button>
+                    )}
+                </div>
             </div>
             
             <div className="p-10 border-2 border-dashed border-base-300 dark:border-base-700 rounded-[2.5rem] text-center bg-white/40 dark:bg-base-900/40 backdrop-blur-md transition-all hover:border-primary-400 group relative">
@@ -262,15 +320,14 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                                 <p className="text-base-400 font-black uppercase tracking-widest">No matches found in intake queue</p>
                             </div>
                         ) : filteredGroupedTasks.map((groupedTask) => {
-                             // Global content scan for keywords
                              const allRawContent = groupedTask.tasks.map(task => 
                                 Object.values(task).map(val => String(val).toLowerCase()).join(' ')
                              ).join(' ');
 
+                             const isInProcess = allRawContent.includes('in process');
                              const isUrgent = allRawContent.includes('urgent');
                              const isSprint = allRawContent.includes('sprint');
                              const isLSP = allRawContent.includes('lsp');
-                             const isPoCat = allRawContent.includes('pocat') || allRawContent.includes('po cat');
 
                             const handleButtonClick = (e: React.MouseEvent, category: TaskCategory) => { e.stopPropagation(); handleCategorize(groupedTask, category); };
 
@@ -287,17 +344,17 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                                                 <span className="text-[10px] font-black text-base-400 uppercase tracking-widest">({groupedTask.tasks.length} items)</span>
                                             </div>
                                             <div className="flex flex-wrap gap-2 mt-2">
+                                                {isInProcess && <span className="px-2.5 py-1 text-[9px] font-black text-white bg-fuchsia-700 rounded-lg animate-pulse uppercase tracking-[0.15em] shadow-lg shadow-fuchsia-500/20">In Process</span>}
                                                 {isSprint && <span className="px-2.5 py-1 text-[9px] font-black text-white bg-rose-600 rounded-lg issue-badge-premium uppercase tracking-[0.15em] shadow-lg shadow-rose-500/20">Sprint</span>}
                                                 {isUrgent && <span className="px-2.5 py-1 text-[9px] font-black text-white bg-orange-600 rounded-lg uppercase tracking-[0.15em] shadow-lg shadow-orange-500/20">Urgent</span>}
                                                 {isLSP && <span className="px-2.5 py-1 text-[9px] font-black text-white bg-cyan-600 rounded-lg uppercase tracking-[0.15em] shadow-lg shadow-cyan-500/20">LSP</span>}
-                                                {isPoCat && <span className="px-2.5 py-1 text-[9px] font-black text-white bg-violet-600 rounded-lg uppercase tracking-[0.15em] shadow-lg shadow-violet-500/20">PoCat</span>}
                                             </div>
                                         </div>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+                                        <button onClick={(e) => handleButtonClick(e, TaskCategory.InProcess)} className="flex-1 md:flex-none px-5 py-2.5 text-[10px] font-black bg-status-inprocess text-white rounded-xl shadow-xl hover:brightness-110 active:scale-95 transition-all uppercase tracking-widest border-b-4 border-fuchsia-950">In Process</button>
                                         <button onClick={(e) => handleButtonClick(e, TaskCategory.Urgent)} className="flex-1 md:flex-none px-5 py-2.5 text-[10px] font-black bg-status-urgent text-white rounded-xl shadow-xl hover:brightness-110 active:scale-95 transition-all uppercase tracking-widest border-b-4 border-red-700">Urgent</button>
                                         <button onClick={(e) => handleButtonClick(e, TaskCategory.Normal)} className="flex-1 md:flex-none px-5 py-2.5 text-[10px] font-black bg-status-normal text-white rounded-xl shadow-xl hover:brightness-110 active:scale-95 transition-all uppercase tracking-widest border-b-4 border-blue-700">Normal</button>
-                                        <button onClick={(e) => handleButtonClick(e, TaskCategory.PoCat)} className="flex-1 md:flex-none px-5 py-2.5 text-[10px] font-black bg-status-pocat text-white rounded-xl shadow-xl hover:brightness-110 active:scale-95 transition-all uppercase tracking-widest border-b-4 border-orange-700">PoCat</button>
                                         <button onClick={(e) => handleButtonClick(e, TaskCategory.Manual)} className="flex-1 md:flex-none px-5 py-2.5 text-[10px] font-black bg-status-manual text-white rounded-xl shadow-xl hover:brightness-110 active:scale-95 transition-all uppercase tracking-widest border-b-4 border-purple-700">Manual</button>
                                     </div>
                                 </summary>

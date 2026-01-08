@@ -233,8 +233,13 @@ const ShiftBoard: React.FC<{
     );
 };
 
-const RosterTab: React.FC<{ testers: Tester[]; onTestersUpdate: () => void; }> = ({ testers }) => {
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+// Fix: Update RosterTab component to accept selectedDate and onDateChange props from App to fix line 107 error in App.tsx
+const RosterTab: React.FC<{ 
+    testers: Tester[]; 
+    onTestersUpdate: () => void; 
+    selectedDate: string;
+    onDateChange: (date: string) => void;
+}> = ({ testers, selectedDate, onDateChange }) => {
     const [scheduledDates, setScheduledDates] = useState<Set<string>>(new Set());
     const [isLoading, setIsLoading] = useState(true);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -313,7 +318,7 @@ const RosterTab: React.FC<{ testers: Tester[]; onTestersUpdate: () => void; }> =
             <div className="flex-grow min-h-0 grid grid-cols-1 xl:grid-cols-12 gap-6">
                 {/* LEFT: Calendar & Actions (3 Cols) */}
                 <div className="xl:col-span-3 flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2">
-                    <CalendarWidget selectedDate={selectedDate} onSelectDate={setSelectedDate} scheduledDates={scheduledDates} />
+                    <CalendarWidget selectedDate={selectedDate} onSelectDate={onDateChange} scheduledDates={scheduledDates} />
                     
                     <div className="bg-white dark:bg-base-800 p-6 rounded-3xl shadow-sm border border-base-200 dark:border-base-700">
                         <div className="mb-6">

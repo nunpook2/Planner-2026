@@ -1,8 +1,8 @@
 
 export enum TaskCategory {
+    InProcess = 'inprocess',
     Urgent = 'urgent',
     Normal = 'normal',
-    PoCat = 'pocat',
     Manual = 'manual',
     Other = 'other',
 }
