@@ -27,21 +27,34 @@ const HEADER_THEMES = [
 ];
 
 const COL_DUE_WIDTH = 60;
-const COL_RID_WIDTH = 180; // ลดเหลือ 180px
+const COL_RID_WIDTH = 180;
 
 // --- UTILITY FUNCTIONS ---
+const excelDateToJSDate = (serial: any): Date | null => {
+    if (!serial) return null;
+    if (typeof serial === 'number') {
+        const date = new Date((serial - 25569) * 86400 * 1000);
+        return isNaN(date.getTime()) ? null : date;
+    }
+    const date = new Date(serial);
+    return isNaN(date.getTime()) ? null : date;
+};
+
 const getTaskValue = (task: RawTask, headerType: string): any => {
     if (!task) return '';
     const keys = Object.keys(task);
     const target = headerType.toLowerCase().trim();
+    
+    // Priority check for Due Date
     if (target === 'due date' || target === 'due') {
-        const priorities = ['due date', 'due finish', 'due', 'deadline', 'requested date', 'target date', 'target'];
+        const priorities = ['due date', 'due finish', 'due', 'deadline', 'requested date', 'target date'];
         for (const p of priorities) {
             const match = keys.find(k => k.toLowerCase().trim() === p);
             if (match && task[match] !== undefined && task[match] !== null && task[match] !== '') return task[match];
         }
         return '';
     }
+
     let matchedKey = keys.find(k => k.toLowerCase().trim() === target);
     if (!matchedKey) {
         if (target === 'description') matchedKey = keys.find(k => ['desc', 'test name', 'testname', 'item'].includes(k.toLowerCase().trim()));
@@ -56,12 +69,10 @@ const getDueDateTimestamp = (tasks: RawTask[]): number => {
     let minTime = Infinity;
     for (const t of tasks) {
         const val = getTaskValue(t, 'due date');
-        if (val) {
-            const date = new Date(val);
-            if (!isNaN(date.getTime())) {
-                const time = date.getTime();
-                if (time < minTime) minTime = time;
-            }
+        const date = excelDateToJSDate(val);
+        if (date) {
+            const time = date.getTime();
+            if (time < minTime) minTime = time;
         }
     }
     return minTime;
@@ -540,7 +551,7 @@ const TasksTab: React.FC<{
         const date = new Date(timestamp);
         return (
             <div className="flex flex-col items-center justify-center leading-none">
-                <span className="text-[14px] font-black tracking-tighter">{date.getDate().toString().padStart(2, '0')}/{(date.getMonth()+1).toString().padStart(2,'0')}</span>
+                <span className="text-[14px] font-black tracking-tighter text-slate-900 dark:text-white">{date.getDate().toString().padStart(2, '0')}/{(date.getMonth()+1).toString().padStart(2,'0')}</span>
             </div>
         );
     };
@@ -558,7 +569,6 @@ const TasksTab: React.FC<{
                 <div className="flex justify-between items-center">
                     <h2 className="text-3xl font-black text-base-950 dark:text-base-50 tracking-tighter">Queue Deployment</h2>
                     <div className="flex items-center gap-3">
-                        {/* ปุ่มติ๊ก Hide คอลัมน์ที่หายไป */}
                         <button 
                             onClick={() => setHideEmptyColumns(!hideEmptyColumns)}
                             className={`px-5 py-2 text-[10px] font-black rounded-xl transition-all border-2 uppercase tracking-widest flex items-center gap-2 shadow-md ${hideEmptyColumns ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-white dark:bg-base-800 text-base-500 border-base-200'}`}
@@ -621,7 +631,7 @@ const TasksTab: React.FC<{
                                 <tbody className="divide-y-2 divide-base-100 dark:divide-base-800">
                                     {gridData.map(row => (
                                         <tr key={row.requestId} className="hover:bg-primary-50/30 group">
-                                            <td className="p-1 border-r border-base-200 dark:border-base-800 bg-white dark:bg-base-950 sticky left-0 z-40 text-center">{renderDueDateCell(row.minDueDate)}</td>
+                                            <td className="p-1 border-r border-base-200 dark:border-base-800 bg-white dark:bg-[#1e293b]/20 sticky left-0 z-40 text-center">{renderDueDateCell(row.minDueDate)}</td>
                                             <td className="px-4 py-4 font-black text-base-950 dark:text-base-50 border-r-4 border-primary-500/30 bg-white dark:bg-[#111827] sticky left-[60px] z-40 shadow-[12px_0px_25px_-10px_rgba(0,0,0,0.2)] min-w-[180px]">
                                                 <div className="flex flex-col gap-2 min-w-0">
                                                     <span className="tracking-tighter text-[15px] truncate leading-none uppercase">{row.requestId.replace(/^RS1-/, '')}</span>
