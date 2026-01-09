@@ -128,6 +128,27 @@ const NoteModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: (va
     );
 };
 
+const DeleteTemplateModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: () => void; templateId: string }> = ({ isOpen, onClose, onConfirm, templateId }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-base-900/90 backdrop-blur-xl flex items-center justify-center z-[120] animate-fade-in p-4" onClick={onClose}>
+            <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-md overflow-hidden border border-red-200 dark:border-red-900/30 p-10 text-center space-y-6" onClick={e => e.stopPropagation()}>
+                <div className="w-20 h-20 bg-red-50 dark:bg-red-900/20 rounded-[2rem] flex items-center justify-center mx-auto text-red-600 shadow-inner">
+                    <AlertTriangleIcon className="h-10 w-10" />
+                </div>
+                <div>
+                    <h3 className="text-2xl font-black text-base-955 dark:text-white tracking-tighter uppercase leading-none">Remove Template?</h3>
+                    <p className="text-base-500 mt-4 font-bold text-sm leading-relaxed">Permanently delete template <span className="text-red-600">"{templateId}"</span>? This action cannot be reversed.</p>
+                </div>
+                <div className="flex flex-col gap-3 pt-4">
+                    <button onClick={onConfirm} className="w-full py-4 bg-red-600 text-white font-black rounded-[1.5rem] shadow-xl hover:bg-red-700 transition-all uppercase tracking-[0.2em] text-[11px] border-b-4 border-red-800">Wipe Metadata</button>
+                    <button onClick={onClose} className="w-full py-3 text-[10px] font-black text-base-400 hover:text-base-800 dark:hover:text-white uppercase tracking-widest transition-colors">Keep Record</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const ManualTaskModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (task: { jobId: string; description: string; quantity: string }) => void; isProcessing: boolean }> = ({ isOpen, onClose, onSave, isProcessing }) => {
     const [jobId, setJobId] = useState('');
     const [description, setDescription] = useState('');
@@ -275,7 +296,7 @@ const ExpandableCell: React.FC<{
                                                 <div className="flex justify-between items-start mb-1 gap-4">
                                                     <div className="flex flex-col gap-1 min-w-0">
                                                         <div className="flex items-center gap-2">
-                                                            <span className="font-black text-[15px] uppercase truncate tracking-tight text-base-900 dark:text-white leading-tight">{String(getTaskValue(task, 'Sample Name'))}</span>
+                                                            <span className="font-black text-[15px] uppercase truncate tracking-tight text-base-950 dark:text-white leading-tight">{String(getTaskValue(task, 'Sample Name'))}</span>
                                                             {isPrepAwaiting && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black rounded-lg uppercase tracking-widest border border-amber-200">Awaiting Prep</span>}
                                                             {isReady && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[8px] font-black rounded-lg uppercase tracking-widest border border-emerald-200">Ready</span>}
                                                         </div>
@@ -322,6 +343,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     const [isAssigning, setIsAssigning] = useState(false);
     const [isSavingManual, setIsSavingManual] = useState(false);
     const [noteEditor, setNoteEditor] = useState<{ docId: string, index: number, text: string } | null>(null);
+    const [templateToDelete, setTemplateToDelete] = useState<CategorizedTask | null>(null);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -479,19 +501,27 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                 const selectedIndices = assignmentsByDocId[docId];
                 if (!originalTaskGroup) continue;
                 
-                if (isAssigningToPrepare && originalTaskGroup.category.toLowerCase() !== 'manual') {
+                const isManual = originalTaskGroup.category.toLowerCase() === 'manual';
+
+                if (isAssigningToPrepare && !isManual) {
                     await assignItemsToPrepare(originalTaskGroup, selectedIndices, selectedPerson, selectedDate, selectedShift);
                 } else if (!isAssigningToPrepare) {
                     const itemsToAssign = selectedIndices.map(index => {
                         const t = { ...originalTaskGroup.tasks[index] };
-                        if (originalTaskGroup.category.toLowerCase() === 'manual') t._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
+                        // CRITICAL: สำหรับงาน Manual ให้สร้าง ID ใหม่เสมอ เพื่อให้ Template เดิมยังคงอยู่
+                        t._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
                         delete t.isReturned; delete t.returnReason; delete t.returnedBy; delete t.status; delete t.notOkReason; delete t.preparationStatus;
                         return t;
                     });
+                    
                     await addAssignedTask({ requestId: originalTaskGroup.id, tasks: itemsToAssign, category: originalTaskGroup.category, testerId: selectedPerson.id, testerName: selectedPerson.name, assignedDate: selectedDate, shift: selectedShift, status: TaskStatus.Pending });
-                    const remainingItems = originalTaskGroup.tasks.filter((_, index) => !selectedIndices.includes(index));
-                    if (remainingItems.length > 0) await updateCategorizedTask(docId, { tasks: remainingItems });
-                    else await deleteCategorizedTask(docId);
+                    
+                    // Logic: ไม่ลบออกจาก Pool หากเป็นงาน Manual (เพื่อให้ใช้เป็น Template ได้เรื่อยๆ)
+                    if (!isManual) {
+                        const remainingItems = originalTaskGroup.tasks.filter((_, index) => !selectedIndices.includes(index));
+                        if (remainingItems.length > 0) await updateCategorizedTask(docId, { tasks: remainingItems });
+                        else await deleteCategorizedTask(docId);
+                    }
                 }
             }
             setNotification({ message: "Assigned Successfully." });
@@ -524,15 +554,39 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
 
     const totalSelectedCount = useMemo(() => Object.values(selectedItems).reduce((acc: number, set: Set<number>) => acc + set.size, 0), [selectedItems]);
 
+    const handleDeleteTemplate = async () => {
+        if (!templateToDelete) return;
+        try {
+            await deleteCategorizedTask(templateToDelete.docId!);
+            setNotification({ message: "Template removed." });
+            setTemplateToDelete(null);
+            fetchData();
+        } catch (e) {
+            setNotification({ message: "Delete failed.", isError: true });
+        }
+    };
+
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] space-y-4 animate-slide-in-up relative overflow-hidden">
             {notification && <Toast message={notification.message} isError={notification.isError} onDismiss={() => setNotification(null)} />}
             <AssignmentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAssign={handleConfirmAssignment} personnel={onShiftPersonnel} isPreparation={isAssigningToPrepare} selectedItemCount={totalSelectedCount} isProcessing={isAssigning}/>
             <ManualTaskModal isOpen={isManualModalOpen} onClose={() => setIsManualModalOpen(false)} onSave={handleSaveManualTask} isProcessing={isSavingManual} />
             <NoteModal isOpen={!!noteEditor} onClose={() => setNoteEditor(null)} initialNote={noteEditor?.text || ''} onConfirm={(val) => { if(noteEditor) handleUpdatePlannerNote(noteEditor.docId, noteEditor.index, val); }} />
+            <DeleteTemplateModal isOpen={!!templateToDelete} onClose={() => setTemplateToDelete(null)} onConfirm={handleDeleteTemplate} templateId={templateToDelete?.id || ''} />
 
             <div className="flex-shrink-0 space-y-3 px-4 pt-2">
-                <div className="flex justify-between items-center"><h2 className="text-3xl font-black text-base-950 dark:text-base-50 tracking-tighter">Queue Deployment</h2><button onClick={() => setHideEmptyColumns(!hideEmptyColumns)} className={`px-5 py-2 text-[10px] font-black rounded-xl transition-all border-2 uppercase tracking-widest flex items-center gap-2 shadow-md ${hideEmptyColumns ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-white dark:bg-base-800 text-base-500 border-base-200'}`}>{hideEmptyColumns ? <CheckCircleIcon className="h-4 w-4" /> : <div className="w-4 h-4 rounded border-2 border-base-300"></div>}Hide Empty Columns</button></div>
+                <div className="flex justify-between items-center">
+                    <h2 className="text-3xl font-black text-base-955 dark:text-base-50 tracking-tighter">Queue Deployment</h2>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => setIsManualModalOpen(true)}
+                            className="px-5 py-2 text-[10px] font-black rounded-xl transition-all border-2 bg-purple-600 text-white border-purple-500 uppercase tracking-widest flex items-center gap-2 shadow-md hover:brightness-110 active:scale-95"
+                        >
+                            <PlusIcon className="h-4 w-4" /> Add Manual Template
+                        </button>
+                        <button onClick={() => setHideEmptyColumns(!hideEmptyColumns)} className={`px-5 py-2 text-[10px] font-black rounded-xl transition-all border-2 uppercase tracking-widest flex items-center gap-2 shadow-md ${hideEmptyColumns ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-white dark:bg-base-800 text-base-500 border-base-200'}`}>{hideEmptyColumns ? <CheckCircleIcon className="h-4 w-4" /> : <div className="w-4 h-4 rounded border-2 border-base-300"></div>}Hide Empty Columns</button>
+                    </div>
+                </div>
                 <div className="p-5 bg-white/80 dark:bg-base-800/80 rounded-3xl border-2 border-white dark:border-base-700 shadow-xl space-y-5 backdrop-blur-md">
                     <div className="flex flex-wrap gap-2.5">
                         {['all', 'pocat', 'urgent', 'normal', 'manual'].map(c => (
@@ -597,13 +651,59 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                             </table>
                         )}
                         {manualTasksList.length > 0 && (
-                            <div className="space-y-4 p-8">
-                                <div className="flex items-center gap-3 ml-2"><PlusIcon className="h-5 w-5 text-purple-600" /><h3 className="text-xl font-black uppercase">Manual Mission Queue</h3></div>
-                                <div className="grid grid-cols-1 gap-4">
+                            <div className="space-y-6 p-10 bg-purple-50/20 dark:bg-purple-900/10 min-h-full">
+                                <div className="flex items-center gap-4 ml-2 pb-4 border-b border-purple-200 dark:border-purple-800">
+                                    <div className="p-3 bg-purple-600 rounded-2xl shadow-lg shadow-purple-500/30">
+                                        <BeakerIcon className="h-6 w-6 text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-black uppercase tracking-tighter text-purple-900 dark:text-purple-100">Mission Template Center</h3>
+                                        <p className="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Recurring Deployment Templates</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {manualTasksList.map((group) => (
-                                        <div key={group.docId} className="bg-white dark:bg-base-800 border-2 border-purple-100 dark:border-purple-900/30 rounded-[2rem] shadow-lg p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                            <div className="flex items-center gap-5 flex-grow"><div className="h-14 w-14 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center font-black text-sm shrink-0">M</div><div className="min-w-0 flex-grow"><span className="text-lg font-black">{group.id}</span><div className="mt-1">{group.tasks.map((t, ti) => <div key={ti} className="flex items-center gap-3"><p className="text-[14px] font-bold text-slate-600 dark:text-slate-400">{String(getTaskValue(t, 'Description'))}</p><span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-black rounded-lg">x{String(getTaskValue(t, 'Quantity'))}</span></div>)}</div></div></div>
-                                            <div className="flex items-center gap-3 shrink-0"><div className="flex items-center gap-2">{group.tasks.map((_, ti) => <input key={ti} type="checkbox" disabled={isAssigningToPrepare} className="h-6 w-6 rounded-xl text-primary-600 cursor-pointer disabled:opacity-20" checked={selectedItems[group.docId!]?.has(ti) || false} onChange={e => handleSelectItem(group.docId!, ti, e.target.checked)}/>)}<span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Assign</span></div><button onClick={() => { if(confirm('Delete template?')) deleteCategorizedTask(group.docId!).then(fetchData); }} className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"><TrashIcon className="h-6 w-6" /></button></div>
+                                        <div key={group.docId} className="bg-white dark:bg-base-800 border-2 border-purple-100 dark:border-purple-900/30 rounded-[2.5rem] shadow-xl flex flex-col hover:border-purple-500 transition-all duration-500 overflow-hidden group/card relative">
+                                            {/* Header */}
+                                            <div className="px-8 py-4 bg-purple-50 dark:bg-purple-900/20 border-b border-purple-100 dark:border-purple-800 flex justify-between items-center">
+                                                <span className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-[0.2em]">{group.id}</span>
+                                                <button 
+                                                    onClick={() => setTemplateToDelete(group)} 
+                                                    className="p-2 text-red-300 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
+                                                >
+                                                    <TrashIcon className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                            
+                                            {/* Body */}
+                                            <div className="p-8 flex-grow space-y-4">
+                                                {group.tasks.map((t, ti) => (
+                                                    <div key={ti} className="space-y-3">
+                                                        <h4 className="text-xl font-black text-base-900 dark:text-white uppercase leading-tight line-clamp-2">{String(getTaskValue(t, 'Description'))}</h4>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="px-3 py-1 bg-purple-600 text-white rounded-lg text-[11px] font-black shadow-md shadow-purple-500/20">QTY: {String(getTaskValue(t, 'Quantity'))}</div>
+                                                            <div className="px-3 py-1 bg-base-100 dark:bg-base-700 text-base-500 dark:text-base-300 rounded-lg text-[11px] font-black uppercase tracking-widest border border-base-200 dark:border-base-600">Manual ID: {group.id}</div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {/* Footer - Deployment Action */}
+                                            <div className="p-3 bg-base-50/50 dark:bg-base-955/50 border-t border-base-100 dark:border-base-800">
+                                                {group.tasks.map((_, ti) => (
+                                                    <label key={ti} className={`flex items-center justify-center gap-3 p-4 rounded-2xl cursor-pointer transition-all border-2 border-transparent ${selectedItems[group.docId!]?.has(ti) ? 'bg-purple-600 text-white shadow-lg' : 'bg-white dark:bg-base-800 hover:border-purple-400 text-purple-600'}`}>
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="h-5 w-5 rounded-lg border-2 border-purple-200 focus:ring-purple-500 text-purple-600" 
+                                                            checked={selectedItems[group.docId!]?.has(ti) || false} 
+                                                            onChange={e => handleSelectItem(group.docId!, ti, e.target.checked)}
+                                                        />
+                                                        <span className={`text-[12px] font-black uppercase tracking-widest ${selectedItems[group.docId!]?.has(ti) ? 'text-white' : 'text-purple-700'}`}>
+                                                            {selectedItems[group.docId!]?.has(ti) ? 'Ready for Deployment' : 'Select for Mission'}
+                                                        </span>
+                                                    </label>
+                                                ))}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
