@@ -18,6 +18,8 @@ import {
 
 declare const XLSX: any;
 
+const ALL_PERSONNEL_ID = 'unified_view_all';
+
 interface SampleDetail {
     name: string;
     qty: string;
@@ -75,7 +77,6 @@ const getPriorityStatus = (task: RawTask, category: TaskCategory): 'lsp' | 'spri
     return 'normal';
 };
 
-// --- SUB-COMPONENTS ---
 const ReportEditorModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -101,7 +102,7 @@ const ReportEditorModal: React.FC<{
             <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col border border-white/20" onClick={e => e.stopPropagation()}>
                 <div className="p-8 border-b border-base-100 dark:border-base-800 flex justify-between items-center">
                     <div>
-                        <h3 className="text-2xl font-black tracking-tighter text-base-950 dark:text-white">Lab Waste Status</h3>
+                        <h3 className="text-2xl font-black tracking-tighter text-base-955 dark:text-white">Lab Waste Status</h3>
                         <p className="text-[10px] font-bold text-base-400 uppercase tracking-widest mt-1">{date} | {shift.toUpperCase()} SHIFT</p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-base-200 dark:hover:bg-base-700 rounded-full transition-colors"><XCircleIcon className="h-6 w-6 text-base-400"/></button>
@@ -178,7 +179,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
     const [isFetching, setIsFetching] = useState(false);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [notification, setNotification] = useState<{message: string, isError: boolean} | null>(null);
-    const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+    const [selectedPersonId, setSelectedPersonId] = useState<string | null>(ALL_PERSONNEL_ID);
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
     const fetchData = useCallback(async () => {
@@ -227,45 +228,58 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                 const testerObj = testers.find(t => t.id === id);
                 if (testerObj) {
                     const isAssistant = testerObj.team === 'assistants_4_2';
-                    stats[testerObj.name] = { id: testerObj.id, name: testerObj.name, role: isAssistant ? 'ASST' : 'ANLST', pendingTasks: 0, summary: {} };
+                    stats[testerObj.id] = { id: testerObj.id, name: testerObj.name, role: isAssistant ? 'ASST' : 'ANLST', pendingTasks: 0, summary: {} };
                 }
             });
         }
-        const addActivity = (targetPerson: string, task: RawTask, cat: TaskCategory, isReady: boolean, isPrep: boolean = false) => {
-            if (!stats[targetPerson]) return; 
+        
+        const addActivity = (targetPersonId: string, task: RawTask, cat: TaskCategory, isReady: boolean, isPrep: boolean = false) => {
+            if (!stats[targetPersonId]) return; 
+            const person = stats[targetPersonId];
             const priority = isPrep ? 'normal' : getPriorityStatus(task, cat);
             const rawDesc = String(getTaskValue(task, 'Description') || 'General Task');
             const desc = isPrep ? `[PREP] ${rawDesc}` : rawDesc;
             const status = isReady ? 'done' : (task.status === TaskStatus.NotOK ? 'failed' : (task.isReturned ? 'returned' : 'pending'));
-            if (status !== 'done') stats[targetPerson].pendingTasks++;
-            if (!stats[targetPerson].summary[desc]) {
-                stats[targetPerson].summary[desc] = { desc, total: 0, done: 0, failed: 0, returned: 0, priorityStatus: priority, isManual: task.ManualEntry === true || cat === TaskCategory.Manual, isPrepGroup: isPrep, samples: [] };
+            
+            if (status !== 'done') person.pendingTasks++;
+            
+            const summaryKey = `${person.id}_${desc}`;
+            
+            if (!person.summary[summaryKey]) {
+                person.summary[summaryKey] = { desc, total: 0, done: 0, failed: 0, returned: 0, priorityStatus: priority, isManual: task.ManualEntry === true || cat === TaskCategory.Manual, isPrepGroup: isPrep, samples: [] };
             }
-            const item = stats[targetPerson].summary[desc];
+            const item = person.summary[summaryKey];
             item.total++;
             if (status === 'done') item.done++;
             if (status === 'failed') item.failed++;
             if (status === 'returned') item.returned++;
+            
             if (!isPrep) {
                 const priorities = ['lsp', 'sprint', 'urgent', 'pocat', 'normal'];
                 if (priorities.indexOf(priority) < priorities.indexOf(item.priorityStatus)) item.priorityStatus = priority;
             }
+            
             item.samples.push({ name: String(getTaskValue(task, 'Sample Name') || 'N/A'), qty: String(getTaskValue(task, 'Quantity') || '1'), detail: String(getTaskValue(task, 'Variant') || '-'), status: status, isManual: item.isManual, isPrep: isPrep, reason: task.notOkReason || task.returnReason || undefined });
         };
-        assignedTasks.forEach(g => (g.tasks || []).forEach(t => addActivity(g.testerName, t, g.category, t.status === TaskStatus.Done, false)));
+
+        assignedTasks.forEach(g => (g.tasks || []).forEach(t => addActivity(g.testerId, t, g.category, t.status === TaskStatus.Done, false)));
         prepareTasks.forEach(g => (g.tasks || []).forEach(t => {
             const isDone = t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing';
-            addActivity(g.assistantName, t, g.category, isDone, true);
+            addActivity(g.assistantId, t, g.category, isDone, true);
         }));
+
         return Object.values(stats).sort((a, b) => b.pendingTasks - a.pendingTasks);
     }, [assignedTasks, prepareTasks, schedule, testers, selectedShift]);
 
-    const activePerson = processedPersonnel.find(p => p.id === selectedPersonId);
+    const activePerson = useMemo(() => {
+        if (!selectedPersonId || selectedPersonId === ALL_PERSONNEL_ID) return null;
+        return processedPersonnel.find(p => p.id === selectedPersonId) || null;
+    }, [processedPersonnel, selectedPersonId]);
 
-    const toggleGroup = (desc: string) => {
+    const toggleGroup = (key: string) => {
         setExpandedGroups(prev => {
             const next = new Set(prev);
-            if (next.has(desc)) next.delete(desc); else next.add(desc);
+            if (next.has(key)) next.delete(key); else next.add(key);
             return next;
         });
     };
@@ -291,12 +305,120 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         }
     }, [shiftReport]);
 
+    const renderPersonnelSection = (person: PersonStats) => {
+        const missions = Object.entries(person.summary);
+        if (missions.length === 0) return null;
+
+        const totalDone = Object.values(person.summary).reduce((acc, s) => acc + s.done, 0);
+        const totalAll = Object.values(person.summary).reduce((acc, s) => acc + s.total, 0);
+
+        return (
+            <div key={person.id} className="relative group/person mb-12 animate-fade-in">
+                {/* Visual Anchor Bar */}
+                <div className={`absolute -left-3 top-0 bottom-0 w-1.5 rounded-full transition-all duration-500 ${person.role === 'ASST' ? 'bg-amber-500 group-hover/person:w-2' : 'bg-primary-600 group-hover/person:w-2'}`}></div>
+                
+                {/* Section Header */}
+                <div className="sticky top-0 z-[15] px-4 py-2 mb-4 bg-white/95 dark:bg-base-900/95 backdrop-blur-md rounded-2xl border border-base-200 dark:border-base-800 shadow-sm flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-[11px] font-black text-white shadow-lg ${person.role === 'ASST' ? 'person-avatar assistant' : 'person-avatar'}`}>
+                            {person.name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                            <h4 className="text-[16px] font-black text-base-955 dark:text-base-50 uppercase tracking-tighter leading-none">{person.name}</h4>
+                            <span className={`text-[8px] font-black uppercase tracking-[0.2em] mt-1 block ${person.role === 'ASST' ? 'text-amber-600' : 'text-primary-600'}`}>
+                                {person.role === 'ASST' ? 'Assistant Ops' : 'Analyst Ops'}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-6">
+                        <div className="flex flex-col items-end">
+                            <span className="text-[8px] font-black text-base-400 uppercase tracking-widest">Load Performance</span>
+                            <span className={`text-[15px] font-black ${totalDone === totalAll ? 'text-emerald-600' : 'text-primary-600'}`}>
+                                {totalDone} <span className="text-base-300 mx-0.5 font-normal">/</span> {totalAll}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Missions Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 px-1">
+                    {missions.map(([key, sum]) => {
+                        const isComplete = sum.done === sum.total;
+                        const hasError = sum.failed > 0 || sum.returned > 0;
+                        const isExpanded = expandedGroups.has(key);
+                        
+                        return (
+                            <div key={key} className={`group/mission rounded-[1.8rem] border-2 transition-all duration-300 flex flex-col overflow-hidden ${isComplete ? 'bg-emerald-50/5 border-emerald-100/30' : hasError ? 'bg-red-50/5 border-red-100/30 shadow-md' : 'bg-white dark:bg-base-800 border-base-100 dark:border-base-700 hover:border-primary-500/30 hover:shadow-xl'}`}>
+                                <button onClick={() => toggleGroup(key)} className="w-full text-left p-5 flex flex-col gap-3">
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex flex-wrap gap-1.5 min-h-[1.5rem]">
+                                            {sum.isPrepGroup && <span className="bg-amber-500 text-white px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest border-b-2 border-amber-700">PREP</span>}
+                                            {!sum.isPrepGroup && sum.priorityStatus !== 'normal' && (
+                                                <span className={`px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest text-white border-b-2 ${
+                                                    sum.priorityStatus === 'lsp' ? 'bg-cyan-600 border-cyan-800' : 
+                                                    sum.priorityStatus === 'sprint' ? 'bg-rose-600 border-rose-800' : 
+                                                    sum.priorityStatus === 'urgent' ? 'bg-red-500 border-red-800' : 'bg-orange-500 border-orange-800'
+                                                }`}>{sum.priorityStatus}</span>
+                                            )}
+                                        </div>
+                                        <div className={`text-[18px] font-black tracking-tighter ${isComplete ? 'text-emerald-700' : hasError ? 'text-red-600' : 'text-primary-700'}`}>
+                                            {sum.done}<span className="text-base-300 mx-0.5 font-normal text-xs">/</span>{sum.total}
+                                        </div>
+                                    </div>
+                                    
+                                    <h3 className={`text-[13px] font-black tracking-tight uppercase line-clamp-2 leading-tight ${isComplete ? 'text-emerald-900/50' : 'text-base-955 dark:text-white'}`}>
+                                        {sum.desc}
+                                    </h3>
+
+                                    <div className="w-full h-1 bg-base-100 dark:bg-base-700 rounded-full overflow-hidden mt-1">
+                                        <div className={`h-full transition-all duration-1000 ${isComplete ? 'bg-emerald-500' : hasError ? 'bg-red-500' : 'bg-primary-500'}`} style={{width: `${(sum.done/sum.total)*100}%`}}></div>
+                                    </div>
+                                    
+                                    <div className="flex justify-between items-center pt-1">
+                                        <span className="text-[8px] font-black text-base-300 uppercase tracking-widest">{isExpanded ? 'Hide Details' : 'View Mission List'}</span>
+                                        <ChevronDownIcon className={`h-3 w-3 text-base-300 transition-transform duration-500 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
+                                    </div>
+                                </button>
+                                
+                                {isExpanded && (
+                                    <div className="px-3 pb-4 space-y-1.5 animate-fade-in bg-base-50/20 dark:bg-black/10 border-t border-base-50 dark:border-base-700 pt-3">
+                                        {sum.samples.map((s, si) => (
+                                            <div key={si} className="flex flex-col p-2.5 bg-white dark:bg-base-900/60 rounded-xl border border-base-50 dark:border-base-800 gap-1 shadow-sm">
+                                                <div className="flex justify-between items-start">
+                                                    <span className="text-[11px] font-black text-base-955 dark:text-base-50 uppercase tracking-tight truncate flex-grow mr-2">{s.name}</span>
+                                                    <span className={`text-[7px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-widest shrink-0 ${s.status === 'done' ? 'bg-emerald-600 text-white' : s.status === 'failed' ? 'bg-red-600 text-white' : 'bg-base-100 dark:bg-base-800 text-base-500'}`}>
+                                                        {s.status}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`px-1.5 py-0.5 rounded-lg text-[7px] font-black ${s.isPrep ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'}`}>x{s.qty}</span>
+                                                    <span className="text-[9px] font-bold text-base-400 uppercase truncate flex-grow">{s.detail}</span>
+                                                </div>
+                                                {s.reason && (
+                                                    <div className="mt-1 flex items-center gap-1.5 px-2 py-1 bg-red-600 text-white rounded-lg animate-pulse">
+                                                        <AlertTriangleIcon className="h-2.5 w-2.5" />
+                                                        <span className="text-[7px] font-black uppercase truncate">{s.reason}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="h-[calc(100vh-140px)] flex flex-col animate-fade-in overflow-hidden p-3 bg-base-50/50 dark:bg-base-955 font-sans relative">
             <style>{`
                 .no-scrollbar::-webkit-scrollbar { display: none; }
                 .person-avatar { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); }
                 .person-avatar.assistant { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); }
+                .person-avatar.unified { background: linear-gradient(135deg, #0f172a 0%, #334155 100%); }
                 .active-glow { box-shadow: 0 0 20px -5px rgba(99, 102, 241, 0.4); }
                 @keyframes waste-pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.02); } 100% { opacity: 1; transform: scale(1); } }
                 .waste-pulse-active { animation: waste-pulse 2s ease-in-out infinite; }
@@ -312,6 +434,21 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                     </div>
                     
                     <div className="flex-grow overflow-y-auto no-scrollbar p-2.5 space-y-1.5 min-h-0">
+                        <button 
+                            onClick={() => setSelectedPersonId(ALL_PERSONNEL_ID)} 
+                            className={`w-full group flex items-center gap-3 p-3 rounded-[1.3rem] transition-all duration-300 border text-left ${selectedPersonId === ALL_PERSONNEL_ID ? 'bg-base-900 border-base-800 text-white shadow-lg scale-[1.02]' : 'bg-white/40 dark:bg-base-900/40 hover:bg-white dark:hover:bg-base-800 border-transparent hover:border-base-200 dark:hover:border-base-700'}`}
+                        >
+                            <div className={`w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-[11px] font-black shadow-inner person-avatar unified ring-white/10 ${selectedPersonId === ALL_PERSONNEL_ID ? 'ring-2' : ''}`}>
+                                <SparklesIcon className="h-4 w-4" />
+                            </div>
+                            <div className="flex-grow min-w-0">
+                                <span className={`block text-[14px] font-black tracking-tight leading-tight ${selectedPersonId === ALL_PERSONNEL_ID ? 'text-white' : 'text-base-800 dark:text-base-100'}`}>Unified View</span>
+                                <span className={`text-[8px] font-bold uppercase tracking-widest mt-1 block ${selectedPersonId === ALL_PERSONNEL_ID ? 'text-white/60' : 'text-base-400'}`}>All Personnel</span>
+                            </div>
+                        </button>
+
+                        <div className="h-px bg-base-200 dark:bg-base-800 mx-2 my-1"></div>
+
                         {processedPersonnel.map(person => {
                             const isActive = selectedPersonId === person.id;
                             const isAssistant = person.role === 'ASST';
@@ -330,7 +467,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                     <div className="px-8 py-5 border-b border-white dark:border-base-800 flex justify-between items-center bg-white/40 dark:bg-base-800/10 backdrop-blur-xl shrink-0 sticky top-0 z-20">
                         <div className="flex items-center gap-8">
                             <div>
-                                <h2 className="text-2xl font-black text-base-950 dark:text-white tracking-tighter leading-none">Shift Intelligence</h2>
+                                <h2 className="text-2xl font-black text-base-955 dark:text-white tracking-tighter leading-none">Shift Intelligence</h2>
                                 <p className="text-[10px] text-base-400 font-black uppercase tracking-[0.3em] mt-1.5">Mission Performance Analysis</p>
                             </div>
                             <div className="flex items-center gap-3 bg-white/60 dark:bg-base-800/60 p-1.5 rounded-[1.4rem] border border-white dark:border-base-700 shadow-inner">
@@ -342,13 +479,13 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                     </div>
 
                     <div className="flex-grow overflow-y-auto no-scrollbar p-8">
-                        <div className="max-w-7xl mx-auto space-y-10 pb-20">
-                            {/* KPI Grid - Updated to 6 columns to include Waste Status */}
+                        <div className="max-w-7xl mx-auto space-y-6 pb-20">
+                            {/* KPI Grid */}
                             <div className="grid grid-cols-6 gap-3">
                                 <div className="col-span-1 bg-white dark:bg-base-800 rounded-[1.8rem] border border-primary-500/10 p-4 shadow-lg flex flex-col justify-between">
                                     <h4 className="text-[9px] font-black text-primary-600 uppercase tracking-widest mb-2">Success Rate</h4>
                                     <div className="flex items-end justify-between mb-1">
-                                        <span className="text-2xl font-black text-base-950 dark:text-white tracking-tighter leading-none">{globalStats.done}<span className="text-base-300 mx-0.5 font-medium text-base">/</span>{globalStats.total}</span>
+                                        <span className="text-2xl font-black text-base-955 dark:text-white tracking-tighter leading-none">{globalStats.done}<span className="text-base-300 mx-0.5 font-medium text-base">/</span>{globalStats.total}</span>
                                         <span className="text-[10px] font-black text-primary-600">{globalStats.percent}%</span>
                                     </div>
                                     <div className="w-full h-1 bg-primary-100 dark:bg-base-700 rounded-full overflow-hidden">
@@ -388,7 +525,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                     </div>
                                 </div>
 
-                                {/* PREMIUM WASTE CARD - INTEGRATED AS KPI */}
                                 <button 
                                     onClick={() => setIsReportModalOpen(true)}
                                     className={`col-span-1 rounded-[1.8rem] border transition-all duration-300 overflow-hidden relative group text-left flex flex-col justify-between p-4 shadow-xl ${wasteTheme.bg} border-transparent ${wasteTheme.glow} ${shiftReport?.wasteLevel === 'high' ? 'waste-pulse-active' : ''}`}
@@ -405,26 +541,32 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                 </button>
                             </div>
 
-                            {!activePerson ? (
-                                <div className="flex flex-col items-center justify-center opacity-10 text-base-300 py-20"><UserGroupIcon className="h-24 w-24 mb-4" /><span className="text-xl font-black uppercase tracking-[0.5em] text-base-400">Select Staff to View Details</span></div>
-                            ) : (
-                                <div className="space-y-5">
-                                    <div className="flex items-center gap-3 ml-2"><ClipboardListIcon className="h-5 w-5 text-primary-500"/><h3 className="text-[11px] font-black text-primary-600 uppercase tracking-[0.4em]">Integrated Mission Progress (Testing & Preparation)</h3></div>
-                                    {Object.values(activePerson.summary).length === 0 ? (
-                                        <div className="py-20 text-center opacity-10 flex flex-col items-center"><BeakerIcon className="h-20 w-20 mb-4" /><span className="text-sm font-black uppercase tracking-[0.5em]">No Missions Assigned</span></div>
-                                    ) : (
-                                        Object.values(activePerson.summary).map((sum: SummaryItemStats, idx: number) => {
-                                            const isComplete = sum.done === sum.total, hasError = sum.failed > 0 || sum.returned > 0, isExpanded = expandedGroups.has(sum.desc);
-                                            return (
-                                                <div key={idx} className={`rounded-[1.8rem] border-2 overflow-hidden transition-all duration-300 shadow-lg ${isComplete ? 'bg-emerald-50/10 border-emerald-100/50' : hasError ? 'bg-white dark:bg-base-800 border-red-200' : 'bg-white dark:bg-base-800 border-base-200 dark:border-base-700'}`}>
-                                                    <button onClick={() => toggleGroup(sum.desc)} className={`w-full text-left px-6 py-4 border-b-2 flex justify-between items-start transition-colors ${isComplete ? 'bg-emerald-50/40 hover:bg-emerald-100/40' : hasError ? 'bg-red-50/40 hover:bg-red-100/40' : 'bg-base-50/50 hover:bg-base-100/50'}`}><div className="min-w-0 pr-4 flex items-start gap-4"><ChevronDownIcon className={`h-5 w-5 mt-1.5 text-base-400 transition-transform duration-300 ${isExpanded ? 'rotate-0' : '-rotate-90'}`} /><div><div className="flex flex-wrap gap-2 mb-2 mt-1">{sum.isPrepGroup && <span className="bg-amber-500 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">PREP</span>}{!sum.isPrepGroup && sum.priorityStatus === 'lsp' && <span className="bg-cyan-600 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">LSP</span>}{!sum.isPrepGroup && sum.priorityStatus === 'sprint' && <span className="bg-rose-600 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">SPRINT</span>}{!sum.isPrepGroup && sum.priorityStatus === 'urgent' && <span className="bg-red-500 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">URGENT</span>}{!sum.isPrepGroup && sum.priorityStatus === 'pocat' && <span className="bg-orange-500 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">Po cat</span>}</div><h3 className={`text-[16px] font-black tracking-tight uppercase whitespace-normal leading-tight ${isComplete ? 'text-emerald-900 opacity-60' : 'text-base-950 dark:text-white'}`}>{sum.desc}</h3></div></div><div className="flex items-center gap-6 flex-shrink-0 mt-1"><div className="flex flex-col items-end"><span className={`text-[24px] font-black tracking-tighter leading-none ${isComplete ? 'text-emerald-700' : hasError ? 'text-red-700' : 'text-primary-700'}`}>{sum.done}<span className="text-base-300 mx-1 font-normal text-lg">/</span>{sum.total}</span></div><div className="w-24 h-2 bg-base-100 dark:bg-base-700 rounded-full overflow-hidden shadow-inner ring-1 ring-black/5 hidden sm:block"><div className={`h-full transition-all duration-700 ${isComplete ? 'bg-emerald-500' : hasError ? 'bg-red-500' : 'bg-primary-50'}`} style={{width: `${(sum.done/sum.total)*100}%`}}></div></div></div></button>
-                                                    {isExpanded && (<div className="p-2 space-y-1.5 bg-white/30 dark:bg-base-900/20 animate-fade-in">{sum.samples.map((s, si) => (<div key={si} className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-6 py-4 bg-white dark:bg-base-900/40 rounded-[1.3rem] border border-base-100 dark:border-base-800 transition-colors shadow-sm gap-4"><div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6 flex-grow min-w-0 w-full"><span className="text-[14px] font-black text-base-950 dark:text-base-100 uppercase tracking-tight whitespace-normal leading-tight min-w-0 sm:min-w-[180px]">{s.name}</span><div className="flex items-center gap-3 shrink-0"><span className={`px-2.5 py-1 ${s.isPrep ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100'} border rounded-xl text-[10px] font-black`}>x{s.qty}</span><span className="text-[11px] font-extrabold text-base-800 dark:text-base-400 uppercase flex items-center gap-1.5"><span className="text-primary-600 opacity-50 font-black">D:</span> {s.detail}</span></div>{s.reason && (<div className="flex items-center gap-2.5 px-4 py-2 bg-red-700 text-white rounded-[12px] sm:ml-auto border border-red-500 shrink-0 shadow-lg w-full sm:w-auto"><AlertTriangleIcon className="h-4 w-4 shrink-0" /><span className="text-[11px] font-black uppercase tracking-tight leading-none">Issue: {s.reason}</span></div>)}</div><span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest shadow-sm self-end sm:self-auto ${s.status === 'done' ? 'bg-emerald-600 text-white' : s.status === 'failed' ? 'bg-red-600 text-white' : 'bg-base-200 dark:bg-base-700 text-base-600'}`}>{s.status}</span></div>))}</div>)}
-                                                </div>
-                                            );
-                                        })
-                                    )}
+                            <div className="space-y-12">
+                                <div className="flex items-center gap-3 ml-2">
+                                    <ClipboardListIcon className="h-5 w-5 text-primary-500"/>
+                                    <h3 className="text-[11px] font-black text-primary-600 uppercase tracking-[0.4em]">
+                                        {selectedPersonId === ALL_PERSONNEL_ID ? 'Full Shift Deployment Registry' : 'Analyst Performance Log'}
+                                    </h3>
                                 </div>
-                            )}
+                                
+                                {selectedPersonId === ALL_PERSONNEL_ID ? (
+                                    processedPersonnel.filter(p => Object.keys(p.summary).length > 0).map(person => renderPersonnelSection(person))
+                                ) : (
+                                    activePerson ? renderPersonnelSection(activePerson) : (
+                                        <div className="flex flex-col items-center justify-center opacity-10 text-base-300 py-20">
+                                            <UserGroupIcon className="h-24 w-24 mb-4" />
+                                            <span className="text-xl font-black uppercase tracking-[0.5em] text-base-400">Mission Log Empty</span>
+                                        </div>
+                                    )
+                                )}
+
+                                {selectedPersonId === ALL_PERSONNEL_ID && processedPersonnel.every(p => Object.keys(p.summary).length === 0) && (
+                                    <div className="py-20 text-center opacity-10 flex flex-col items-center">
+                                        <BeakerIcon className="h-20 w-20 mb-4" />
+                                        <span className="text-sm font-black uppercase tracking-[0.5em]">No Missions Assigned this Shift</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
