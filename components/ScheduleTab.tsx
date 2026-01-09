@@ -131,6 +131,23 @@ const getTaskValue = (task: RawTask, header: string): any => {
     return matchedKey ? task[matchedKey] : '';
 };
 
+const PriorityBadge: React.FC<{ category: string, tasks: RawTask[] }> = ({ category, tasks }) => {
+    const allContent = tasks.map(t => Object.values(t).map(v => String(v).toLowerCase()).join(' ')).join(' ');
+    const isPoCat = category.toLowerCase() === 'pocat' || allContent.includes('po cat');
+    const isLSP = allContent.includes('lsp');
+    const isSprint = allContent.includes('sprint');
+    const isUrgent = category.toLowerCase() === 'urgent' || allContent.includes('urgent');
+
+    return (
+        <div className="flex gap-1.5 ml-2">
+            {isPoCat && <span className="px-2 py-0.5 bg-orange-500 text-white text-[9px] font-black rounded-lg uppercase tracking-wider shadow-lg shadow-orange-500/20">Po cat</span>}
+            {isLSP && <span className="px-2 py-0.5 bg-cyan-600 text-white text-[9px] font-black rounded-lg uppercase tracking-wider shadow-lg shadow-cyan-500/20">LSP</span>}
+            {isSprint && <span className="px-2 py-0.5 bg-rose-600 text-white text-[9px] font-black rounded-lg uppercase tracking-wider shadow-lg shadow-rose-500/20">Sprint</span>}
+            {isUrgent && <span className="px-2 py-0.5 bg-red-600 text-white text-[9px] font-black rounded-lg uppercase tracking-wider shadow-lg shadow-red-500/20">Urgent</span>}
+        </div>
+    );
+};
+
 const ScheduleTab: React.FC<ScheduleTabProps> = ({ 
     testers, 
     onTasksUpdated, 
@@ -176,11 +193,11 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     }, [personTasks]);
 
     const groupedPrepTasks = useMemo(() => {
-        const groups: Record<string, { requestId: string, items: { task: RawTask, sourceGroup: AssignedPrepareTask, index: number }[] }> = {};
+        const groups: Record<string, { requestId: string, category: TaskCategory, items: { task: RawTask, sourceGroup: AssignedPrepareTask, index: number }[] }> = {};
         personPrepTasks.forEach(group => {
             const effectiveId = group.category === TaskCategory.Manual ? 'MANUAL-PREP' : group.requestId;
             const displayId = group.category === TaskCategory.Manual ? 'MANUAL PREP' : group.requestId;
-            if (!groups[effectiveId]) groups[effectiveId] = { requestId: displayId, items: [] };
+            if (!groups[effectiveId]) groups[effectiveId] = { requestId: displayId, category: group.category, items: [] };
             group.tasks.forEach((task, idx) => groups[effectiveId].items.push({ task, sourceGroup: group, index: idx }));
         });
         return Object.values(groups).sort((a, b) => a.requestId.localeCompare(b.requestId));
@@ -257,7 +274,6 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     };
 
     const handleCorrectionReturn = async (group: AssignedTask, itemIndex: number) => {
-        // QUICK RETURN: No reason, No Dashboard (isReturnedPool = false)
         const item = group.tasks[itemIndex];
         const categorizedTask: CategorizedTask = { 
             id: group.requestId, 
@@ -395,7 +411,6 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             });
         });
 
-        // Structure: hierarchy[personnel][date][requestId][taskType][description][variant] = { count: number, remark: string }
         const hierarchy: Record<string, Record<string, Record<string, Record<string, Record<string, Record<string, { count: number; remark: string }>>>>>> = {};
 
         combinedRawAssignments.forEach(({ personnel, requestId, task, taskType }) => {
@@ -452,7 +467,6 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                 grandTotal += count;
 
                                 const row: any[] = [];
-                                // Span logic: show only first appearance in the group
                                 row[0] = (rIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? tester : "";
                                 row[1] = (rIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? dateDisplay : "";
                                 row[2] = (tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? reqId : "";
@@ -480,7 +494,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             { wch: 20 }, // Request ID
             { wch: 25 }, // Task Type
             { wch: 35 }, // Description
-            { wch: 25 }, // Variant (NEW)
+            { wch: 25 }, // Variant
             { wch: 45 }, // Remark
             { wch: 8 }   // Total
         ];
@@ -606,7 +620,12 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                         <div className="flex items-center gap-2.5 ml-1"><div className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-md"></div><h4 className="text-[11px] font-black text-amber-600 uppercase tracking-[0.2em]">Preparation Mission Group</h4></div>
                                         {groupedPrepTasks.map(group => (
                                             <div key={group.requestId} className="bg-amber-50/20 dark:bg-amber-900/10 rounded-[1.8rem] border-2 border-amber-100 dark:border-amber-900/30 overflow-hidden shadow-sm">
-                                                <div className="px-6 py-3 bg-amber-900/90 text-white border-b border-amber-800 flex justify-between items-center backdrop-blur-sm"><span className="text-[11px] font-black uppercase tracking-[0.2em]">SEQ: {group.requestId}</span></div>
+                                                <div className="px-6 py-4 bg-amber-900/90 text-white border-b border-amber-800 flex justify-between items-center backdrop-blur-sm">
+                                                    <div className="flex items-center">
+                                                        <span className="text-[20px] font-black uppercase tracking-tighter leading-none">{group.requestId}</span>
+                                                        <PriorityBadge category={group.category} tasks={group.items.map(i => i.task)} />
+                                                    </div>
+                                                </div>
                                                 <div className="p-3 space-y-2">
                                                     {group.items.map((item, idx) => {
                                                         const isPrepared = item.task.preparationStatus === 'Prepared' || item.task.preparationStatus === 'Ready for Testing';
@@ -665,7 +684,12 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                         <div className="flex items-center gap-2.5 ml-1"><div className="w-2.5 h-2.5 rounded-full bg-primary-500 shadow-md animate-pulse"></div><h4 className="text-[11px] font-black text-primary-600 uppercase tracking-[0.2em]">Active Execution Mission</h4></div>
                                         {groupedPersonTasks.map(group => (
                                             <div key={group.requestId} className="bg-white/60 dark:bg-base-955/40 rounded-[2rem] border-2 border-base-200 dark:border-base-800 overflow-hidden shadow-lg">
-                                                <div className="px-6 py-3.5 bg-base-900 text-white border-b border-indigo-900/50 flex justify-between items-center"><span className="text-[11px] font-black uppercase tracking-[0.2em]">SEQ: {group.requestId}</span></div>
+                                                <div className="px-6 py-4 bg-base-900 text-white border-b border-indigo-900/50 flex justify-between items-center">
+                                                    <div className="flex items-center">
+                                                        <span className="text-[22px] font-black uppercase tracking-tighter leading-none">{group.requestId}</span>
+                                                        <PriorityBadge category={group.category} tasks={group.items.map(i => i.task)} />
+                                                    </div>
+                                                </div>
                                                 <div className="p-3 space-y-2.5">
                                                     {group.items.map((item, idx) => {
                                                         const isDone = item.task.status === TaskStatus.Done;
@@ -694,7 +718,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                     </div>
                                                                     <div className="flex flex-shrink-0 items-center gap-3">
                                                                         <div className={`px-2.5 py-1 rounded-xl text-[12px] font-black border flex-shrink-0 ${isDone ? 'bg-emerald-100 border-emerald-200 text-emerald-700' : isNotOk ? 'bg-red-100 border-red-200 text-red-700' : 'bg-indigo-50 border-indigo-100 text-indigo-700'}`}>x{qty}</div>
-                                                                        {sampleName && sampleName !== 'N/A' && <div className={`px-3 py-1 rounded-xl text-[12px] font-black border uppercase truncate max-w-[220px] flex-shrink-0 ${isDone ? 'bg-emerald-50/50 border-emerald-200 text-emerald-700/50' : isNotOk ? 'bg-red-50/50 border-red-200 text-red-700/50' : 'bg-indigo-100/30 border-indigo-100 text-indigo-950 dark:text-indigo-200'}`}>S: {sampleName}</div>}
+                                                                        {sampleName && sampleName !== 'N/A' && <div className={`px-3 py-1 rounded-xl text-[12px] font-black border uppercase truncate max-w-[220px] flex-shrink-0 ${isDone ? 'bg-emerald-50/50 border-emerald-200 text-emerald-700/50' : isNotOk ? 'bg-red-50/50 border-red-200 text-red-700/50' : 'bg-indigo-100/30 border-indigo-100 text-indigo-955 dark:text-indigo-200'}`}>S: {sampleName}</div>}
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex flex-row items-center gap-2 flex-shrink-0 ml-5">
