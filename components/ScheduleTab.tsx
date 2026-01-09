@@ -33,29 +33,34 @@ const LocalModal: React.FC<{
     onConfirm: (inputValue?: string) => void;
     title: string;
     message: string;
+    initialValue?: string;
     showInput?: boolean;
     isTextArea?: boolean;
     inputPlaceholder?: string;
     confirmText?: string;
     confirmColor?: string;
     icon?: React.ReactNode;
+    preventOutsideClick?: boolean;
 }> = ({ 
-    isOpen, onClose, onConfirm, title, message, showInput, 
+    isOpen, onClose, onConfirm, title, message, initialValue = '', showInput, 
     isTextArea, inputPlaceholder, confirmText = "Confirm", 
-    confirmColor = "bg-primary-600", icon 
+    confirmColor = "bg-primary-600", icon, preventOutsideClick = false
 }) => {
     const [val, setVal] = useState('');
     
     useEffect(() => { 
         if (isOpen) {
-            setVal(showInput && typeof message === 'string' && message !== 'N/A' ? message : ''); 
+            setVal(initialValue); 
         }
-    }, [isOpen, showInput, message]);
+    }, [isOpen, initialValue]);
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-base-900/80 backdrop-blur-md flex items-center justify-center z-[100] animate-fade-in" onClick={onClose}>
+        <div 
+            className="fixed inset-0 bg-base-900/80 backdrop-blur-md flex items-center justify-center z-[100] animate-fade-in" 
+            onClick={!preventOutsideClick ? onClose : undefined}
+        >
             <div className="bg-white dark:bg-base-800 rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] p-8 w-full max-w-lg m-4 space-y-6 animate-slide-in-up border border-white/20 dark:border-base-700" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-4">
                     <div className={`p-3 rounded-2xl ${confirmColor.includes('red') || confirmColor.includes('orange') ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
@@ -64,7 +69,7 @@ const LocalModal: React.FC<{
                     <h3 className="text-2xl font-black text-base-900 dark:text-base-100 tracking-tighter">{title}</h3>
                 </div>
 
-                {!isTextArea && <p className="text-sm font-medium text-base-600 dark:text-base-300 leading-relaxed whitespace-pre-wrap px-1">{message}</p>}
+                {message && <p className="text-sm font-medium text-base-600 dark:text-base-300 leading-relaxed whitespace-pre-wrap px-1">{message}</p>}
                 
                 {showInput && (
                     <div className="relative group">
@@ -75,7 +80,7 @@ const LocalModal: React.FC<{
                                 onChange={e => setVal(e.target.value)} 
                                 placeholder={inputPlaceholder} 
                                 rows={5}
-                                className="w-full p-5 bg-base-50 dark:bg-base-950 border-2 border-base-100 dark:border-base-800 rounded-3xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none dark:text-white font-bold text-[15px] resize-none transition-all"
+                                className="w-full p-5 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-3xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none dark:text-white font-bold text-[15px] resize-none transition-all"
                             />
                         ) : (
                             <input 
@@ -84,7 +89,7 @@ const LocalModal: React.FC<{
                                 value={val} 
                                 onChange={e => setVal(e.target.value)} 
                                 placeholder={inputPlaceholder} 
-                                className="w-full p-4 bg-base-50 dark:bg-base-950 border-2 border-base-100 dark:border-base-800 rounded-2xl focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none dark:text-white font-bold text-sm transition-all" 
+                                className="w-full p-4 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-2xl focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none dark:text-white font-bold text-sm transition-all" 
                                 onKeyDown={e => { if (e.key === 'Enter' && val.trim()) onConfirm(val); }} 
                             />
                         )}
@@ -128,7 +133,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     const [notification, setNotification] = useState<{message: string, isError: boolean} | null>(null);
 
     const [modalConfig, setModalConfig] = useState<{
-        isOpen: boolean; title: string; message: string; showInput?: boolean; isTextArea?: boolean; inputPlaceholder?: string; confirmText?: string; confirmColor?: string; icon?: React.ReactNode; onConfirm: (val?: string) => void;
+        isOpen: boolean; title: string; message: string; initialValue?: string; showInput?: boolean; isTextArea?: boolean; inputPlaceholder?: string; confirmText?: string; confirmColor?: string; icon?: React.ReactNode; onConfirm: (val?: string) => void; preventOutsideClick?: boolean;
     }>({ isOpen: false, title: '', message: '', onConfirm: () => { } });
 
     const fetchData = async () => {
@@ -193,12 +198,14 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
         setModalConfig({
             isOpen: true, 
             title: "Planner Mission Briefing", 
-            message: currentNote, 
+            message: "Edit specific instructions for this Analyst mission:", 
+            initialValue: currentNote,
             showInput: true, 
             isTextArea: true,
             inputPlaceholder: "Enter detailed instructions or special remarks for the Analyst here...", 
             confirmText: "Save Mission", 
             confirmColor: "bg-indigo-600",
+            preventOutsideClick: true,
             onConfirm: (note) => handleUpdateNote(type, group, itemIndex, note || '')
         });
     };
@@ -217,7 +224,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
 
     const handleNotOkClick = (group: AssignedTask, itemIndex: number) => {
         setModalConfig({
-            isOpen: true, title: "Report Quality Issue", message: "Why is this task Not OK?", showInput: true, inputPlaceholder: "Reason...", confirmText: "Mark Not OK", confirmColor: "bg-red-600",
+            isOpen: true, title: "Report Quality Issue", message: "Why is this task Not OK?", initialValue: '', showInput: true, inputPlaceholder: "Reason...", confirmText: "Mark Not OK", confirmColor: "bg-red-600",
             onConfirm: async (reason) => {
                 if (!reason) return;
                 await handleUpdateStatus(group, itemIndex, TaskStatus.NotOK, reason);
@@ -251,25 +258,28 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             isOpen: true, 
             title: "Abort Preparation", 
             message: "คุณต้องการคืนรายการงานเตรียมชิ้นนี้กลับไปที่คิว (Pool) เพื่อจัดสรรใหม่ใช่หรือไม่?", 
+            initialValue: '',
             showInput: true, 
             inputPlaceholder: "ระบุเหตุผลการคืนงานเตรียม...", 
             confirmText: "คืนงานรายชิ้น", 
             confirmColor: "bg-orange-600",
+            preventOutsideClick: true,
             onConfirm: async (reason) => {
                 if (!reason) return;
                 const item = { ...group.tasks[itemIndex] };
                 
-                // คืนงานแบบราย Item โดยล้างสถานะ Ready และใส่ flag คืนงาน
+                const returnedItem = { 
+                    ...item, 
+                    isReturned: true, 
+                    returnReason: reason, 
+                    returnedBy: group.assistantName, 
+                    preparationStatus: null 
+                };
+
                 await addCategorizedTask({ 
                     id: group.requestId, 
                     category: group.category, 
-                    tasks: [{ 
-                        ...item, 
-                        isReturned: true, 
-                        returnReason: reason, 
-                        returnedBy: group.assistantName, 
-                        preparationStatus: null // ล้างสถานะให้กลับไปรอเตรียมใหม่
-                    }], 
+                    tasks: [returnedItem], 
                     isReturnedPool: true, 
                     createdAt: new Date().toISOString(), 
                     shift: group.shift, 
@@ -277,7 +287,6 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     returnReason: reason 
                 } as any);
 
-                // ลบออกจากกลุ่มงานเตรียมเดิม
                 const remaining = group.tasks.filter((_, idx) => idx !== itemIndex);
                 if (remaining.length > 0) await updateAssignedPrepareTask(group.id, { tasks: remaining });
                 else await deleteAssignedPrepareTask(group.id);
@@ -292,92 +301,178 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
 
     const handleTesterReturn = async (group: AssignedTask, itemIndex: number) => {
         setModalConfig({
-            isOpen: true, title: "Abort Mission", message: "Why return this task to the pool?", showInput: true, inputPlaceholder: "Reason...", confirmText: "Abort", confirmColor: "bg-orange-600",
+            isOpen: true, 
+            title: "Abort Mission", 
+            message: "Why return this task to the pool?", 
+            initialValue: '',
+            showInput: true, 
+            inputPlaceholder: "Reason...", 
+            confirmText: "Abort", 
+            confirmColor: "bg-orange-600",
+            preventOutsideClick: true,
             onConfirm: async (reason) => {
                 if (!reason) return;
-                const item = group.tasks[itemIndex];
-                await addCategorizedTask({ id: group.requestId, category: group.category, tasks: [{ ...item, isReturned: true, returnReason: reason, returnedBy: group.testerName }], isReturnedPool: true, createdAt: new Date().toISOString(), shift: group.shift, returnedBy: group.testerName, returnReason: reason, returnedDate: group.assignedDate } as any);
+                const item = { ...group.tasks[itemIndex] };
+                
+                const returnedItem = { 
+                    ...item, 
+                    isReturned: true, 
+                    returnReason: reason, 
+                    returnedBy: group.testerName 
+                };
+
+                await addCategorizedTask({ 
+                    id: group.requestId, 
+                    category: group.category, 
+                    tasks: [returnedItem], 
+                    isReturnedPool: true, 
+                    createdAt: new Date().toISOString(), 
+                    shift: group.shift, 
+                    returnedBy: group.testerName, 
+                    returnReason: reason, 
+                    returnedDate: group.assignedDate 
+                } as any);
+
                 const remaining = group.tasks.filter((_, idx) => idx !== itemIndex);
                 if (remaining.length > 0) await updateAssignedTask(group.id, { tasks: remaining });
                 else await deleteAssignedTask(group.id);
-                fetchData(); onTasksUpdated(); setModalConfig(p => ({ ...p, isOpen: false }));
+                
+                fetchData(); 
+                onTasksUpdated(); 
+                setModalConfig(p => ({ ...p, isOpen: false }));
+                setNotification({ message: "Task returned with remark", isError: false });
             }
         });
     };
 
     const handleExport = () => {
-        const executionData = assignedTasks.flatMap(group => 
-            group.tasks.map(task => ({
-                'Type': 'Execution',
-                'Personnel': group.testerName,
-                'Request ID': group.requestId,
-                'Description': getTaskValue(task, 'Description'),
-                'Quantity': getTaskValue(task, 'Quantity'),
-                'Sample Name': getTaskValue(task, 'Sample Name'),
-                'Variant': getTaskValue(task, 'Variant'),
-                'Status': task.status || 'Pending',
-                'Planner Note': task.plannerNote || ''
-            }))
-        );
-        const prepData = prepareTasks.flatMap(group => 
-            group.tasks.map(task => ({
-                'Type': 'Preparation',
-                'Personnel': group.assistantName,
-                'Request ID': group.requestId,
-                'Description': getTaskValue(task, 'Description'),
-                'Quantity': getTaskValue(task, 'Quantity'),
-                'Sample Name': getTaskValue(task, 'Sample Name'),
-                'Variant': getTaskValue(task, 'Variant'),
-                'Status': task.preparationStatus || 'Awaiting',
-                'Planner Note': task.plannerNote || ''
-            }))
-        );
-        const allData = [...executionData, ...prepData];
-
-        const formatLimsDate = (dateStr: string) => {
-            if (!dateStr) return '';
-            const [y, m, d] = dateStr.split('-');
-            return `${parseInt(d)}/${parseInt(m)}/${y}`;
-        };
-
-        const integrationHeaderA1 = [["Count of Variant"]];
-        const integrationHeadersRow2 = ["SDIDATAID", "Assign Analyst", "Assign Start date", "Total"];
+        // --- PREPARE DATA STRUCTURE ---
+        const exportDate = selectedDate;
+        const [y, m, d] = exportDate.split('-');
+        const dateDisplay = `${d}-${m}-${y.substring(2)}`;
         
-        const integrationRows = [
-            ...assignedTasks.flatMap(group => 
-                group.tasks.map(task => [
-                    getTaskValue(task, 'SDIDATAID') || '',
-                    group.testerName,
-                    formatLimsDate(group.assignedDate),
-                    1
-                ])
-            ),
-            ...prepareTasks.flatMap(group => 
-                group.tasks.map(task => [
-                    getTaskValue(task, 'SDIDATAID') || '',
-                    group.assistantName,
-                    formatLimsDate(group.assignedDate),
-                    1
-                ])
-            )
-        ];
-
-        const integrationAOA = [
-            ...integrationHeaderA1,
-            integrationHeadersRow2,
-            ...integrationRows
-        ];
-
-        const ws1 = XLSX.utils.json_to_sheet(allData);
-        const ws2 = XLSX.utils.aoa_to_sheet(integrationAOA);
+        // 1. Gather all tasks assigned for this shift with their source type
+        const combinedRawAssignments: { personnel: string; requestId: string; task: RawTask; taskType: string }[] = [];
         
-        ws2['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 18 }, { wch: 8 }];
+        assignedTasks.forEach(group => {
+            group.tasks.forEach(task => {
+                combinedRawAssignments.push({ 
+                    personnel: group.testerName, 
+                    requestId: group.requestId, 
+                    task, 
+                    taskType: 'งานทดสอบ (Testing)' 
+                });
+            });
+        });
+
+        prepareTasks.forEach(group => {
+            group.tasks.forEach(task => {
+                combinedRawAssignments.push({ 
+                    personnel: group.assistantName, 
+                    requestId: group.requestId, 
+                    task, 
+                    taskType: 'งานเตรียมตัวอย่าง (Preparation)' 
+                });
+            });
+        });
+
+        // 2. Nest data: Tester -> Date -> RequestID -> TaskType -> Description -> { count, remark }
+        const hierarchy: Record<string, Record<string, Record<string, Record<string, Record<string, { count: number; remark: string }>>>>> = {};
+
+        combinedRawAssignments.forEach(({ personnel, requestId, task, taskType }) => {
+            const desc = String(getTaskValue(task, 'Description') || 'General Task').trim();
+            const remark = task.plannerNote || '';
+            
+            if (!hierarchy[personnel]) hierarchy[personnel] = {};
+            if (!hierarchy[personnel][exportDate]) hierarchy[personnel][exportDate] = {};
+            if (!hierarchy[personnel][exportDate][requestId]) hierarchy[personnel][exportDate][requestId] = {};
+            if (!hierarchy[personnel][exportDate][requestId][taskType]) hierarchy[personnel][exportDate][requestId][taskType] = {};
+            
+            if (!hierarchy[personnel][exportDate][requestId][taskType][desc]) {
+                hierarchy[personnel][exportDate][requestId][taskType][desc] = { count: 0, remark: remark };
+            }
+            
+            hierarchy[personnel][exportDate][requestId][taskType][desc].count += 1;
+            
+            // If we have a new remark and the existing one is empty, update it
+            if (remark && !hierarchy[personnel][exportDate][requestId][taskType][desc].remark) {
+                hierarchy[personnel][exportDate][requestId][taskType][desc].remark = remark;
+            } else if (remark && hierarchy[personnel][exportDate][requestId][taskType][desc].remark && !hierarchy[personnel][exportDate][requestId][taskType][desc].remark.includes(remark)) {
+                // If notes are different, append
+                hierarchy[personnel][exportDate][requestId][taskType][desc].remark += `; ${remark}`;
+            }
+        });
+
+        // 3. Flatten for Excel AOA
+        const rows: any[][] = [];
+        // Header
+        rows.push(["Tester", "Plantodate", "Request ID", "ประเภทงาน", "รายการทดสอบ", "Remark", "Total"]);
+
+        let grandTotal = 0;
+
+        // Sort personnel for consistent output
+        const sortedTesters = Object.keys(hierarchy).sort();
+
+        sortedTesters.forEach((tester, tIdx) => {
+            const testerDates = hierarchy[tester];
+            Object.keys(testerDates).forEach((date, dIdx) => {
+                const reqIds = testerDates[date];
+                const sortedReqIds = Object.keys(reqIds).sort();
+                
+                sortedReqIds.forEach((reqId, rIdx) => {
+                    const taskTypes = reqIds[reqId];
+                    const sortedTaskTypes = Object.keys(taskTypes).sort();
+
+                    sortedTaskTypes.forEach((taskType, tyIdx) => {
+                        const descs = taskTypes[taskType];
+                        const sortedDescs = Object.keys(descs).sort();
+                        
+                        sortedDescs.forEach((desc, dsIdx) => {
+                            const { count, remark } = descs[desc];
+                            grandTotal += count;
+
+                            // Create hierarchical row
+                            const row: any[] = [];
+                            
+                            // Hierarchical logic: Only show parent labels for the first item in the group
+                            // To create visual "lines" or grouping, we leave values empty if they repeat from previous row
+                            row[0] = (dIdx === 0 && rIdx === 0 && tyIdx === 0 && dsIdx === 0) ? tester : "";
+                            row[1] = (rIdx === 0 && tyIdx === 0 && dsIdx === 0) ? dateDisplay : "";
+                            row[2] = (tyIdx === 0 && dsIdx === 0) ? reqId : "";
+                            row[3] = (dsIdx === 0) ? taskType : "";
+                            row[4] = desc;
+                            row[5] = remark;
+                            row[6] = count;
+
+                            rows.push(row);
+                        });
+                    });
+                });
+            });
+            // Optional: Insert empty row between testers for better visual separation
+            rows.push([]);
+        });
+
+        // Add Grand Total row
+        rows.push(["Grand Total", "", "", "", "", "", grandTotal]);
+
+        // 4. Create Workbook and Download
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        
+        // Basic Column Widths
+        ws['!cols'] = [
+            { wch: 15 }, // Tester
+            { wch: 12 }, // Date
+            { wch: 20 }, // Request ID
+            { wch: 25 }, // ประเภทงาน
+            { wch: 35 }, // Description
+            { wch: 45 }, // Remark
+            { wch: 8 },  // Total
+        ];
 
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws1, "Shift Assignments");
-        XLSX.utils.book_append_sheet(wb, ws2, "LIMS_Integration");
-        
-        XLSX.writeFile(wb, `ShiftAssignments_${selectedDate}_${selectedShift}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, "Mission Summary");
+        XLSX.writeFile(wb, `ShiftMissionSummary_${exportDate}_${selectedShift}.xlsx`);
     };
 
     return (
@@ -411,12 +506,14 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 onConfirm={modalConfig.onConfirm} 
                 title={modalConfig.title} 
                 message={modalConfig.message} 
+                initialValue={modalConfig.initialValue}
                 showInput={modalConfig.showInput} 
                 isTextArea={modalConfig.isTextArea} 
                 inputPlaceholder={modalConfig.inputPlaceholder} 
                 confirmText={modalConfig.confirmText} 
                 confirmColor={modalConfig.confirmColor} 
                 icon={modalConfig.icon}
+                preventOutsideClick={modalConfig.preventOutsideClick}
             />
 
             {notification && (
@@ -427,10 +524,10 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             )}
 
             <div className="flex-grow grid grid-cols-12 gap-4 h-full relative overflow-hidden">
-                <div className="col-span-3 bg-white/40 dark:bg-base-900/40 rounded-[2rem] border border-white dark:border-base-800 shadow-sm flex flex-col overflow-hidden backdrop-blur-md h-full">
+                <div className="col-span-3 bg-white/40 dark:bg-base-900/40 rounded-[2.5rem] border border-white dark:border-base-800 shadow-sm flex flex-col overflow-hidden backdrop-blur-md h-full">
                     <div className="p-4 border-b border-white dark:border-base-800 bg-white/20 flex justify-between items-center shrink-0">
                         <h3 className="text-[10px] font-black text-base-400 uppercase tracking-[0.4em] ml-1">Duty Roster</h3>
-                        <button onClick={handleExport} title="Export Detailed Log" className="p-2 bg-white dark:bg-base-800 border border-base-200 dark:border-base-700 rounded-xl hover:bg-base-50 transition-colors shadow-sm">
+                        <button onClick={handleExport} title="Export Detailed Summary" className="p-2 bg-white dark:bg-base-800 border border-base-200 dark:border-base-700 rounded-xl hover:bg-base-50 transition-colors shadow-sm">
                             <DownloadIcon className="h-4 w-4 text-base-500" />
                         </button>
                     </div>
@@ -496,7 +593,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                 <div className="flex items-center gap-4">
                                                                     <button 
                                                                         onClick={() => handleNoteClick('prep', item.sourceGroup, item.index)}
-                                                                        className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-lg border-2 ${hasPlannerNote ? 'bg-red-600 border-red-400 text-white luxury-red-pulse' : 'bg-base-50 dark:bg-base-950 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`}
+                                                                        className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-lg border-2 ${hasPlannerNote ? 'bg-red-600 border-red-400 text-white luxury-red-pulse' : 'bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`}
                                                                         title={hasPlannerNote ? "Read Mission Instruction" : "Add Mission Briefing"}
                                                                     >
                                                                         <ChatBubbleLeftEllipsisIcon className="h-5 w-5" />
@@ -558,7 +655,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                 <div className="flex items-center gap-4">
                                                                     <button 
                                                                         onClick={() => handleNoteClick('exec', item.sourceGroup, item.index)}
-                                                                        className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-lg border-2 ${hasPlannerNote ? 'bg-red-600 border-red-400 text-white luxury-red-pulse' : 'bg-base-50 dark:bg-base-950 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`}
+                                                                        className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-lg border-2 ${hasPlannerNote ? 'bg-red-600 border-red-400 text-white luxury-red-pulse' : 'bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`}
                                                                         title={hasPlannerNote ? "Read Mission Instruction" : "Add Mission Briefing"}
                                                                     >
                                                                         <ChatBubbleLeftEllipsisIcon className="h-5 w-5" />
@@ -576,6 +673,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                 <div className="flex flex-row items-center gap-2 flex-shrink-0 ml-5">
                                                                     {!isActioned ? (
                                                                         <div className="flex gap-2">
+                                                                            <button onClick={() => handleUpdateStatus(item.sourceGroup, item.index, TaskStatus.Done)} className="px-6 py-2.5 bg-emerald-600 text-white font-black rounded-xl shadow-xl uppercase tracking-widest text-[11px] hover:bg-emerald-700 hover:scale-105 transition-all active:scale-95 border-b-4 border-emerald-800">DONE</button>
                                                                             <button onClick={() => handleUpdateStatus(item.sourceGroup, item.index, TaskStatus.Done)} className="px-6 py-2.5 bg-emerald-600 text-white font-black rounded-xl shadow-xl uppercase tracking-widest text-[11px] hover:bg-emerald-700 hover:scale-105 transition-all active:scale-95 border-b-4 border-emerald-800">DONE</button>
                                                                             <button onClick={() => handleNotOkClick(item.sourceGroup, item.index)} className="px-6 py-2.5 bg-red-600 text-white font-black rounded-xl shadow-xl uppercase tracking-widest text-[11px] hover:bg-red-700 hover:scale-105 transition-all active:scale-95 border-b-4 border-red-800">NOT OK</button>
                                                                         </div>

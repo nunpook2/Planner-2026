@@ -1,3 +1,4 @@
+
 import { firestore } from './firebase';
 import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport } from '../types';
 import { TaskCategory } from '../types';
@@ -9,7 +10,6 @@ const safeGet = async (query: any) => {
     try {
         return await query.get();
     } catch (error: any) {
-        // If it's an offline error, try to fetch from cache explicitly
         if (error.code === 'unavailable' || error.message?.includes('offline')) {
             console.warn(`Firestore: Client is offline, attempting to fetch '${query.path || 'collection'}' from cache...`);
             try {
@@ -75,15 +75,20 @@ export const deleteTestMapping = async (id: string): Promise<void> => {
 export const getCategorizedTasks = async (): Promise<CategorizedTask[]> => {
     if (!firestore) throw new Error("Database not initialized");
     const snapshot = await safeGet(getCollection('categorizedTasks'));
-    return snapshot.docs.map((doc: any) => ({ docId: doc.id, ...doc.data() }) as CategorizedTask);
+    // CRITICAL FIX: Ensure docId from firestore ALWAYS wins by putting it last in the spread
+    return snapshot.docs.map((doc: any) => ({ ...doc.data(), docId: doc.id }) as CategorizedTask);
 };
 
 export const addCategorizedTask = async (task: Omit<CategorizedTask, 'docId'>): Promise<void> => {
-    await getCollection('categorizedTasks').add(task);
+    // Ensure we don't accidentally save docId inside the document data
+    const { ...pureData } = task;
+    await getCollection('categorizedTasks').add(pureData);
 };
 
 export const updateCategorizedTask = async (docId: string, updates: Partial<CategorizedTask>): Promise<void> => {
-    await getCollection('categorizedTasks').doc(docId).update(updates);
+    // Remove docId from updates if present to avoid data pollution
+    const { docId: _, ...pureUpdates } = updates as any;
+    await getCollection('categorizedTasks').doc(docId).update(pureUpdates);
 };
 
 export const deleteCategorizedTask = async (docId: string): Promise<void> => {
@@ -142,7 +147,6 @@ export const updateAssignedPrepareTask = async (id: string, updates: Partial<Ass
     await getCollection('assignedPrepareTasks').doc(id).update(updates);
 };
 
-// Fix: Added missing delete function for prepared tasks to resolve "firestore" not found error in ScheduleTab
 export const deleteAssignedPrepareTask = async (id: string): Promise<void> => {
     await getCollection('assignedPrepareTasks').doc(id).delete();
 };
@@ -156,7 +160,6 @@ export const assignItemsToPrepare = async (
 ) => {
     const itemsToAssign = indicesToAssign.map(index => {
          let item = { ...originalTask.tasks[index] } as RawTask;
-         // Manual Tasks Logic: Clone with new ID, act as instance
          if (originalTask.category === TaskCategory.Manual) {
              item._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
          }
@@ -177,7 +180,6 @@ export const assignItemsToPrepare = async (
     };
     await getCollection('assignedPrepareTasks').add(prepareTaskPayload);
 
-    // Sync back status only if NOT manual
     if (originalTask.category !== TaskCategory.Manual) {
         const updatedTasks = originalTask.tasks.map((task, index) => {
             if (indicesToAssign.includes(index)) {
@@ -197,7 +199,6 @@ export const markItemAsPrepared = async (prepTask: AssignedPrepareTask, itemInde
     targetItem.preparationStatus = 'Prepared';
     await getCollection('assignedPrepareTasks').doc(prepTask.id).update({ tasks: updatedPrepTasks });
 
-    // Sync back only if NOT manual
     if (prepTask.category !== TaskCategory.Manual) {
         try {
             const originalDoc = await getCollection('categorizedTasks').doc(prepTask.originalDocId).get();
@@ -236,7 +237,6 @@ export const resetItemPreparation = async (prepTask: AssignedPrepareTask, itemIn
     targetItem.preparationStatus = 'Awaiting Preparation';
     await getCollection('assignedPrepareTasks').doc(prepTask.id).update({ tasks: updatedPrepTasks });
 
-    // Sync back only if NOT manual
     if (prepTask.category !== TaskCategory.Manual) {
         try {
             const originalDoc = await getCollection('categorizedTasks').doc(prepTask.originalDocId).get();
@@ -268,7 +268,10 @@ export const resetItemPreparation = async (prepTask: AssignedPrepareTask, itemIn
 };
 
 export const returnTaskToPool = async (categorizedTask: CategorizedTask): Promise<void> => {
-    const tasksWithFlags = categorizedTask.tasks.map(t => ({
+    // Strip docId to avoid contamination
+    const { docId, ...cleanBase } = categorizedTask;
+    
+    const tasksWithFlags = cleanBase.tasks.map(t => ({
         ...t,
         isReturned: true,
         returnReason: categorizedTask.returnReason,
@@ -276,7 +279,7 @@ export const returnTaskToPool = async (categorizedTask: CategorizedTask): Promis
     }));
 
     const payload = {
-        ...categorizedTask,
+        ...cleanBase,
         tasks: tasksWithFlags,
         isReturnedPool: true,
         createdAt: new Date().toISOString()
@@ -284,18 +287,17 @@ export const returnTaskToPool = async (categorizedTask: CategorizedTask): Promis
     await getCollection('categorizedTasks').add(payload);
 };
 
-// New function: Planner Unassign (Returns to pool WITHOUT 'returned' flag)
 export const unassignTaskToPool = async (categorizedTask: CategorizedTask): Promise<void> => {
-    // Reset status fields to make it look like a fresh task
-    const cleanTasks = categorizedTask.tasks.map(t => {
+    const { docId, ...cleanBase } = categorizedTask;
+    
+    const cleanTasks = cleanBase.tasks.map(t => {
         const { status, notOkReason, returnReason, returnedBy, isReturned, preparationStatus, ...rest } = t;
         return rest as RawTask;
     });
 
     const payload = {
-        ...categorizedTask,
+        ...cleanBase,
         tasks: cleanTasks,
-        // Ensure NO returned flags on the group
         returnReason: null,
         returnedBy: null,
         isReturnedPool: false
@@ -322,8 +324,6 @@ const deleteInBatches = async (refs: any[]) => {
     if (!firestore) throw new Error("Database not initialized");
     const BATCH_SIZE = 400;
     const total = refs.length;
-    console.log(`[Batch Delete] Starting deletion of ${total} documents...`);
-
     for (let i = 0; i < total; i += BATCH_SIZE) {
         const chunk = refs.slice(i, i + BATCH_SIZE);
         const batch = firestore.batch();
