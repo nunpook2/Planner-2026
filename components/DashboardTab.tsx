@@ -15,14 +15,6 @@ import {
 
 declare const XLSX: any;
 
-interface DashboardTabProps {
-    testers: Tester[];
-    selectedDate: string;
-    onDateChange: (date: string) => void;
-    selectedShift: 'day' | 'night';
-    onShiftChange: (shift: 'day' | 'night') => void;
-}
-
 interface SampleDetail {
     name: string;
     qty: string;
@@ -38,7 +30,7 @@ interface SummaryItemStats {
     done: number; 
     failed: number; 
     returned: number;
-    isInProcess: boolean;
+    isPoCat: boolean;
     isSprint: boolean;
     isUrgent: boolean;
     isLSP: boolean;
@@ -65,13 +57,24 @@ const getSpecialStatus = (task: RawTask, category: TaskCategory) => {
     const allContent = Object.values(task).map(v => String(v).toLowerCase()).join(' ');
     
     return {
-        isInProcess: category === TaskCategory.InProcess || allContent.includes('in process'),
+        isPoCat: category === TaskCategory.PoCat || allContent.includes('po cat'),
         isSprint: allContent.includes('sprint'),
         isUrgent: category === TaskCategory.Urgent || allContent.includes('urgent'),
         isLSP: allContent.includes('lsp'),
         isManual: task.ManualEntry === true || category === TaskCategory.Manual
     };
 };
+
+/**
+ * Added missing DashboardTabProps interface to resolve the undefined name error.
+ */
+interface DashboardTabProps {
+    testers: Tester[];
+    selectedDate: string;
+    onDateChange: (date: string) => void;
+    selectedShift: 'day' | 'night';
+    onShiftChange: (shift: 'day' | 'night') => void;
+}
 
 const DashboardTab: React.FC<DashboardTabProps> = ({ 
     testers, 
@@ -135,15 +138,15 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         let total = 0;
         let prep = 0;
         let exec = 0;
-        let inProcessCount = 0;
+        let poCatCount = 0;
         let lspCount = 0;
         let sprintCount = 0;
         let urgentCount = 0;
 
         const processTaskFlags = (t: RawTask, cat: TaskCategory) => {
             const spec = getSpecialStatus(t, cat);
-            if (spec.isInProcess) {
-                inProcessCount++;
+            if (spec.isPoCat) {
+                poCatCount++;
             } else if (spec.isLSP) {
                 lspCount++;
             } else if (spec.isSprint) {
@@ -165,11 +168,11 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         total = exec + prep;
         return { 
             total, prep, exec, 
-            inProcess: inProcessCount,
+            poCat: poCatCount,
             lsp: lspCount, 
             sprint: sprintCount, 
             urgent: urgentCount, 
-            totalSpecial: inProcessCount + lspCount + sprintCount + urgentCount
+            totalSpecial: poCatCount + lspCount + sprintCount + urgentCount
         };
     }, [assignedTasks, prepareTasks]);
 
@@ -262,10 +265,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         }
     };
 
-    const handleUpdateReport = (updates: Partial<ShiftReport>) => {
-        setShiftReport(prev => prev ? { ...prev, ...updates } : null);
-    };
-
     const handleExport = () => {
         const exportData = processedPersonnel.flatMap(person => 
             Object.values(person.summary).flatMap((sum: SummaryItemStats) => 
@@ -288,18 +287,9 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
     };
 
     return (
-        <div className="h-[calc(100vh-140px)] flex flex-col animate-fade-in overflow-hidden p-3 bg-base-50/50 dark:bg-base-950 font-sans text-[10px] relative">
+        <div className="h-[calc(100vh-140px)] flex flex-col animate-fade-in overflow-hidden p-3 bg-base-50/50 dark:bg-base-955 font-sans text-[10px] relative">
             <style>{`
                 .no-scrollbar::-webkit-scrollbar { display: none; }
-                .glass-card {
-                    background: rgba(255, 255, 255, 0.85);
-                    backdrop-filter: blur(16px);
-                    border: 1px solid rgba(255, 255, 255, 0.5);
-                }
-                .dark .glass-card {
-                    background: rgba(15, 23, 42, 0.7);
-                    border: 1px solid rgba(255, 255, 255, 0.05);
-                }
                 .person-avatar { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); }
                 .person-avatar.assistant { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); }
                 .active-glow { box-shadow: 0 0 20px -5px rgba(99, 102, 241, 0.4); }
@@ -338,7 +328,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                         })}
                     </div>
 
-                    <div className="p-4 bg-white/40 dark:bg-base-950/40 border-t border-white dark:border-base-800 shrink-0 space-y-3">
+                    <div className="p-4 bg-white/40 dark:bg-base-955/40 border-t border-white dark:border-base-800 shrink-0 space-y-3">
                         <div className="flex items-center gap-2 mb-1 px-1">
                             <SparklesIcon className="h-3.5 w-3.5 text-primary-500" />
                             <h4 className="text-[9px] font-black text-base-400 uppercase tracking-widest">Performance Insight</h4>
@@ -362,13 +352,13 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
 
                             <div className="bg-indigo-50/50 dark:bg-indigo-950/20 rounded-2xl border-2 border-indigo-100 dark:border-indigo-900/50 p-3 shadow-inner overflow-hidden">
                                 <div className="flex justify-between items-center mb-2 border-b border-indigo-100/50 dark:border-indigo-900/50 pb-1.5 px-0.5">
-                                    <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">Special Operations (Test)</span>
+                                    <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">Po cat Ops (Test)</span>
                                     <span className="text-[14px] font-black text-indigo-700 dark:text-indigo-400 tracking-tighter">{globalStats.totalSpecial}</span>
                                 </div>
                                 <div className="space-y-1.5 overflow-y-auto max-h-[120px] custom-scrollbar">
-                                    <div className="flex items-center justify-between px-2 py-1 bg-fuchsia-100 dark:bg-fuchsia-950/40 rounded-lg shadow-sm">
-                                        <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-fuchsia-600"></div><span className="text-[8px] font-black text-fuchsia-800 dark:text-fuchsia-300 uppercase tracking-widest">In Process</span></div>
-                                        <span className="text-[12px] font-black text-fuchsia-900 dark:text-fuchsia-200">{globalStats.inProcess}</span>
+                                    <div className="flex items-center justify-between px-2 py-1 bg-orange-100 dark:bg-orange-950/40 rounded-lg shadow-sm">
+                                        <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-orange-500"></div><span className="text-[8px] font-black text-orange-800 dark:text-orange-300 uppercase tracking-widest">Po cat</span></div>
+                                        <span className="text-[12px] font-black text-orange-900 dark:text-orange-200">{globalStats.poCat}</span>
                                     </div>
                                     <div className="flex items-center justify-between px-2 py-1 bg-white dark:bg-base-900/50 rounded-lg shadow-sm">
                                         <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-cyan-500"></div><span className="text-[8px] font-black text-base-500 uppercase tracking-widest">LSP Focus</span></div>
@@ -384,7 +374,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                     </div>
                                 </div>
                                 <p className="text-[5.5px] font-bold text-indigo-400 uppercase tracking-widest text-center mt-2 opacity-60 italic">
-                                    {'Hierarchy: In Process > LSP > Sprint > Urgent > Normal'}
+                                    {'Hierarchy: Po cat > LSP > Sprint > Urgent > Normal'}
                                 </p>
                             </div>
                         </div>
@@ -433,7 +423,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                                             <ChevronDownIcon className={`h-5 w-5 mt-1.5 text-base-400 transition-transform duration-300 ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
                                                             <div>
                                                                 <div className="flex flex-wrap gap-2 mb-2 mt-1">
-                                                                    {sum.isInProcess && <span className="bg-fuchsia-700 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm animate-pulse">IN PROCESS</span>}
+                                                                    {sum.isPoCat && <span className="bg-orange-500 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm animate-pulse">Po cat</span>}
                                                                     {sum.isSprint && <span className="bg-red-600 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">SPRINT</span>}
                                                                     {sum.isUrgent && <span className="bg-rose-500 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">URGENT</span>}
                                                                     {sum.isLSP && <span className="bg-cyan-600 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">LSP</span>}

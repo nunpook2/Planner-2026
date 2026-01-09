@@ -18,6 +18,18 @@ import {
 
 declare const XLSX: any;
 
+const LockIcon = ({ className = "h-5 w-5" }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0V10.5m-2.25 1.333v4.63c0 .46.36.843.81.913a21.18 21.18 0 0 0 10.88 0c.45-.07.81-.453.81-.913v-4.63c0-.46-.36-.843-.81-.913a21.18 21.18 0 0 0-10.88 0c-.45.07-.81.453-.81.913Z" />
+    </svg>
+);
+
+const UnlockIcon = ({ className = "h-5 w-5" }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 11.25h16.5m-16.5 0a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25h16.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25M12 15.75h.007v.008H12v-.008Z" />
+    </svg>
+);
+
 interface ScheduleTabProps {
     testers: Tester[];
     onTasksUpdated: () => void;
@@ -98,7 +110,7 @@ const LocalModal: React.FC<{
 
                 <div className="flex justify-end gap-4 pt-2">
                     <button onClick={onClose} className="px-6 py-3 text-[11px] font-black text-base-400 hover:text-base-800 dark:hover:text-white uppercase tracking-widest transition-colors">Close</button>
-                    {showInput && (
+                    {(showInput || confirmText) && (
                         <button 
                             onClick={() => onConfirm(val)} 
                             className={`px-8 py-3.5 text-[11px] font-black text-white rounded-2xl shadow-xl transition-all uppercase tracking-widest ${confirmColor} hover:brightness-110`}
@@ -130,6 +142,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     const [assignedTasks, setAssignedTasks] = useState<AssignedTask[]>([]);
     const [prepareTasks, setPrepareTasks] = useState<AssignedPrepareTask[]>([]);
     const [activePersonId, setActivePersonId] = useState<string>('');
+    const [isPlannerAuthorized, setIsPlannerAuthorized] = useState<boolean>(false);
     const [notification, setNotification] = useState<{message: string, isError: boolean} | null>(null);
 
     const [modalConfig, setModalConfig] = useState<{
@@ -244,13 +257,21 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     };
 
     const handleCorrectionReturn = async (group: AssignedTask, itemIndex: number) => {
+        // QUICK RETURN: No reason, No Dashboard (isReturnedPool = false)
         const item = group.tasks[itemIndex];
-        const categorizedTask: CategorizedTask = { id: group.requestId, category: group.category, tasks: [item], docId: group.id };
+        const categorizedTask: CategorizedTask = { 
+            id: group.requestId, 
+            category: group.category, 
+            tasks: [item], 
+            docId: group.id 
+        };
         await unassignTaskToPool(categorizedTask);
         const remaining = group.tasks.filter((_, idx) => idx !== itemIndex);
         if (remaining.length > 0) await updateAssignedTask(group.id, { tasks: remaining });
         else await deleteAssignedTask(group.id);
-        fetchData(); onTasksUpdated();
+        fetchData(); 
+        onTasksUpdated();
+        setNotification({ message: "Task Recalled (Quick)", isError: false });
     };
 
     const handlePrepReturn = async (group: AssignedPrepareTask, itemIndex: number) => {
@@ -346,12 +367,10 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     };
 
     const handleExport = () => {
-        // --- PREPARE DATA STRUCTURE ---
         const exportDate = selectedDate;
         const [y, m, d] = exportDate.split('-');
         const dateDisplay = `${d}-${m}-${y.substring(2)}`;
         
-        // 1. Gather all tasks assigned for this shift with their source type
         const combinedRawAssignments: { personnel: string; requestId: string; task: RawTask; taskType: string }[] = [];
         
         assignedTasks.forEach(group => {
@@ -376,7 +395,6 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             });
         });
 
-        // 2. Nest data: Tester -> Date -> RequestID -> TaskType -> Description -> { count, remark }
         const hierarchy: Record<string, Record<string, Record<string, Record<string, Record<string, { count: number; remark: string }>>>>> = {};
 
         combinedRawAssignments.forEach(({ personnel, requestId, task, taskType }) => {
@@ -394,23 +412,17 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             
             hierarchy[personnel][exportDate][requestId][taskType][desc].count += 1;
             
-            // If we have a new remark and the existing one is empty, update it
             if (remark && !hierarchy[personnel][exportDate][requestId][taskType][desc].remark) {
                 hierarchy[personnel][exportDate][requestId][taskType][desc].remark = remark;
             } else if (remark && hierarchy[personnel][exportDate][requestId][taskType][desc].remark && !hierarchy[personnel][exportDate][requestId][taskType][desc].remark.includes(remark)) {
-                // If notes are different, append
                 hierarchy[personnel][exportDate][requestId][taskType][desc].remark += `; ${remark}`;
             }
         });
 
-        // 3. Flatten for Excel AOA
         const rows: any[][] = [];
-        // Header
         rows.push(["Tester", "Plantodate", "Request ID", "ประเภทงาน", "รายการทดสอบ", "Remark", "Total"]);
 
         let grandTotal = 0;
-
-        // Sort personnel for consistent output
         const sortedTesters = Object.keys(hierarchy).sort();
 
         sortedTesters.forEach((tester, tIdx) => {
@@ -431,11 +443,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                             const { count, remark } = descs[desc];
                             grandTotal += count;
 
-                            // Create hierarchical row
                             const row: any[] = [];
-                            
-                            // Hierarchical logic: Only show parent labels for the first item in the group
-                            // To create visual "lines" or grouping, we leave values empty if they repeat from previous row
                             row[0] = (dIdx === 0 && rIdx === 0 && tyIdx === 0 && dsIdx === 0) ? tester : "";
                             row[1] = (rIdx === 0 && tyIdx === 0 && dsIdx === 0) ? dateDisplay : "";
                             row[2] = (tyIdx === 0 && dsIdx === 0) ? reqId : "";
@@ -449,26 +457,13 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     });
                 });
             });
-            // Optional: Insert empty row between testers for better visual separation
             rows.push([]);
         });
 
-        // Add Grand Total row
         rows.push(["Grand Total", "", "", "", "", "", grandTotal]);
 
-        // 4. Create Workbook and Download
         const ws = XLSX.utils.aoa_to_sheet(rows);
-        
-        // Basic Column Widths
-        ws['!cols'] = [
-            { wch: 15 }, // Tester
-            { wch: 12 }, // Date
-            { wch: 20 }, // Request ID
-            { wch: 25 }, // ประเภทงาน
-            { wch: 35 }, // Description
-            { wch: 45 }, // Remark
-            { wch: 8 },  // Total
-        ];
+        ws['!cols'] = [{ wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 25 }, { wch: 35 }, { wch: 45 }, { wch: 8 }];
 
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Mission Summary");
@@ -527,9 +522,18 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 <div className="col-span-3 bg-white/40 dark:bg-base-900/40 rounded-[2.5rem] border border-white dark:border-base-800 shadow-sm flex flex-col overflow-hidden backdrop-blur-md h-full">
                     <div className="p-4 border-b border-white dark:border-base-800 bg-white/20 flex justify-between items-center shrink-0">
                         <h3 className="text-[10px] font-black text-base-400 uppercase tracking-[0.4em] ml-1">Duty Roster</h3>
-                        <button onClick={handleExport} title="Export Detailed Summary" className="p-2 bg-white dark:bg-base-800 border border-base-200 dark:border-base-700 rounded-xl hover:bg-base-50 transition-colors shadow-sm">
-                            <DownloadIcon className="h-4 w-4 text-base-500" />
-                        </button>
+                        <div className="flex gap-1.5">
+                            <button 
+                                onClick={() => setIsPlannerAuthorized(!isPlannerAuthorized)} 
+                                title={isPlannerAuthorized ? "Planner Tools: Unlocked" : "Planner Tools: Locked"} 
+                                className={`p-2 rounded-xl transition-all shadow-sm border ${isPlannerAuthorized ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-white dark:bg-base-800 border-base-200 dark:border-base-700 text-base-400 hover:text-indigo-600'}`}
+                            >
+                                {isPlannerAuthorized ? <UnlockIcon className="h-4 w-4" /> : <LockIcon className="h-4 w-4" />}
+                            </button>
+                            <button onClick={handleExport} title="Export Summary" className="p-2 bg-white dark:bg-base-800 border border-base-200 dark:border-base-700 rounded-xl hover:bg-base-50 transition-colors shadow-sm">
+                                <DownloadIcon className="h-4 w-4 text-base-500" />
+                            </button>
+                        </div>
                     </div>
                     <div className="flex-grow overflow-y-auto no-scrollbar p-2.5 space-y-1.5">
                         {testers.filter(t => assignedTasks.some(at => at.testerId === t.id) || prepareTasks.some(pt => pt.assistantId === t.id)).map(tester => {
@@ -557,7 +561,10 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                     </div>
                                     <div>
                                         <h2 className="text-2xl font-black text-base-900 dark:text-white tracking-tighter leading-none">{activePerson.name}</h2>
-                                        <p className="text-[10px] text-base-400 font-bold uppercase tracking-[0.3em] mt-1.5">Operational Tasks Control</p>
+                                        <p className="text-[10px] text-base-400 font-bold uppercase tracking-[0.3em] mt-1.5 flex items-center gap-2">
+                                            Operational Tasks Control
+                                            {isPlannerAuthorized && <span className="px-2 py-0.5 bg-indigo-600 text-white rounded text-[8px] font-black tracking-widest">PLANNER MODE</span>}
+                                        </p>
                                     </div>
                                 </>
                             ) : (
@@ -619,7 +626,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                     <button 
                                                                         onClick={() => handlePrepReturn(item.sourceGroup, item.index)} 
                                                                         className="p-2.5 bg-white dark:bg-base-800 text-orange-600 dark:text-orange-400 border-2 border-orange-100 dark:border-orange-900/50 rounded-xl shadow-sm hover:bg-orange-50 transition-all"
-                                                                        title="Return Preparation Item to Pool"
+                                                                        title="Abort Preparation Item (Return to Pool)"
                                                                     >
                                                                         <ArrowUturnLeftIcon className="h-5 w-5" />
                                                                     </button>
@@ -674,7 +681,6 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                     {!isActioned ? (
                                                                         <div className="flex gap-2">
                                                                             <button onClick={() => handleUpdateStatus(item.sourceGroup, item.index, TaskStatus.Done)} className="px-6 py-2.5 bg-emerald-600 text-white font-black rounded-xl shadow-xl uppercase tracking-widest text-[11px] hover:bg-emerald-700 hover:scale-105 transition-all active:scale-95 border-b-4 border-emerald-800">DONE</button>
-                                                                            <button onClick={() => handleUpdateStatus(item.sourceGroup, item.index, TaskStatus.Done)} className="px-6 py-2.5 bg-emerald-600 text-white font-black rounded-xl shadow-xl uppercase tracking-widest text-[11px] hover:bg-emerald-700 hover:scale-105 transition-all active:scale-95 border-b-4 border-emerald-800">DONE</button>
                                                                             <button onClick={() => handleNotOkClick(item.sourceGroup, item.index)} className="px-6 py-2.5 bg-red-600 text-white font-black rounded-xl shadow-xl uppercase tracking-widest text-[11px] hover:bg-red-700 hover:scale-105 transition-all active:scale-95 border-b-4 border-red-800">NOT OK</button>
                                                                         </div>
                                                                     ) : (
@@ -695,17 +701,19 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                     )}
                                                                     
                                                                     <div className="flex gap-2">
-                                                                        <button 
-                                                                            onClick={() => handleCorrectionReturn(item.sourceGroup, item.index)} 
-                                                                            className="p-2.5 bg-white dark:bg-base-800 text-indigo-600 dark:text-indigo-400 border-2 border-indigo-100 dark:border-indigo-900/50 rounded-xl shadow-sm hover:bg-indigo-50 transition-all flex items-center justify-center shadow-indigo-100"
-                                                                            title="Return from Planner"
-                                                                        >
-                                                                            <ArrowUturnLeftIcon className="h-5 w-5" />
-                                                                        </button>
+                                                                        {isPlannerAuthorized && (
+                                                                            <button 
+                                                                                onClick={() => handleCorrectionReturn(item.sourceGroup, item.index)} 
+                                                                                className="p-2.5 bg-white dark:bg-base-800 text-indigo-600 dark:text-indigo-400 border-2 border-indigo-100 dark:border-indigo-900/50 rounded-xl shadow-sm hover:bg-indigo-50 transition-all flex items-center justify-center shadow-indigo-100 animate-fade-in"
+                                                                                title="Planner Quick Recall (No Reason/No Dashboard)"
+                                                                            >
+                                                                                <ArrowUturnLeftIcon className="h-5 w-5" />
+                                                                            </button>
+                                                                        )}
                                                                         <button 
                                                                             onClick={() => handleTesterReturn(item.sourceGroup, item.index)} 
                                                                             className="p-2.5 bg-white dark:bg-base-800 text-orange-600 dark:text-orange-400 border-2 border-orange-100 dark:border-orange-900/50 rounded-xl shadow-sm hover:bg-orange-50 transition-all flex items-center justify-center shadow-orange-100"
-                                                                            title="Return from Tester"
+                                                                            title="Tester Mission Abort (Required Reason)"
                                                                         >
                                                                             <AlertTriangleIcon className="h-5 w-5" />
                                                                         </button>

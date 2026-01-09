@@ -80,7 +80,7 @@ const getSpecialStatus = (task: RawTask, category: string) => {
     const allContent = Object.values(task).map(v => String(v).toLowerCase()).join(' ');
     const lowerCategory = category.toLowerCase();
     return {
-        isInProcess: lowerCategory === 'inprocess' || allContent.includes('in process'),
+        isPoCat: lowerCategory === 'pocat' || allContent.includes('po cat'),
         isSprint: allContent.includes('sprint'),
         isUrgent: lowerCategory === 'urgent' || allContent.includes('urgent'),
         isLSP: allContent.includes('lsp'),
@@ -118,7 +118,7 @@ const NoteModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: (va
                     <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600"><ChatBubbleLeftEllipsisIcon className="h-6 w-6" /></div>
                     <h3 className="text-2xl font-black text-base-900 dark:text-base-100 tracking-tighter">Mission Briefing</h3>
                 </div>
-                <textarea autoFocus value={val} onChange={e => setVal(e.target.value)} placeholder="Instructions..." rows={5} className="w-full p-5 bg-base-50 dark:bg-base-950 border-2 border-base-100 dark:border-base-800 rounded-3xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none dark:text-white font-bold text-[15px] resize-none transition-all"/>
+                <textarea autoFocus value={val} onChange={e => setVal(e.target.value)} placeholder="Instructions..." rows={5} className="w-full p-5 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-3xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none dark:text-white font-bold text-[15px] resize-none transition-all"/>
                 <div className="flex justify-end gap-4">
                     <button onClick={onClose} className="px-6 py-3 text-[11px] font-black text-base-400 hover:text-base-800 dark:hover:text-white uppercase tracking-widest transition-colors">Cancel</button>
                     <button onClick={() => onConfirm(val)} className="px-8 py-3.5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl hover:brightness-110 transition-all uppercase tracking-widest text-[11px]">Save</button>
@@ -138,7 +138,7 @@ const ManualTaskModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: 
             <div className="bg-white dark:bg-base-800 rounded-[2rem] shadow-2xl p-8 w-full max-w-md m-4 space-y-5 animate-slide-in-up border border-base-200 dark:border-base-700" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-4 mb-2"><div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600"><PlusIcon className="h-6 w-6" /></div><h2 className="text-2xl font-black text-base-900 dark:text-base-100 tracking-tighter">Add Manual Template</h2></div>
                 <div className="space-y-4">
-                    <input type="text" value={jobId} onChange={e => setJobId(e.target.value)} placeholder="Request ID (e.g. M-01)" className="w-full p-4 bg-base-50 dark:bg-base-950 border-2 border-base-100 dark:border-base-800 rounded-2xl outline-none dark:text-white font-bold text-sm"/>
+                    <input type="text" value={jobId} onChange={e => setJobId(e.target.value)} placeholder="Request ID (e.g. M-01)" className="w-full p-4 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-2xl outline-none dark:text-white font-bold text-sm"/>
                     <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Description..." rows={3} className="w-full p-4 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-2xl outline-none dark:text-white font-bold text-sm resize-none"/>
                     <input type="text" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Quantity" className="w-full p-4 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-2xl outline-none dark:text-white font-bold text-sm"/>
                 </div>
@@ -251,7 +251,6 @@ const ExpandableCell: React.FC<{
                             <input type="checkbox" className="h-4 w-4 rounded" checked={areAllSelected} onChange={e => toggleAll(e.target.checked)}/> Select All
                         </label>
                     </div>
-                    {/* CRITICAL FIX: Add overscroll-contain to prevent scroll leaking to main grid */}
                     <div className="max-h-96 overflow-y-auto overscroll-contain custom-scrollbar bg-white dark:bg-base-900">
                         <table className="w-full border-collapse">
                             <tbody className="divide-y divide-base-50 dark:divide-base-800">
@@ -272,7 +271,7 @@ const ExpandableCell: React.FC<{
                                                     )}
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
-                                                    <button onClick={(e) => { e.stopPropagation(); setNoteEditor({ docId: sourceDocId, index: originalIndex, text: task.plannerNote || '' }); }} className={`p-2 rounded-xl transition-all border-2 ${task.plannerNote ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg animate-pulse' : 'bg-base-50 dark:bg-base-800 border-base-100 dark:border-base-700 text-base-400 hover:text-indigo-600'}`} title="Edit Note"><ChatBubbleLeftEllipsisIcon className="h-4 w-4" /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); setNoteEditor({ docId: sourceDocId, index: originalIndex, text: task.plannerNote || '' }); }} className={`p-2 rounded-xl transition-all border-2 ${task.plannerNote ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg animate-pulse' : 'bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`} title="Edit Note"><ChatBubbleLeftEllipsisIcon className="h-4 w-4" /></button>
                                                     <div className="px-2.5 py-1 bg-primary-50 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 rounded-xl text-[11px] font-black border border-primary-100 dark:border-primary-800">x{String(getTaskValue(task, 'Quantity'))}</div>
                                                 </div>
                                             </div>
@@ -349,16 +348,12 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         return sortedGroups.map(gn => [gn, groupsContent[gn].sort((a, b) => a.order - b.order).map(x => x.key)] as [string, string[]]);
     }, [testMappings]);
 
-    // INCLUSIVE GROUPING: Normalize ID by trimming and stripping common prefixes like RS1-
     const groupedByNormalizedId = useMemo<Record<string, { displayId: string, docs: CategorizedTask[] }>>(() => {
         const groups: Record<string, { displayId: string, docs: CategorizedTask[] }> = {};
         categorizedTasks.forEach(doc => {
             const rawId = String(doc.id || '').trim();
             if (!rawId) return;
-            
-            // Normalize Key for grouping: strip "RS1-" and make lowercase
             const normalizedKey = rawId.toLowerCase().replace(/^rs1-/, '');
-            
             if (!groups[normalizedKey]) {
                 groups[normalizedKey] = { displayId: rawId, docs: [] };
             }
@@ -387,7 +382,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     unmappedItems: [] as { task: RawTask; originalIndex: number; sourceDocId: string }[],
                     minDueDate: Infinity,
                     totalItemCount: 0,
-                    isInProcess: false, isSprint: false, isUrgent: false, isLSP: false, isReturned: false,
+                    isPoCat: false, isSprint: false, isUrgent: false, isLSP: false, isReturned: false,
                     seenKeys: new Set<string>()
                 };
 
@@ -396,16 +391,13 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     if (groupDate < row.minDueDate) row.minDueDate = groupDate;
 
                     doc.tasks.forEach((task, index) => {
-                        // CRITICAL DEDUPLICATION: Use task._id as the unique key instead of doc-index
-                        // This prevents showing 10 items when 2 are actually duplicates from a return operation
                         const itemKey = task._id || `${doc.docId}-${index}`;
-                        
                         if (row.seenKeys.has(itemKey)) return;
                         row.seenKeys.add(itemKey);
                         row.totalItemCount++;
 
                         const spec = getSpecialStatus(task, doc.category);
-                        if (spec.isInProcess) row.isInProcess = true;
+                        if (spec.isPoCat) row.isPoCat = true;
                         if (spec.isSprint) row.isSprint = true;
                         if (spec.isUrgent) row.isUrgent = true;
                         if (spec.isLSP) row.isLSP = true;
@@ -526,9 +518,9 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                 <div className="flex justify-between items-center"><h2 className="text-3xl font-black text-base-950 dark:text-base-50 tracking-tighter">Queue Deployment</h2><button onClick={() => setHideEmptyColumns(!hideEmptyColumns)} className={`px-5 py-2 text-[10px] font-black rounded-xl transition-all border-2 uppercase tracking-widest flex items-center gap-2 shadow-md ${hideEmptyColumns ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-white dark:bg-base-800 text-base-500 border-base-200'}`}>{hideEmptyColumns ? <CheckCircleIcon className="h-4 w-4" /> : <div className="w-4 h-4 rounded border-2 border-base-300"></div>}Hide Empty Columns</button></div>
                 <div className="p-5 bg-white/80 dark:bg-base-800/80 rounded-3xl border-2 border-white dark:border-base-700 shadow-xl space-y-5 backdrop-blur-md">
                     <div className="flex flex-wrap gap-2.5">
-                        {['all', 'inprocess', 'urgent', 'normal', 'manual'].map(c => (
+                        {['all', 'pocat', 'urgent', 'normal', 'manual'].map(c => (
                             <button key={c} onClick={() => setActiveCategory(c)} className={`px-5 py-2 text-xs font-black rounded-xl transition-all border-2 uppercase tracking-[0.1em] shadow-md ${activeCategory === c ? 'bg-primary-700 text-white border-primary-600' : 'bg-white dark:bg-base-800 text-base-800 dark:text-base-100 border-base-200 dark:border-base-700'}`}>
-                                {c === 'all' ? 'Show All' : c === 'inprocess' ? 'In Process' : c.toUpperCase()} <span className="ml-2 px-2 py-0.5 rounded-lg text-[10px] bg-base-100 dark:bg-base-900 text-primary-600">{categorizedTasks.filter(t => c === 'all' ? true : (t.category || '').toLowerCase() === c).length}</span>
+                                {c === 'all' ? 'Show All' : c === 'pocat' ? 'Po cat' : c.toUpperCase()} <span className="ml-2 px-2 py-0.5 rounded-lg text-[10px] bg-base-100 dark:bg-base-900 text-primary-600">{categorizedTasks.filter(t => c === 'all' ? true : (t.category || '').toLowerCase() === c).length}</span>
                             </button>
                         ))}
                     </div>
@@ -572,7 +564,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                                 <div className="flex flex-col gap-1.5 min-w-0">
                                                     <div className="flex items-center justify-between"><span className="tracking-tighter text-[15px] font-black truncate leading-none uppercase text-base-950 dark:text-base-50">{row.requestId.replace(/^RS1-/, '')}</span><span className="px-2 py-0.5 bg-base-100 dark:bg-base-800 text-[10px] font-black rounded-lg text-base-400">#{row.totalItemCount}</span></div>
                                                     <div className="flex flex-nowrap gap-1 mt-1 overflow-x-auto no-scrollbar">
-                                                        {row.isInProcess && <span className="px-1.5 py-0.5 bg-fuchsia-700 text-white text-[7px] rounded-md uppercase font-black shrink-0">IP</span>}
+                                                        {row.isPoCat && <span className="px-1.5 py-0.5 bg-orange-500 text-white text-[7px] rounded-md uppercase font-black shrink-0">PC</span>}
                                                         {row.isLSP && <span className="px-1.5 py-0.5 bg-cyan-600 text-white text-[7px] rounded-md uppercase font-black shrink-0">LSP</span>}
                                                         {row.isSprint && <span className="px-1.5 py-0.5 bg-rose-500 text-white text-[7px] rounded-md uppercase font-black shrink-0">SPR</span>}
                                                         {row.isUrgent && <span className="px-1.5 py-0.5 bg-red-600 text-white text-[7px] rounded-md uppercase font-black shrink-0">URG</span>}
@@ -604,7 +596,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     </div>
                  )}
             </div>
-            <div className="px-4 py-2 bg-base-50 dark:bg-base-955 border-t border-base-200 dark:border-base-800 text-[9px] font-bold text-base-400 text-center uppercase tracking-widest">Hierarchy: In Process &gt; LSP &gt; Sprint &gt; Urgent &gt; Normal</div>
+            <div className="px-4 py-2 bg-base-50 dark:bg-base-955 border-t border-base-200 dark:border-base-800 text-[9px] font-bold text-base-400 text-center uppercase tracking-widest">Hierarchy: Po cat &gt; LSP &gt; Sprint &gt; Urgent &gt; Normal</div>
         </div>
     );
 };
