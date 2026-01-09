@@ -211,6 +211,7 @@ const ExpandableCell: React.FC<{
             const next = { ...prev };
             items.forEach(item => {
                 const currentSet = new Set(next[item.sourceDocId] || []);
+                // If not assigning to prep, we block items that are currently in prep from being selected
                 const isLockDisabled = !isAssigningToPrepare && item.task.preparationStatus === 'Awaiting Preparation';
                 if (checked && !isLockDisabled) currentSet.add(item.originalIndex); 
                 else currentSet.delete(item.originalIndex);
@@ -254,31 +255,47 @@ const ExpandableCell: React.FC<{
                     <div className="max-h-96 overflow-y-auto overscroll-contain custom-scrollbar bg-white dark:bg-base-900">
                         <table className="w-full border-collapse">
                             <tbody className="divide-y divide-base-50 dark:divide-base-800">
-                                {items.map(({ task, originalIndex, sourceDocId }) => (
-                                    <tr key={`${sourceDocId}-${originalIndex}`} className="bg-white dark:bg-base-900 hover:bg-primary-50/20 transition-colors">
-                                        <td className="p-4 w-12 text-center" onClick={e => e.stopPropagation()}>
-                                            <input type="checkbox" className="h-5 w-5 rounded cursor-pointer border-2 border-base-300 dark:border-base-600 text-primary-600 focus:ring-primary-500" checked={selectedItems[sourceDocId]?.has(originalIndex) || false} onChange={e => handleSelectItem(sourceDocId, originalIndex, e.target.checked)}/>
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="flex justify-between items-start mb-1 gap-4">
-                                                <div className="flex flex-col gap-1 min-w-0">
-                                                    <span className="font-black text-[15px] uppercase truncate tracking-tight text-base-900 dark:text-white leading-tight">{String(getTaskValue(task, 'Sample Name'))}</span>
-                                                    {task.isReturned && (
-                                                        <div className="px-3 py-2 bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-800 rounded-xl mt-1.5">
-                                                            <div className="flex items-center gap-1.5"><AlertTriangleIcon className="h-3 w-3 text-red-500" /><span className="text-[9px] font-black text-red-600 dark:text-red-400 uppercase tracking-widest italic">Aborted By {task.returnedBy || 'Staff'}</span></div>
-                                                            <span className="text-[11px] font-bold text-red-800 dark:text-red-200 leading-tight block mt-1">Reason: {task.returnReason || 'N/A'}</span>
+                                {items.map(({ task, originalIndex, sourceDocId }) => {
+                                    const isLocked = !isAssigningToPrepare && task.preparationStatus === 'Awaiting Preparation';
+                                    const isReady = task.preparationStatus === 'Prepared' || task.preparationStatus === 'Ready for Testing';
+                                    const isPrepAwaiting = task.preparationStatus === 'Awaiting Preparation';
+
+                                    return (
+                                        <tr key={`${sourceDocId}-${originalIndex}`} className={`bg-white dark:bg-base-900 hover:bg-primary-50/20 transition-colors ${isLocked ? 'opacity-60 grayscale-[0.5]' : ''}`}>
+                                            <td className="p-4 w-12 text-center" onClick={e => e.stopPropagation()}>
+                                                <input 
+                                                    type="checkbox" 
+                                                    disabled={isLocked}
+                                                    className={`h-5 w-5 rounded cursor-pointer border-2 border-base-300 dark:border-base-600 text-primary-600 focus:ring-primary-500 ${isLocked ? 'cursor-not-allowed bg-base-100' : ''}`} 
+                                                    checked={selectedItems[sourceDocId]?.has(originalIndex) || false} 
+                                                    onChange={e => handleSelectItem(sourceDocId, originalIndex, e.target.checked)}
+                                                />
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="flex justify-between items-start mb-1 gap-4">
+                                                    <div className="flex flex-col gap-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-black text-[15px] uppercase truncate tracking-tight text-base-900 dark:text-white leading-tight">{String(getTaskValue(task, 'Sample Name'))}</span>
+                                                            {isPrepAwaiting && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black rounded-lg uppercase tracking-widest border border-amber-200">Awaiting Prep</span>}
+                                                            {isReady && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[8px] font-black rounded-lg uppercase tracking-widest border border-emerald-200">Ready</span>}
                                                         </div>
-                                                    )}
+                                                        {task.isReturned && (
+                                                            <div className="px-3 py-2 bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-800 rounded-xl mt-1.5">
+                                                                <div className="flex items-center gap-1.5"><AlertTriangleIcon className="h-3 w-3 text-red-500" /><span className="text-[9px] font-black text-red-600 dark:text-red-400 uppercase tracking-widest italic">Aborted By {task.returnedBy || 'Staff'}</span></div>
+                                                                <span className="text-[11px] font-bold text-red-800 dark:text-red-200 leading-tight block mt-1">Reason: {task.returnReason || 'N/A'}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+                                                        <button onClick={(e) => { e.stopPropagation(); setNoteEditor({ docId: sourceDocId, index: originalIndex, text: task.plannerNote || '' }); }} className={`p-2 rounded-xl transition-all border-2 ${task.plannerNote ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg animate-pulse' : 'bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`} title="Edit Note"><ChatBubbleLeftEllipsisIcon className="h-4 w-4" /></button>
+                                                        <div className="px-2.5 py-1 bg-primary-50 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 rounded-xl text-[11px] font-black border border-primary-100 dark:border-primary-800">x{String(getTaskValue(task, 'Quantity'))}</div>
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
-                                                    <button onClick={(e) => { e.stopPropagation(); setNoteEditor({ docId: sourceDocId, index: originalIndex, text: task.plannerNote || '' }); }} className={`p-2 rounded-xl transition-all border-2 ${task.plannerNote ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg animate-pulse' : 'bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`} title="Edit Note"><ChatBubbleLeftEllipsisIcon className="h-4 w-4" /></button>
-                                                    <div className="px-2.5 py-1 bg-primary-50 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 rounded-xl text-[11px] font-black border border-primary-100 dark:border-primary-800">x{String(getTaskValue(task, 'Quantity'))}</div>
-                                                </div>
-                                            </div>
-                                            <p className="text-[11px] font-bold text-indigo-500/80 dark:text-indigo-400/80 truncate">{String(getTaskValue(task, 'Variant'))}</p>
-                                        </td>
-                                    </tr>
-                                ))}
+                                                <p className="text-[11px] font-bold text-indigo-500/80 dark:text-indigo-400/80 truncate">{String(getTaskValue(task, 'Variant'))}</p>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -542,9 +559,9 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
 
             <div className="flex-1 min-h-0 flex flex-col mx-4 mb-4 bg-white dark:bg-base-900 rounded-[2.5rem] border-2 border-base-200 dark:border-base-800 shadow-2xl overflow-hidden relative">
                  {isLoading ? (
-                    <div className="flex flex-col items-center justify-center h-full text-base-500 font-black gap-4 uppercase bg-base-50 dark:bg-base-950"><RefreshIcon className="animate-spin h-14 w-14 text-primary-500"/>Syncing...</div>
+                    <div className="flex flex-col items-center justify-center h-full text-base-500 font-black gap-4 uppercase bg-base-50 dark:bg-base-955"><RefreshIcon className="animate-spin h-14 w-14 text-primary-500"/>Syncing...</div>
                  ) : (
-                    <div className="flex-1 overflow-auto custom-scrollbar bg-white dark:bg-base-950">
+                    <div className="flex-1 overflow-auto custom-scrollbar bg-white dark:bg-base-955">
                         {gridData.length > 0 && (
                             <table className="min-w-full text-xs text-left border-collapse table-fixed relative">
                                 <thead className="bg-[#0f172a] text-white sticky top-0 z-[60]">

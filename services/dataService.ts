@@ -1,26 +1,44 @@
 
 import { firestore } from './firebase';
-import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport } from '../types';
+import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment } from '../types';
 import { TaskCategory } from '../types';
 
 const getCollection = (collectionName: string) => firestore.collection(collectionName);
 
-// Helper to handle offline fetches gracefully
 const safeGet = async (query: any) => {
     try {
         return await query.get();
     } catch (error: any) {
         if (error.code === 'unavailable' || error.message?.includes('offline')) {
-            console.warn(`Firestore: Client is offline, attempting to fetch '${query.path || 'collection'}' from cache...`);
             try {
                 return await query.get({ source: 'cache' });
             } catch (cacheError) {
-                console.error("Firestore: Cache fetch failed as well.", cacheError);
                 throw error;
             }
         }
         throw error;
     }
+};
+
+// --- Equipment Management ---
+export const getEquipments = async (): Promise<Equipment[]> => {
+    if (!firestore) return [];
+    const snapshot = await safeGet(getCollection('equipments'));
+    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }) as Equipment);
+};
+
+export const saveEquipment = async (equipment: Omit<Equipment, 'id'> & { id?: string }): Promise<void> => {
+    const { id, ...data } = equipment;
+    if (id) {
+        await getCollection('equipments').doc(id).set(data);
+    } else {
+        // Use 'data' instead of 'equipment' to ensure the 'id' field (which is undefined) is not sent to Firestore
+        await getCollection('equipments').add(data);
+    }
+};
+
+export const deleteEquipment = async (id: string): Promise<void> => {
+    await getCollection('equipments').doc(id).delete();
 };
 
 // --- Tester Management ---
@@ -52,9 +70,7 @@ export const getTestMappings = async (): Promise<TestMapping[]> => {
         const orderA = a.order ?? Infinity;
         const orderB = b.order ?? Infinity;
         if (orderA !== orderB) return orderA - orderB;
-        const groupCompare = a.headerGroup.localeCompare(b.headerGroup);
-        if (groupCompare !== 0) return groupCompare;
-        return a.headerSub.localeCompare(b.headerSub);
+        return (a.headerGroup || '').localeCompare(b.headerGroup || '');
     });
 };
 
@@ -75,20 +91,15 @@ export const deleteTestMapping = async (id: string): Promise<void> => {
 export const getCategorizedTasks = async (): Promise<CategorizedTask[]> => {
     if (!firestore) throw new Error("Database not initialized");
     const snapshot = await safeGet(getCollection('categorizedTasks'));
-    // CRITICAL FIX: Ensure docId from firestore ALWAYS wins by putting it last in the spread
     return snapshot.docs.map((doc: any) => ({ ...doc.data(), docId: doc.id }) as CategorizedTask);
 };
 
 export const addCategorizedTask = async (task: Omit<CategorizedTask, 'docId'>): Promise<void> => {
-    // Ensure we don't accidentally save docId inside the document data
-    const { ...pureData } = task;
-    await getCollection('categorizedTasks').add(pureData);
+    await getCollection('categorizedTasks').add(task);
 };
 
 export const updateCategorizedTask = async (docId: string, updates: Partial<CategorizedTask>): Promise<void> => {
-    // Remove docId from updates if present to avoid data pollution
-    const { docId: _, ...pureUpdates } = updates as any;
-    await getCollection('categorizedTasks').doc(docId).update(pureUpdates);
+    await getCollection('categorizedTasks').doc(docId).update(updates);
 };
 
 export const deleteCategorizedTask = async (docId: string): Promise<void> => {
@@ -108,13 +119,8 @@ export const saveDailySchedule = async (date: string, schedule: Omit<DailySchedu
 
 export const getExistingScheduleDates = async (): Promise<string[]> => {
     if (!firestore) return [];
-    try {
-        const snapshot = await safeGet(getCollection('dailySchedules'));
-        return snapshot.docs.map((doc: any) => doc.id);
-    } catch (e) {
-        console.error("Error fetching schedule dates:", e);
-        return [];
-    }
+    const snapshot = await safeGet(getCollection('dailySchedules'));
+    return snapshot.docs.map((doc: any) => doc.id);
 };
 
 // --- Assigned Task Management ---
@@ -224,7 +230,7 @@ export const markItemAsPrepared = async (prepTask: AssignedPrepareTask, itemInde
                 }
             }
         } catch (e) {
-            console.error("Error syncing preparation status to original task:", e);
+            console.error(e);
         }
     }
 };
@@ -262,51 +268,21 @@ export const resetItemPreparation = async (prepTask: AssignedPrepareTask, itemIn
                 }
             }
         } catch (e) {
-            console.error("Error syncing preparation status reset:", e);
+            console.error(e);
         }
     }
 };
 
-export const returnTaskToPool = async (categorizedTask: CategorizedTask): Promise<void> => {
-    // Strip docId to avoid contamination
-    const { docId, ...cleanBase } = categorizedTask;
-    
-    const tasksWithFlags = cleanBase.tasks.map(t => ({
-        ...t,
-        isReturned: true,
-        returnReason: categorizedTask.returnReason,
-        returnedBy: categorizedTask.returnedBy
-    }));
-
-    const payload = {
-        ...cleanBase,
-        tasks: tasksWithFlags,
-        isReturnedPool: true,
-        createdAt: new Date().toISOString()
-    };
-    await getCollection('categorizedTasks').add(payload);
-};
-
 export const unassignTaskToPool = async (categorizedTask: CategorizedTask): Promise<void> => {
     const { docId, ...cleanBase } = categorizedTask;
-    
     const cleanTasks = cleanBase.tasks.map(t => {
         const { status, notOkReason, returnReason, returnedBy, isReturned, preparationStatus, ...rest } = t;
         return rest as RawTask;
     });
-
-    const payload = {
-        ...cleanBase,
-        tasks: cleanTasks,
-        returnReason: null,
-        returnedBy: null,
-        isReturnedPool: false
-    };
-    
+    const payload = { ...cleanBase, tasks: cleanTasks, returnReason: null, returnedBy: null, isReturnedPool: false };
     await getCollection('categorizedTasks').add(payload);
 };
 
-// --- Shift Report Management ---
 export const getShiftReport = async (date: string, shift: 'day' | 'night'): Promise<ShiftReport | null> => {
     if (!firestore) return null;
     const docId = `${date}_${shift}`;
@@ -319,38 +295,29 @@ export const saveShiftReport = async (report: ShiftReport): Promise<void> => {
     await getCollection('shiftReports').doc(docId).set(report);
 };
 
-// --- BATCH HELPERS ---
-const deleteInBatches = async (refs: any[]) => {
-    if (!firestore) throw new Error("Database not initialized");
-    const BATCH_SIZE = 400;
-    const total = refs.length;
-    for (let i = 0; i < total; i += BATCH_SIZE) {
-        const chunk = refs.slice(i, i + BATCH_SIZE);
-        const batch = firestore.batch();
-        chunk.forEach((ref: any) => batch.delete(ref));
-        await batch.commit();
-    }
-};
-
 export const runCleanup = async () => {
     if (!firestore) throw new Error("Database not initialized");
     const catSnapshot = await getCollection('categorizedTasks').get();
     const refsToDelete: any[] = [];
     catSnapshot.forEach((doc: any) => {
         const data = doc.data() as CategorizedTask;
-        if (!data.tasks || !Array.isArray(data.tasks) || data.tasks.length === 0) refsToDelete.push(doc.ref);
+        if (!data.tasks || data.tasks.length === 0) refsToDelete.push(doc.ref);
     });
-    if (refsToDelete.length > 0) await deleteInBatches(refsToDelete);
+    if (refsToDelete.length > 0) {
+        const batch = firestore.batch();
+        refsToDelete.forEach(ref => batch.delete(ref));
+        await batch.commit();
+    }
     return { deleted: refsToDelete.length };
 };
 
 export const clearAllTaskData = async () => {
     if (!firestore) throw new Error("Database not initialized");
     const collections = ['categorizedTasks', 'assignedTasks', 'assignedPrepareTasks', 'shiftReports'];
-    const refsToDelete: any[] = [];
     for (const colName of collections) {
         const snapshot = await getCollection(colName).get();
-        snapshot.forEach((doc: any) => refsToDelete.push(doc.ref));
+        const batch = firestore.batch();
+        snapshot.forEach((doc: any) => batch.delete(doc.ref));
+        await batch.commit();
     }
-    if (refsToDelete.length > 0) await deleteInBatches(refsToDelete);
 };

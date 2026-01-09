@@ -395,39 +395,43 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             });
         });
 
-        const hierarchy: Record<string, Record<string, Record<string, Record<string, Record<string, { count: number; remark: string }>>>>> = {};
+        // Structure: hierarchy[personnel][date][requestId][taskType][description][variant] = { count: number, remark: string }
+        const hierarchy: Record<string, Record<string, Record<string, Record<string, Record<string, Record<string, { count: number; remark: string }>>>>>> = {};
 
         combinedRawAssignments.forEach(({ personnel, requestId, task, taskType }) => {
             const desc = String(getTaskValue(task, 'Description') || 'General Task').trim();
+            const variant = String(getTaskValue(task, 'Variant') || '-').trim();
             const remark = task.plannerNote || '';
             
             if (!hierarchy[personnel]) hierarchy[personnel] = {};
             if (!hierarchy[personnel][exportDate]) hierarchy[personnel][exportDate] = {};
             if (!hierarchy[personnel][exportDate][requestId]) hierarchy[personnel][exportDate][requestId] = {};
             if (!hierarchy[personnel][exportDate][requestId][taskType]) hierarchy[personnel][exportDate][requestId][taskType] = {};
+            if (!hierarchy[personnel][exportDate][requestId][taskType][desc]) hierarchy[personnel][exportDate][requestId][taskType][desc] = {};
             
-            if (!hierarchy[personnel][exportDate][requestId][taskType][desc]) {
-                hierarchy[personnel][exportDate][requestId][taskType][desc] = { count: 0, remark: remark };
+            if (!hierarchy[personnel][exportDate][requestId][taskType][desc][variant]) {
+                hierarchy[personnel][exportDate][requestId][taskType][desc][variant] = { count: 0, remark: remark };
             }
             
-            hierarchy[personnel][exportDate][requestId][taskType][desc].count += 1;
+            hierarchy[personnel][exportDate][requestId][taskType][desc][variant].count += 1;
             
-            if (remark && !hierarchy[personnel][exportDate][requestId][taskType][desc].remark) {
-                hierarchy[personnel][exportDate][requestId][taskType][desc].remark = remark;
-            } else if (remark && hierarchy[personnel][exportDate][requestId][taskType][desc].remark && !hierarchy[personnel][exportDate][requestId][taskType][desc].remark.includes(remark)) {
-                hierarchy[personnel][exportDate][requestId][taskType][desc].remark += `; ${remark}`;
+            const currentObj = hierarchy[personnel][exportDate][requestId][taskType][desc][variant];
+            if (remark && !currentObj.remark) {
+                currentObj.remark = remark;
+            } else if (remark && currentObj.remark && !currentObj.remark.includes(remark)) {
+                currentObj.remark += `; ${remark}`;
             }
         });
 
         const rows: any[][] = [];
-        rows.push(["Tester", "Plantodate", "Request ID", "ประเภทงาน", "รายการทดสอบ", "Remark", "Total"]);
+        rows.push(["Tester", "Plantodate", "Request ID", "ประเภทงาน", "รายการทดสอบ", "Variant", "Remark", "Total"]);
 
         let grandTotal = 0;
         const sortedTesters = Object.keys(hierarchy).sort();
 
-        sortedTesters.forEach((tester, tIdx) => {
+        sortedTesters.forEach((tester) => {
             const testerDates = hierarchy[tester];
-            Object.keys(testerDates).forEach((date, dIdx) => {
+            Object.keys(testerDates).forEach((date) => {
                 const reqIds = testerDates[date];
                 const sortedReqIds = Object.keys(reqIds).sort();
                 
@@ -440,19 +444,26 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                         const sortedDescs = Object.keys(descs).sort();
                         
                         sortedDescs.forEach((desc, dsIdx) => {
-                            const { count, remark } = descs[desc];
-                            grandTotal += count;
+                            const variants = descs[desc];
+                            const sortedVariants = Object.keys(variants).sort();
 
-                            const row: any[] = [];
-                            row[0] = (dIdx === 0 && rIdx === 0 && tyIdx === 0 && dsIdx === 0) ? tester : "";
-                            row[1] = (rIdx === 0 && tyIdx === 0 && dsIdx === 0) ? dateDisplay : "";
-                            row[2] = (tyIdx === 0 && dsIdx === 0) ? reqId : "";
-                            row[3] = (dsIdx === 0) ? taskType : "";
-                            row[4] = desc;
-                            row[5] = remark;
-                            row[6] = count;
+                            sortedVariants.forEach((variant, vIdx) => {
+                                const { count, remark } = variants[variant];
+                                grandTotal += count;
 
-                            rows.push(row);
+                                const row: any[] = [];
+                                // Span logic: show only first appearance in the group
+                                row[0] = (rIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? tester : "";
+                                row[1] = (rIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? dateDisplay : "";
+                                row[2] = (tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? reqId : "";
+                                row[3] = (dsIdx === 0 && vIdx === 0) ? taskType : "";
+                                row[4] = (vIdx === 0) ? desc : "";
+                                row[5] = variant;
+                                row[6] = remark;
+                                row[7] = count;
+
+                                rows.push(row);
+                            });
                         });
                     });
                 });
@@ -460,10 +471,19 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             rows.push([]);
         });
 
-        rows.push(["Grand Total", "", "", "", "", "", grandTotal]);
+        rows.push(["Grand Total", "", "", "", "", "", "", grandTotal]);
 
         const ws = XLSX.utils.aoa_to_sheet(rows);
-        ws['!cols'] = [{ wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 25 }, { wch: 35 }, { wch: 45 }, { wch: 8 }];
+        ws['!cols'] = [
+            { wch: 15 }, // Tester
+            { wch: 12 }, // Date
+            { wch: 20 }, // Request ID
+            { wch: 25 }, // Task Type
+            { wch: 35 }, // Description
+            { wch: 25 }, // Variant (NEW)
+            { wch: 45 }, // Remark
+            { wch: 8 }   // Total
+        ];
 
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Mission Summary");

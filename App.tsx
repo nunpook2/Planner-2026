@@ -6,6 +6,7 @@ import RosterTab from './components/RosterTab';
 import ScheduleTab from './components/ScheduleTab';
 import DashboardTab from './components/DashboardTab';
 import SettingsTab from './components/SettingsTab';
+import EquipmentTab from './components/EquipmentTab';
 import { getTesters } from './services/dataService';
 import type { Tester } from './types';
 import { DatabaseIcon, UploadIcon, ClipboardListIcon, CalendarIcon, CogIcon, BeakerIcon } from './components/common/Icons';
@@ -59,7 +60,6 @@ const App: React.FC = () => {
     const [error, setError] = useState<React.ReactNode | null>(null);
     const [taskRefreshKey, setTaskRefreshKey] = useState(0);
     
-    // Global context for date and shift
     const [globalSelectedDate, setGlobalSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [globalSelectedShift, setGlobalSelectedShift] = useState<'day' | 'night'>('day');
 
@@ -100,6 +100,7 @@ const App: React.FC = () => {
                     onShiftChange={setGlobalSelectedShift}
                 />
             );
+            case 'equipment': return <EquipmentTab />;
             case 'roster': return (
                 <RosterTab 
                     testers={testers} 
@@ -145,7 +146,6 @@ const App: React.FC = () => {
                     }
                 `}
             >
-                {/* Active Indicator Bar */}
                 {isActive && (
                     <div className="absolute left-0 top-3 bottom-3 w-1.5 bg-gradient-to-b from-primary-400 to-primary-700 rounded-r-full animate-fade-in"></div>
                 )}
@@ -196,7 +196,6 @@ const App: React.FC = () => {
             
             <div className="flex-1 w-[96%] mx-auto px-2 py-8">
                 <div className="flex flex-col lg:flex-row gap-8 h-full">
-                    {/* PREMIUM SIDEBAR NAVIGATION */}
                     <aside className="hidden lg:block w-64 flex-shrink-0 sticky top-28 self-start bg-white/30 dark:bg-base-900/30 backdrop-blur-md rounded-[2.5rem] p-4 border border-white dark:border-base-800 shadow-sm">
                         <nav className="space-y-1.5">
                             <TabButton tabName="import" label="Import Data" icon={<UploadIcon className="h-5 w-5"/>} />
@@ -204,12 +203,12 @@ const App: React.FC = () => {
                             <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-4 mx-4"></div>
                             <TabButton tabName="schedule" label="Shift Tracking" icon={<CalendarIcon className="h-5 w-5"/>} />
                             <TabButton tabName="dashboard" label="Shift Summary" icon={<BeakerIcon className="h-5 w-5"/>} />
+                            <TabButton tabName="equipment" label="Equipment" icon={<CogIcon className="h-5 w-5"/>} />
                             <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-4 mx-4"></div>
                             <TabButton tabName="roster" label="Roster & Shifts" icon={<DatabaseIcon className="h-5 w-5"/>} />
                             <TabButton tabName="settings" label="Settings" icon={<CogIcon className="h-5 w-5"/>} />
                         </nav>
                         
-                        {/* Sidebar Footer Insight */}
                         <div className="mt-8 p-5 bg-gradient-to-br from-primary-600 to-primary-800 rounded-[1.8rem] text-white shadow-xl shadow-primary-500/20">
                             <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-60">System Status</p>
                             <div className="flex items-center gap-2 mt-2">
@@ -219,12 +218,12 @@ const App: React.FC = () => {
                         </div>
                     </aside>
 
-                    {/* MOBILE TAB BAR */}
                     <div className="lg:hidden fixed bottom-6 left-6 right-6 bg-white/80 dark:bg-base-900/80 backdrop-blur-2xl border border-white dark:border-base-800 rounded-[2.5rem] p-3 z-50 flex justify-around shadow-2xl">
                         <TabButton tabName="import" label="" icon={<UploadIcon className="h-5 w-5"/>} />
                         <TabButton tabName="tasks" label="" icon={<ClipboardListIcon className="h-5 w-5"/>} />
                         <TabButton tabName="schedule" label="" icon={<CalendarIcon className="h-5 w-5"/>} />
                         <TabButton tabName="dashboard" label="" icon={<BeakerIcon className="h-5 w-5"/>} />
+                        <TabButton tabName="equipment" label="" icon={<CogIcon className="h-5 w-5"/>} />
                         <TabButton tabName="roster" label="" icon={<DatabaseIcon className="h-5 w-5"/>} />
                     </div>
 
