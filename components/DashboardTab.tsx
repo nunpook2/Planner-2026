@@ -13,7 +13,8 @@ import {
     SunIcon, MoonIcon, DownloadIcon,
     ChevronDownIcon, SparklesIcon,
     TrashIcon, CogIcon, PlusIcon, XCircleIcon,
-    ClipboardListIcon
+    ClipboardListIcon,
+    ArrowUturnLeftIcon
 } from './common/Icons';
 
 declare const XLSX: any;
@@ -305,108 +306,93 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         }
     }, [shiftReport]);
 
-    const renderPersonnelSection = (person: PersonStats) => {
+    const renderPersonnelBoardCard = (person: PersonStats) => {
         const missions = Object.entries(person.summary);
         if (missions.length === 0) return null;
 
         const totalDone = Object.values(person.summary).reduce((acc, s) => acc + s.done, 0);
         const totalAll = Object.values(person.summary).reduce((acc, s) => acc + s.total, 0);
+        const isCompleted = totalDone === totalAll;
 
         return (
-            <div key={person.id} className="relative group/person mb-12 animate-fade-in">
-                {/* Visual Anchor Bar */}
-                <div className={`absolute -left-3 top-0 bottom-0 w-1.5 rounded-full transition-all duration-500 ${person.role === 'ASST' ? 'bg-amber-500 group-hover/person:w-2' : 'bg-primary-600 group-hover/person:w-2'}`}></div>
-                
-                {/* Section Header */}
-                <div className="sticky top-0 z-[15] px-4 py-2 mb-4 bg-white/95 dark:bg-base-900/95 backdrop-blur-md rounded-2xl border border-base-200 dark:border-base-800 shadow-sm flex items-center justify-between">
+            <div key={person.id} className="bg-white dark:bg-base-900 rounded-[2.5rem] border-2 border-base-200 dark:border-base-800 shadow-xl overflow-hidden flex flex-col h-full hover:border-primary-500/50 transition-all duration-300 animate-fade-in">
+                {/* Compact Card Header */}
+                <div className={`px-6 py-4 flex items-center justify-between border-b-2 border-base-50 dark:border-base-800 ${person.role === 'ASST' ? 'bg-amber-50/30 dark:bg-amber-900/10' : 'bg-primary-50/30 dark:bg-primary-900/10'}`}>
                     <div className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-[11px] font-black text-white shadow-lg ${person.role === 'ASST' ? 'person-avatar assistant' : 'person-avatar'}`}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-black text-white shadow-lg ${person.role === 'ASST' ? 'person-avatar assistant' : 'person-avatar'}`}>
                             {person.name.substring(0, 2).toUpperCase()}
                         </div>
                         <div>
                             <h4 className="text-[16px] font-black text-base-955 dark:text-base-50 uppercase tracking-tighter leading-none">{person.name}</h4>
                             <span className={`text-[8px] font-black uppercase tracking-[0.2em] mt-1 block ${person.role === 'ASST' ? 'text-amber-600' : 'text-primary-600'}`}>
-                                {person.role === 'ASST' ? 'Assistant Ops' : 'Analyst Ops'}
+                                {person.role === 'ASST' ? 'Assistant' : 'Analyst'}
                             </span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-6">
-                        <div className="flex flex-col items-end">
-                            <span className="text-[8px] font-black text-base-400 uppercase tracking-widest">Load Performance</span>
-                            <span className={`text-[15px] font-black ${totalDone === totalAll ? 'text-emerald-600' : 'text-primary-600'}`}>
-                                {totalDone} <span className="text-base-300 mx-0.5 font-normal">/</span> {totalAll}
-                            </span>
-                        </div>
+                    <div className={`text-[20px] font-black tracking-tighter ${isCompleted ? 'text-emerald-600' : 'text-primary-700'}`}>
+                        {totalDone}<span className="text-base-300 mx-0.5 font-normal text-sm">/</span>{totalAll}
                     </div>
                 </div>
 
-                {/* Missions Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 px-1">
+                {/* Progress Bar Header Overlay */}
+                <div className="w-full h-1.5 bg-base-100 dark:bg-base-800 overflow-hidden">
+                    <div className={`h-full transition-all duration-1000 ${isCompleted ? 'bg-emerald-500' : 'bg-primary-600'}`} style={{width: `${(totalDone/totalAll)*100}%`}}></div>
+                </div>
+
+                {/* Compact Mission List */}
+                <div className="flex-grow overflow-y-auto p-4 space-y-3 custom-scrollbar max-h-[500px]">
                     {missions.map(([key, sum]) => {
-                        const isComplete = sum.done === sum.total;
-                        const hasError = sum.failed > 0 || sum.returned > 0;
-                        const isExpanded = expandedGroups.has(key);
+                        const isSumComplete = sum.done === sum.total;
+                        const hasSumError = sum.failed > 0 || sum.returned > 0;
                         
                         return (
-                            <div key={key} className={`group/mission rounded-[1.8rem] border-2 transition-all duration-300 flex flex-col overflow-hidden ${isComplete ? 'bg-emerald-50/5 border-emerald-100/30' : hasError ? 'bg-red-50/5 border-red-100/30 shadow-md' : 'bg-white dark:bg-base-800 border-base-100 dark:border-base-700 hover:border-primary-500/30 hover:shadow-xl'}`}>
-                                <button onClick={() => toggleGroup(key)} className="w-full text-left p-5 flex flex-col gap-3">
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex flex-wrap gap-1.5 min-h-[1.5rem]">
-                                            {sum.isPrepGroup && <span className="bg-amber-500 text-white px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest border-b-2 border-amber-700">PREP</span>}
-                                            {!sum.isPrepGroup && sum.priorityStatus !== 'normal' && (
-                                                <span className={`px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest text-white border-b-2 ${
-                                                    sum.priorityStatus === 'lsp' ? 'bg-cyan-600 border-cyan-800' : 
-                                                    sum.priorityStatus === 'sprint' ? 'bg-rose-600 border-rose-800' : 
-                                                    sum.priorityStatus === 'urgent' ? 'bg-red-500 border-red-800' : 'bg-orange-500 border-orange-800'
-                                                }`}>{sum.priorityStatus}</span>
-                                            )}
-                                        </div>
-                                        <div className={`text-[18px] font-black tracking-tighter ${isComplete ? 'text-emerald-700' : hasError ? 'text-red-600' : 'text-primary-700'}`}>
-                                            {sum.done}<span className="text-base-300 mx-0.5 font-normal text-xs">/</span>{sum.total}
-                                        </div>
-                                    </div>
-                                    
-                                    <h3 className={`text-[13px] font-black tracking-tight uppercase line-clamp-2 leading-tight ${isComplete ? 'text-emerald-900/50' : 'text-base-955 dark:text-white'}`}>
+                            <div key={key} className={`p-4 rounded-2xl border-2 transition-all ${isSumComplete ? 'bg-emerald-50/10 border-emerald-100/50' : hasSumError ? 'bg-red-50/10 border-red-100 shadow-md' : 'bg-base-50/30 dark:bg-base-800/40 border-base-100 dark:border-base-700'}`}>
+                                <div className="flex justify-between items-start mb-2">
+                                    <h5 className={`text-[13px] font-black leading-tight uppercase flex-grow pr-2 ${isSumComplete ? 'text-emerald-900/40' : 'text-base-900 dark:text-base-100'}`}>
                                         {sum.desc}
-                                    </h3>
-
-                                    <div className="w-full h-1 bg-base-100 dark:bg-base-700 rounded-full overflow-hidden mt-1">
-                                        <div className={`h-full transition-all duration-1000 ${isComplete ? 'bg-emerald-500' : hasError ? 'bg-red-500' : 'bg-primary-500'}`} style={{width: `${(sum.done/sum.total)*100}%`}}></div>
-                                    </div>
-                                    
-                                    <div className="flex justify-between items-center pt-1">
-                                        <span className="text-[8px] font-black text-base-300 uppercase tracking-widest">{isExpanded ? 'Hide Details' : 'View Mission List'}</span>
-                                        <ChevronDownIcon className={`h-3 w-3 text-base-300 transition-transform duration-500 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} />
-                                    </div>
-                                </button>
+                                    </h5>
+                                    <span className={`text-[13px] font-black shrink-0 ${isSumComplete ? 'text-emerald-600/50' : hasSumError ? 'text-red-600' : 'text-primary-600'}`}>
+                                        {sum.done}/{sum.total}
+                                    </span>
+                                </div>
                                 
-                                {isExpanded && (
-                                    <div className="px-3 pb-4 space-y-1.5 animate-fade-in bg-base-50/20 dark:bg-black/10 border-t border-base-50 dark:border-base-700 pt-3">
-                                        {sum.samples.map((s, si) => (
-                                            <div key={si} className="flex flex-col p-2.5 bg-white dark:bg-base-900/60 rounded-xl border border-base-50 dark:border-base-800 gap-1 shadow-sm">
-                                                <div className="flex justify-between items-start">
-                                                    <span className="text-[11px] font-black text-base-955 dark:text-base-50 uppercase tracking-tight truncate flex-grow mr-2">{s.name}</span>
-                                                    <span className={`text-[7px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-widest shrink-0 ${s.status === 'done' ? 'bg-emerald-600 text-white' : s.status === 'failed' ? 'bg-red-600 text-white' : 'bg-base-100 dark:bg-base-800 text-base-500'}`}>
+                                <div className="space-y-1.5">
+                                    {sum.samples.map((s, si) => {
+                                        const isSampleActioned = s.status === 'done' || s.status === 'failed' || s.status === 'returned';
+                                        return (
+                                            <div key={si} className="flex flex-col gap-1">
+                                                <div className="flex items-center justify-between text-[11px] font-bold">
+                                                    <span className={`truncate max-w-[150px] uppercase ${isSampleActioned ? 'opacity-40' : 'text-base-700 dark:text-base-300'}`}>{s.name}</span>
+                                                    <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase ${
+                                                        s.status === 'done' ? 'bg-emerald-100 text-emerald-700' : 
+                                                        s.status === 'failed' ? 'bg-red-600 text-white shadow-lg animate-pulse' : 
+                                                        s.status === 'returned' ? 'bg-orange-600 text-white shadow-lg animate-pulse' : 'text-base-400'
+                                                    }`}>
                                                         {s.status}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`px-1.5 py-0.5 rounded-lg text-[7px] font-black ${s.isPrep ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'}`}>x{s.qty}</span>
-                                                    <span className="text-[9px] font-bold text-base-400 uppercase truncate flex-grow">{s.detail}</span>
-                                                </div>
                                                 {s.reason && (
-                                                    <div className="mt-1 flex items-center gap-1.5 px-2 py-1 bg-red-600 text-white rounded-lg animate-pulse">
-                                                        <AlertTriangleIcon className="h-2.5 w-2.5" />
-                                                        <span className="text-[7px] font-black uppercase truncate">{s.reason}</span>
+                                                    <div className={`px-2 py-1.5 rounded-lg text-[11px] font-black text-white leading-tight shadow-md ${s.status === 'failed' ? 'bg-red-600' : 'bg-orange-600'}`}>
+                                                        {s.reason}
                                                     </div>
                                                 )}
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
+                                        );
+                                    })}
+                                </div>
                             </div>
                         );
                     })}
+                </div>
+                
+                {/* Mini Footer */}
+                <div className="px-6 py-3 bg-base-50/50 dark:bg-base-800/30 text-center">
+                    <button 
+                        onClick={() => setSelectedPersonId(person.id)}
+                        className="text-[10px] font-black uppercase tracking-[0.2em] text-primary-600 hover:text-primary-700 transition-colors"
+                    >
+                        View Detail Focus
+                    </button>
                 </div>
             </div>
         );
@@ -419,159 +405,182 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                 .person-avatar { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); }
                 .person-avatar.assistant { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); }
                 .person-avatar.unified { background: linear-gradient(135deg, #0f172a 0%, #334155 100%); }
-                .active-glow { box-shadow: 0 0 20px -5px rgba(99, 102, 241, 0.4); }
+                .active-glow { box-shadow: 0 0 25px -5px rgba(99, 102, 241, 0.4); }
                 @keyframes waste-pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.02); } 100% { opacity: 1; transform: scale(1); } }
                 .waste-pulse-active { animation: waste-pulse 2s ease-in-out infinite; }
             `}</style>
 
             <ReportEditorModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} report={shiftReport} onSave={handleSaveReport} date={selectedDate} shift={selectedShift} />
 
-            <div className="flex-grow grid grid-cols-12 gap-4 h-full relative overflow-hidden">
-                <aside className="col-span-3 flex flex-col bg-white/40 dark:bg-base-900/40 rounded-[2.5rem] border border-white dark:border-base-800 shadow-sm overflow-hidden h-full backdrop-blur-md">
-                    <div className="p-4 border-b border-white dark:border-base-800 bg-white/20 flex justify-between items-center shrink-0">
-                        <h3 className="text-[10px] font-black text-base-400 uppercase tracking-[0.4em] ml-1">Duty Ops</h3>
-                        <div className="w-2 h-2 rounded-full bg-primary-500 animate-pulse shadow-sm"></div>
-                    </div>
-                    
-                    <div className="flex-grow overflow-y-auto no-scrollbar p-2.5 space-y-1.5 min-h-0">
+            <div className="flex-grow grid grid-cols-12 gap-5 h-full relative overflow-hidden">
+                {/* Sidebar for quick toggle */}
+                <aside className="col-span-1 flex flex-col bg-white dark:bg-base-900 rounded-[2rem] border border-base-200 dark:border-base-800 shadow-xl overflow-hidden h-full backdrop-blur-md">
+                    <div className="flex-grow overflow-y-auto no-scrollbar p-3 space-y-3">
                         <button 
                             onClick={() => setSelectedPersonId(ALL_PERSONNEL_ID)} 
-                            className={`w-full group flex items-center gap-3 p-3 rounded-[1.3rem] transition-all duration-300 border text-left ${selectedPersonId === ALL_PERSONNEL_ID ? 'bg-base-900 border-base-800 text-white shadow-lg scale-[1.02]' : 'bg-white/40 dark:bg-base-900/40 hover:bg-white dark:hover:bg-base-800 border-transparent hover:border-base-200 dark:hover:border-base-700'}`}
+                            title="Combined Dashboard"
+                            className={`w-full h-12 rounded-2xl flex items-center justify-center transition-all duration-300 border-2 ${selectedPersonId === ALL_PERSONNEL_ID ? 'bg-base-955 border-base-800 text-white shadow-xl' : 'bg-base-50 dark:bg-base-800 border-transparent text-base-400 hover:border-base-200'}`}
                         >
-                            <div className={`w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-[11px] font-black shadow-inner person-avatar unified ring-white/10 ${selectedPersonId === ALL_PERSONNEL_ID ? 'ring-2' : ''}`}>
-                                <SparklesIcon className="h-4 w-4" />
-                            </div>
-                            <div className="flex-grow min-w-0">
-                                <span className={`block text-[14px] font-black tracking-tight leading-tight ${selectedPersonId === ALL_PERSONNEL_ID ? 'text-white' : 'text-base-800 dark:text-base-100'}`}>Unified View</span>
-                                <span className={`text-[8px] font-bold uppercase tracking-widest mt-1 block ${selectedPersonId === ALL_PERSONNEL_ID ? 'text-white/60' : 'text-base-400'}`}>All Personnel</span>
-                            </div>
+                            <SparklesIcon className="h-6 w-6" />
                         </button>
-
-                        <div className="h-px bg-base-200 dark:bg-base-800 mx-2 my-1"></div>
-
+                        <div className="h-px bg-base-100 dark:bg-base-800"></div>
                         {processedPersonnel.map(person => {
                             const isActive = selectedPersonId === person.id;
-                            const isAssistant = person.role === 'ASST';
                             return (
-                                <button key={person.id} onClick={() => setSelectedPersonId(person.id)} className={`w-full group flex items-center gap-3 p-3 rounded-[1.3rem] transition-all duration-300 border text-left ${isActive ? 'bg-gradient-to-r from-primary-600 to-indigo-600 border-primary-500 text-white shadow-lg active-glow scale-[1.02]' : 'bg-white/40 dark:bg-base-900/40 hover:bg-white dark:hover:bg-base-800 border-transparent hover:border-base-200 dark:hover:border-base-700'}`}>
-                                    <div className={`w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-[11px] font-black shadow-inner ${isAssistant ? 'person-avatar assistant' : 'person-avatar'} ${isActive ? 'ring-2 ring-white/40' : 'text-white'}`}>{person.name.substring(0, 2).toUpperCase()}</div>
-                                    <div className="flex-grow min-w-0"><span className={`block text-[14px] font-black tracking-tight leading-tight ${isActive ? 'text-white' : 'text-base-800 dark:text-base-100'}`}>{person.name}</span><span className={`text-[8px] font-bold uppercase tracking-widest mt-1 block ${isActive ? 'text-white/60' : 'text-base-400'}`}>{isAssistant ? 'Assistant' : 'Analyst'}</span></div>
-                                    {person.pendingTasks > 0 && <div className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[8px] font-black ${isActive ? 'bg-white text-primary-600 shadow-md' : 'bg-primary-50 text-white shadow-sm'}`}>{person.pendingTasks}</div>}
+                                <button 
+                                    key={person.id} 
+                                    onClick={() => setSelectedPersonId(person.id)} 
+                                    title={person.name}
+                                    className={`w-full h-12 rounded-2xl flex items-center justify-center text-[12px] font-black shadow-inner transition-all border-2 ${isActive ? 'bg-primary-600 text-white border-primary-500 shadow-lg active-glow' : 'bg-base-50 dark:bg-base-800 text-base-400 border-transparent hover:border-base-200'}`}
+                                >
+                                    {person.name.substring(0, 2).toUpperCase()}
                                 </button>
                             );
                         })}
                     </div>
+                    <div className="p-3 border-t border-base-100 dark:border-base-800">
+                        <button onClick={fetchData} className="w-full h-12 rounded-2xl bg-base-50 dark:bg-base-800 flex items-center justify-center text-base-400"><RefreshIcon className={`h-5 w-5 ${isFetching ? 'animate-spin text-primary-600' : ''}`}/></button>
+                    </div>
                 </aside>
 
-                <div className="col-span-9 flex flex-col min-w-0 bg-white/60 dark:bg-base-900/60 rounded-[2.5rem] border border-white dark:border-base-800 shadow-2xl overflow-hidden relative backdrop-blur-xl h-full">
-                    <div className="px-8 py-5 border-b border-white dark:border-base-800 flex justify-between items-center bg-white/40 dark:bg-base-800/10 backdrop-blur-xl shrink-0 sticky top-0 z-20">
-                        <div className="flex items-center gap-8">
+                <div className="col-span-11 flex flex-col min-w-0 bg-white dark:bg-base-900 rounded-[3rem] border border-base-200 dark:border-base-800 shadow-2xl overflow-hidden relative backdrop-blur-xl h-full">
+                    {/* Header with KPI and Filters */}
+                    <div className="px-8 py-6 border-b border-base-100 dark:border-base-800 flex flex-col gap-6 bg-base-50/30 dark:bg-base-800/10 shrink-0 sticky top-0 z-20 backdrop-blur-xl">
+                        <div className="flex justify-between items-center">
                             <div>
-                                <h2 className="text-2xl font-black text-base-955 dark:text-white tracking-tighter leading-none">Shift Intelligence</h2>
-                                <p className="text-[10px] text-base-400 font-black uppercase tracking-[0.3em] mt-1.5">Mission Performance Analysis</p>
+                                <h2 className="text-3xl font-black text-base-955 dark:text-white tracking-tighter leading-none">Shift Intelligence</h2>
+                                <p className="text-[11px] text-base-400 font-black uppercase tracking-[0.4em] mt-2">Laboratory Performance Board</p>
                             </div>
-                            <div className="flex items-center gap-3 bg-white/60 dark:bg-base-800/60 p-1.5 rounded-[1.4rem] border border-white dark:border-base-700 shadow-inner">
-                                <div className="relative group px-2 border-r dark:border-base-700"><CalendarIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary-500" /><input type="date" value={selectedDate} onChange={e => onDateChange(e.target.value)} className="bg-transparent border-none text-[11px] font-black focus:ring-0 cursor-pointer pl-6 py-1.5 dark:text-white" /></div>
-                                <div className="flex gap-1 p-0.5"><button onClick={() => onShiftChange('day')} className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${selectedShift === 'day' ? 'bg-amber-500 text-white shadow-lg' : 'text-base-400 hover:text-amber-500'}`}><SunIcon className="h-3 w-3" /> Day</button><button onClick={() => onShiftChange('night')} className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${selectedShift === 'night' ? 'bg-indigo-600 text-white shadow-lg' : 'text-base-400 hover:text-indigo-600'}`}><MoonIcon className="h-3 w-3" /> Night</button></div>
+                            
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-4 bg-white dark:bg-base-800 p-2 rounded-[2rem] border-2 border-base-100 dark:border-base-700 shadow-inner">
+                                    <div className="relative group px-4 border-r dark:border-base-700"><CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-primary-600" /><input type="date" value={selectedDate} onChange={e => onDateChange(e.target.value)} className="bg-transparent border-none text-[13px] font-black focus:ring-0 cursor-pointer pl-6 py-2 dark:text-white" /></div>
+                                    <div className="flex gap-2 p-1"><button onClick={() => onShiftChange('day')} className={`flex items-center gap-2.5 px-6 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedShift === 'day' ? 'bg-amber-500 text-white shadow-lg' : 'text-base-400 hover:text-amber-600'}`}><SunIcon className="h-4 w-4" /> Day</button><button onClick={() => onShiftChange('night')} className={`flex items-center gap-2.5 px-6 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedShift === 'night' ? 'bg-indigo-700 text-white shadow-lg' : 'text-base-400 hover:text-indigo-700'}`}><MoonIcon className="h-4 w-4" /> Night</button></div>
+                                </div>
+                                <button onClick={handleExport} className="p-4 bg-white dark:bg-base-800 hover:bg-base-50 rounded-2xl border-2 border-base-100 dark:border-base-700 shadow-sm text-base-500"><DownloadIcon className="h-6 w-6"/></button>
                             </div>
                         </div>
-                        <div className="flex gap-2.5"><button onClick={handleExport} title="Export Excel" className="p-3 bg-white dark:bg-base-800 hover:bg-base-50 rounded-2xl transition-all border border-base-100 dark:border-base-700 shadow-sm text-base-500"><DownloadIcon className="h-5 w-5"/></button><button onClick={fetchData} className="p-3 bg-white dark:bg-base-800 hover:bg-primary-50 rounded-2xl transition-all border border-base-100 dark:border-base-700 shadow-sm text-base-400"><RefreshIcon className={`h-5 w-5 ${isFetching ? 'animate-spin text-primary-500' : ''}`}/></button></div>
+
+                        {/* High-Level KPI Row */}
+                        <div className="grid grid-cols-6 gap-4">
+                            <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center">
+                                <span className="text-[10px] font-black text-primary-600 uppercase tracking-widest mb-1">Global Success</span>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-2xl font-black text-base-955 dark:text-white">{globalStats.percent}%</span>
+                                    <span className="text-[11px] font-bold text-base-400">({globalStats.done}/{globalStats.total})</span>
+                                </div>
+                            </div>
+                            <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center">
+                                <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-1">Po Cat Load</span>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-2xl font-black text-base-955 dark:text-white">{globalStats.poCat}</span>
+                                </div>
+                            </div>
+                            <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center">
+                                <span className="text-[10px] font-black text-cyan-600 uppercase tracking-widest mb-1">LSP Units</span>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-2xl font-black text-base-955 dark:text-white">{globalStats.lsp}</span>
+                                </div>
+                            </div>
+                            <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center">
+                                <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-1">Sprint Tasks</span>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-2xl font-black text-base-955 dark:text-white">{globalStats.sprint}</span>
+                                </div>
+                            </div>
+                            <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center">
+                                <span className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Urgent Alert</span>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-2xl font-black text-red-600">{globalStats.urgent}</span>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setIsReportModalOpen(true)}
+                                className={`rounded-2xl p-4 shadow-xl border-2 transition-all flex flex-col justify-center ${wasteTheme.bg} border-transparent ${shiftReport?.wasteLevel === 'high' ? 'waste-pulse-active' : ''}`}
+                            >
+                                <span className={`text-[10px] font-black uppercase tracking-widest mb-1 ${wasteTheme.text} opacity-80`}>Waste Status</span>
+                                <span className={`text-2xl font-black ${wasteTheme.text}`}>{wasteTheme.display}</span>
+                            </button>
+                        </div>
                     </div>
 
                     <div className="flex-grow overflow-y-auto no-scrollbar p-8">
-                        <div className="max-w-7xl mx-auto space-y-6 pb-20">
-                            {/* KPI Grid */}
-                            <div className="grid grid-cols-6 gap-3">
-                                <div className="col-span-1 bg-white dark:bg-base-800 rounded-[1.8rem] border border-primary-500/10 p-4 shadow-lg flex flex-col justify-between">
-                                    <h4 className="text-[9px] font-black text-primary-600 uppercase tracking-widest mb-2">Success Rate</h4>
-                                    <div className="flex items-end justify-between mb-1">
-                                        <span className="text-2xl font-black text-base-955 dark:text-white tracking-tighter leading-none">{globalStats.done}<span className="text-base-300 mx-0.5 font-medium text-base">/</span>{globalStats.total}</span>
-                                        <span className="text-[10px] font-black text-primary-600">{globalStats.percent}%</span>
-                                    </div>
-                                    <div className="w-full h-1 bg-primary-100 dark:bg-base-700 rounded-full overflow-hidden">
-                                        <div className="h-full bg-primary-600" style={{width: `${globalStats.percent}%`}}></div>
-                                    </div>
-                                </div>
-
-                                <div className="col-span-1 bg-white dark:bg-base-800 rounded-[1.8rem] border border-cyan-500/10 p-4 shadow-lg">
-                                    <h4 className="text-[9px] font-black text-cyan-600 uppercase tracking-widest mb-2">LSP Status</h4>
-                                    <div className="flex items-baseline gap-1.5">
-                                        <span className="text-3xl font-black text-cyan-600 tracking-tighter leading-none">{globalStats.lsp}</span>
-                                        <span className="text-[8px] font-bold text-base-400 uppercase tracking-tighter">Units</span>
-                                    </div>
-                                </div>
-
-                                <div className="col-span-1 bg-white dark:bg-base-800 rounded-[1.8rem] border border-rose-500/10 p-4 shadow-lg">
-                                    <h4 className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-2">Sprint Track</h4>
-                                    <div className="flex items-baseline gap-1.5">
-                                        <span className="text-3xl font-black text-rose-600 tracking-tighter leading-none">{globalStats.sprint}</span>
-                                        <span className="text-[8px] font-bold text-base-400 uppercase tracking-tighter">Fast</span>
-                                    </div>
-                                </div>
-
-                                <div className="col-span-1 bg-white dark:bg-base-800 rounded-[1.8rem] border border-red-500/10 p-4 shadow-lg">
-                                    <h4 className="text-[9px] font-black text-red-600 uppercase tracking-widest mb-2">Urgent Alert</h4>
-                                    <div className="flex items-baseline gap-1.5">
-                                        <span className={`text-3xl font-black tracking-tighter leading-none ${globalStats.urgent > 0 ? 'text-red-600' : 'text-base-400'}`}>{globalStats.urgent}</span>
-                                        <span className="text-[8px] font-bold text-base-400 uppercase tracking-tighter">Missions</span>
-                                    </div>
-                                </div>
-
-                                <div className="col-span-1 bg-white dark:bg-base-800 rounded-[1.8rem] border border-orange-500/10 p-4 shadow-lg">
-                                    <h4 className="text-[9px] font-black text-orange-600 uppercase tracking-widest mb-2">Po Cat Load</h4>
-                                    <div className="flex items-baseline gap-1.5">
-                                        <span className="text-3xl font-black text-orange-600 tracking-tighter leading-none">{globalStats.poCat}</span>
-                                        <span className="text-[8px] font-bold text-base-400 uppercase tracking-tighter">Ops</span>
-                                    </div>
-                                </div>
-
-                                <button 
-                                    onClick={() => setIsReportModalOpen(true)}
-                                    className={`col-span-1 rounded-[1.8rem] border transition-all duration-300 overflow-hidden relative group text-left flex flex-col justify-between p-4 shadow-xl ${wasteTheme.bg} border-transparent ${wasteTheme.glow} ${shiftReport?.wasteLevel === 'high' ? 'waste-pulse-active' : ''}`}
-                                >
-                                    <div className="absolute top-0 right-0 w-12 h-12 bg-white/10 rounded-full -mr-6 -mt-6 blur-xl"></div>
-                                    <div className="flex justify-between items-start">
-                                        <h4 className={`text-[9px] font-black uppercase tracking-[0.2em] ${wasteTheme.text} opacity-80`}>Waste Status</h4>
-                                        <CogIcon className={`h-3 w-3 ${wasteTheme.text} opacity-50 group-hover:rotate-90 transition-transform`} />
-                                    </div>
-                                    <div className="flex items-baseline gap-1 mt-auto">
-                                        <span className={`text-3xl font-black tracking-tighter leading-none ${wasteTheme.text} drop-shadow-sm`}>{wasteTheme.display}</span>
-                                        <span className={`text-[8px] font-bold uppercase tracking-tighter opacity-80 ${wasteTheme.text}`}>{shiftReport?.wasteLevel === 'high' ? 'ALERT' : 'LEVEL'}</span>
-                                    </div>
-                                </button>
-                            </div>
-
-                            <div className="space-y-12">
-                                <div className="flex items-center gap-3 ml-2">
-                                    <ClipboardListIcon className="h-5 w-5 text-primary-500"/>
-                                    <h3 className="text-[11px] font-black text-primary-600 uppercase tracking-[0.4em]">
-                                        {selectedPersonId === ALL_PERSONNEL_ID ? 'Full Shift Deployment Registry' : 'Analyst Performance Log'}
-                                    </h3>
-                                </div>
+                        {selectedPersonId === ALL_PERSONNEL_ID ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+                                {processedPersonnel.filter(p => Object.keys(p.summary).length > 0).map(person => renderPersonnelBoardCard(person))}
                                 
-                                {selectedPersonId === ALL_PERSONNEL_ID ? (
-                                    processedPersonnel.filter(p => Object.keys(p.summary).length > 0).map(person => renderPersonnelSection(person))
-                                ) : (
-                                    activePerson ? renderPersonnelSection(activePerson) : (
-                                        <div className="flex flex-col items-center justify-center opacity-10 text-base-300 py-20">
-                                            <UserGroupIcon className="h-24 w-24 mb-4" />
-                                            <span className="text-xl font-black uppercase tracking-[0.5em] text-base-400">Mission Log Empty</span>
-                                        </div>
-                                    )
-                                )}
-
-                                {selectedPersonId === ALL_PERSONNEL_ID && processedPersonnel.every(p => Object.keys(p.summary).length === 0) && (
-                                    <div className="py-20 text-center opacity-10 flex flex-col items-center">
-                                        <BeakerIcon className="h-20 w-20 mb-4" />
-                                        <span className="text-sm font-black uppercase tracking-[0.5em]">No Missions Assigned this Shift</span>
+                                {processedPersonnel.every(p => Object.keys(p.summary).length === 0) && (
+                                    <div className="col-span-full py-40 text-center opacity-10 flex flex-col items-center">
+                                        <BeakerIcon className="h-32 w-32 mb-6" />
+                                        <span className="text-2xl font-black uppercase tracking-[0.5em]">No Active Missions</span>
                                     </div>
                                 )}
                             </div>
-                        </div>
+                        ) : (
+                            <div className="max-w-6xl mx-auto">
+                                {activePerson ? (
+                                    <div className="animate-fade-in">
+                                        {/* Original detailed view when selecting a single person */}
+                                        <div className="flex items-center justify-between mb-8 px-6 py-6 bg-white dark:bg-base-900 rounded-[2.5rem] border-2 border-base-100 dark:border-base-800 shadow-xl">
+                                            <div className="flex items-center gap-6">
+                                                <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-2xl font-black text-white shadow-2xl ${activePerson.role === 'ASST' ? 'person-avatar assistant' : 'person-avatar'}`}>
+                                                    {activePerson.name.substring(0, 2).toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-4xl font-black text-base-955 dark:text-white tracking-tighter uppercase leading-none">{activePerson.name}</h3>
+                                                    <span className={`text-xs font-black uppercase tracking-[0.4em] mt-3 block ${activePerson.role === 'ASST' ? 'text-amber-600' : 'text-primary-600'}`}>Mission Integrity Analysis</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-[10px] font-black text-base-400 uppercase tracking-widest mb-1">Success Rate</span>
+                                                <span className="text-4xl font-black text-primary-700">
+                                                    {/* Explicitly cast to SummaryItemStats[] to avoid 'unknown' type issues during iteration */}
+                                                    {(Object.values(activePerson.summary) as SummaryItemStats[]).reduce((acc, s) => acc + s.done, 0)}
+                                                    <span className="text-base-200 mx-1 font-normal">/</span>
+                                                    {(Object.values(activePerson.summary) as SummaryItemStats[]).reduce((acc, s) => acc + s.total, 0)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            {/* Explicitly cast to entries of SummaryItemStats to resolve type errors */}
+                                            {(Object.entries(activePerson.summary) as [string, SummaryItemStats][]).map(([key, sum]) => (
+                                                <div key={key} className="bg-white dark:bg-base-900 rounded-[2rem] border-2 border-base-100 dark:border-base-800 p-8 shadow-lg">
+                                                    <div className="flex justify-between items-start mb-6">
+                                                        <h4 className="text-xl font-black uppercase text-base-955 dark:text-white leading-tight pr-4">{sum.desc}</h4>
+                                                        <span className="text-2xl font-black text-primary-600">{sum.done}/{sum.total}</span>
+                                                    </div>
+                                                    <div className="space-y-4">
+                                                        {sum.samples.map((s, si) => (
+                                                            <div key={si} className="flex flex-col p-4 bg-base-50/50 dark:bg-base-800/50 rounded-2xl border border-base-100 dark:border-base-700">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-[15px] font-black uppercase text-base-900 dark:text-base-100">{s.name}</span>
+                                                                    <span className={`text-[10px] px-3 py-1 rounded-lg font-black uppercase ${
+                                                                        s.status === 'done' ? 'bg-emerald-600 text-white' : 
+                                                                        s.status === 'failed' ? 'bg-red-600 text-white' : 
+                                                                        s.status === 'returned' ? 'bg-orange-600 text-white' : 'bg-base-200 text-base-600'
+                                                                    }`}>{s.status}</span>
+                                                                </div>
+                                                                {s.reason && <p className="mt-3 text-[13px] font-bold text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-100 dark:border-red-900/50">{s.reason}</p>}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center opacity-10 text-base-300 py-32">
+                                        <UserGroupIcon className="h-32 w-32 mb-6" />
+                                        <span className="text-3xl font-black uppercase tracking-[0.5em] text-base-400">MANIFEST EMPTY</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
-            {notification && (<div className={`fixed bottom-10 left-1/2 -translate-x-1/2 px-10 py-5 rounded-[2.5rem] shadow-2xl z-[200] animate-slide-in-up flex items-center gap-4 border-2 backdrop-blur-3xl bg-white/10 ${notification.isError ? 'bg-red-600 border-red-400 text-white' : 'bg-emerald-600 border-emerald-400 text-white'}`}><CheckCircleIcon className="h-5 w-5"/><span className="font-black text-sm uppercase tracking-widest">{notification.message}</span></div>)}
+            {notification && (<div className={`fixed bottom-10 left-1/2 -translate-x-1/2 px-10 py-6 rounded-[3rem] shadow-2xl z-[200] animate-slide-in-up flex items-center gap-5 border-2 backdrop-blur-3xl bg-white/10 ${notification.isError ? 'bg-red-600 border-red-400 text-white' : 'bg-emerald-600 border-emerald-400 text-white'}`}><CheckCircleIcon className="h-6 w-6"/><span className="font-black text-base uppercase tracking-widest">{notification.message}</span></div>)}
         </div>
     );
 };
