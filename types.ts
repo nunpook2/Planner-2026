@@ -46,6 +46,14 @@ export interface CategorizedTask {
     shift?: 'day' | 'night'; 
 }
 
+export interface EquipmentHistory {
+    id: string;
+    date: string;
+    description: string;
+    partsReplaced?: string;
+    technician: string;
+}
+
 export interface Equipment {
     id: string;
     name: string;
@@ -56,6 +64,7 @@ export interface Equipment {
     methods?: string[]; 
     lastUpdated: string;
     updatedBy: string;
+    history?: EquipmentHistory[];
 }
 
 export interface DailySchedule {
