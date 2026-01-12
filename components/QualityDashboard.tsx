@@ -31,6 +31,7 @@ interface GroupedByRequest {
 const QualityDashboard: React.FC<{ onResolve: () => void }> = ({ onResolve }) => {
     const [allAssigned, setAllAssigned] = useState<AssignedTask[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [searchAnalyst, setSearchAnalyst] = useState('');
     const [notification, setNotification] = useState<{message: string, isError?: boolean} | null>(null);
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean, 
@@ -57,44 +58,50 @@ const QualityDashboard: React.FC<{ onResolve: () => void }> = ({ onResolve }) =>
 
     const groupedData: GroupedByRequest[] = useMemo(() => {
         const groups: Record<string, GroupedByRequest> = {};
+        const searchLower = searchAnalyst.toLowerCase().trim();
         
         allAssigned.forEach(doc => {
-            (doc.tasks || []).forEach((t, idx) => {
-                if (t.status === TaskStatus.NotOK) {
-                    if (!groups[doc.requestId]) {
-                        groups[doc.requestId] = {
-                            requestId: doc.requestId,
-                            earliestDate: doc.assignedDate,
-                            category: doc.category,
-                            tasksByDescription: {},
-                            allTasks: []
+            // Check if the analyst name matches the search
+            const analystMatch = !searchLower || doc.testerName.toLowerCase().includes(searchLower);
+            
+            if (analystMatch) {
+                (doc.tasks || []).forEach((t, idx) => {
+                    if (t.status === TaskStatus.NotOK) {
+                        if (!groups[doc.requestId]) {
+                            groups[doc.requestId] = {
+                                requestId: doc.requestId,
+                                earliestDate: doc.assignedDate,
+                                category: doc.category,
+                                tasksByDescription: {},
+                                allTasks: []
+                            };
+                        }
+                        
+                        const desc = String(t.Description || 'General Task');
+                        if (!groups[doc.requestId].tasksByDescription[desc]) {
+                            groups[doc.requestId].tasksByDescription[desc] = [];
+                        }
+                        
+                        const item: FlattenedNotOkTask = {
+                            docId: doc.id,
+                            originalDoc: doc,
+                            task: t,
+                            taskIndex: idx
                         };
-                    }
-                    
-                    const desc = String(t.Description || 'General Task');
-                    if (!groups[doc.requestId].tasksByDescription[desc]) {
-                        groups[doc.requestId].tasksByDescription[desc] = [];
-                    }
-                    
-                    const item: FlattenedNotOkTask = {
-                        docId: doc.id,
-                        originalDoc: doc,
-                        task: t,
-                        taskIndex: idx
-                    };
 
-                    groups[doc.requestId].tasksByDescription[desc].push(item);
-                    groups[doc.requestId].allTasks.push(item);
-                    
-                    if (doc.assignedDate < groups[doc.requestId].earliestDate) {
-                        groups[doc.requestId].earliestDate = doc.assignedDate;
+                        groups[doc.requestId].tasksByDescription[desc].push(item);
+                        groups[doc.requestId].allTasks.push(item);
+                        
+                        if (doc.assignedDate < groups[doc.requestId].earliestDate) {
+                            groups[doc.requestId].earliestDate = doc.assignedDate;
+                        }
                     }
-                }
-            });
+                });
+            }
         });
         
         return Object.values(groups).sort((a, b) => a.earliestDate.localeCompare(b.earliestDate));
-    }, [allAssigned]);
+    }, [allAssigned, searchAnalyst]);
 
     const handleBatchResolve = async (targets: FlattenedNotOkTask[]) => {
         try {
@@ -171,19 +178,42 @@ const QualityDashboard: React.FC<{ onResolve: () => void }> = ({ onResolve }) =>
             )}
 
             {/* Compact Top Header */}
-            <div className="flex justify-between items-center px-4 shrink-0">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center px-4 shrink-0 gap-4">
                 <div>
                     <h2 className="text-3xl font-black text-base-955 dark:text-base-50 tracking-tighter uppercase leading-none">Quality Intelligence</h2>
                     <p className="text-base-400 font-black uppercase tracking-[0.4em] text-[9px] mt-1.5">Mission Critical Failure Stream</p>
                 </div>
-                <div className="flex items-center gap-3">
+                
+                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                    {/* Analyst Search Box */}
+                    <div className="relative group flex-grow md:flex-none md:w-64">
+                        <input 
+                            type="text" 
+                            placeholder="Filter by Analyst name..." 
+                            value={searchAnalyst}
+                            onChange={e => setSearchAnalyst(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-base-900 border-2 border-base-100 dark:border-base-800 rounded-2xl outline-none font-black text-xs focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all shadow-sm"
+                        />
+                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base-300 group-focus-within:text-primary-500 transition-colors">
+                            <UserGroupIcon className="h-4 w-4" />
+                        </div>
+                        {searchAnalyst && (
+                            <button onClick={() => setSearchAnalyst('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-base-300 hover:text-red-500">
+                                <XCircleIcon className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
+
                     <div className="px-5 py-2.5 bg-white dark:bg-base-900 border border-base-100 dark:border-base-800 rounded-2xl shadow-sm flex items-center gap-4">
                         <div className="flex flex-col items-end">
-                            <span className="text-[8px] font-black text-base-400 uppercase tracking-widest">Active Failures</span>
-                            <span className="text-xl font-black text-red-600 leading-none">{groupedData.reduce((acc, g) => acc + g.allTasks.length, 0)}</span>
+                            <span className="text-[8px] font-black text-base-400 uppercase tracking-widest">Found Failures</span>
+                            <span className="text-xl font-black text-red-600 leading-none">
+                                {groupedData.reduce((acc, g) => acc + g.allTasks.length, 0)}
+                            </span>
                         </div>
                         <div className="p-1.5 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-500"><AlertTriangleIcon className="h-5 w-5" /></div>
                     </div>
+                    
                     <button onClick={fetchData} className="p-3.5 bg-white dark:bg-base-800 border border-base-200 dark:border-base-700 rounded-2xl text-base-400 hover:text-primary-600 transition-all shadow-sm">
                         <RefreshIcon className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
                     </button>
@@ -197,7 +227,9 @@ const QualityDashboard: React.FC<{ onResolve: () => void }> = ({ onResolve }) =>
                 ) : groupedData.length === 0 ? (
                     <div className="flex-grow flex flex-col items-center justify-center opacity-10 text-center py-20">
                         <CheckCircleIcon className="h-32 w-32 mb-6 text-emerald-500" />
-                        <span className="text-2xl font-black uppercase tracking-[0.5em] text-base-400">All Systems Clear</span>
+                        <span className="text-2xl font-black uppercase tracking-[0.5em] text-base-400">
+                            {searchAnalyst ? 'No tasks for this Analyst' : 'All Systems Clear'}
+                        </span>
                     </div>
                 ) : (
                     <div className="flex-grow overflow-y-auto no-scrollbar p-6 space-y-8">
