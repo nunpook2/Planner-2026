@@ -3,6 +3,9 @@ import { firestore } from './firebase';
 import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment } from '../types';
 import { TaskCategory } from '../types';
 
+// Export firestore for use in components
+export { firestore };
+
 const getCollection = (collectionName: string) => firestore.collection(collectionName);
 
 const safeGet = async (query: any) => {

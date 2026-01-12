@@ -36,6 +36,7 @@ export interface CategorizedTask {
     docId?: string; 
     tasks: RawTask[];
     category: TaskCategory;
+    manualGroup?: string | null; 
     originalDocId?: string; 
     originalIndices?: number[]; 
     returnReason?: string | null;
