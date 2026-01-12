@@ -7,15 +7,11 @@ import ScheduleTab from './components/ScheduleTab';
 import DashboardTab from './components/DashboardTab';
 import SettingsTab from './components/SettingsTab';
 import EquipmentTab from './components/EquipmentTab';
-import { getTesters } from './services/dataService';
-import type { Tester } from './types';
-import { DatabaseIcon, UploadIcon, ClipboardListIcon, CalendarIcon, CogIcon, BeakerIcon } from './components/common/Icons';
-
-const AlertTriangleIcon = ({ className = "h-5 w-5" }: { className?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-    </svg>
-);
+import QualityDashboard from './components/QualityDashboard';
+import { getTesters, getAssignedTasks } from './services/dataService';
+import type { Tester, AssignedTask } from './types';
+import { TaskStatus } from './types';
+import { DatabaseIcon, UploadIcon, ClipboardListIcon, CalendarIcon, CogIcon, BeakerIcon, AlertTriangleIcon } from './components/common/Icons';
 
 const LoadingSpinner = () => (
     <div className="flex flex-col items-center justify-center h-full animate-fade-in">
@@ -56,6 +52,7 @@ const ErrorModal = ({ children, onRetry }: { children?: React.ReactNode; onRetry
 const App: React.FC = () => {
     const [activeTab, setActiveTab] = useState('import');
     const [testers, setTesters] = useState<Tester[]>([]);
+    const [notOkCount, setNotOkCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<React.ReactNode | null>(null);
     const [taskRefreshKey, setTaskRefreshKey] = useState(0);
@@ -67,14 +64,25 @@ const App: React.FC = () => {
         setTaskRefreshKey(prevKey => prevKey + 1);
     }, []);
 
-    const fetchTesters = useCallback(async () => {
+    const fetchCoreData = useCallback(async () => {
         setIsLoading(true);
         setError(null);
         try {
-            const fetchedTesters = await getTesters();
+            const [fetchedTesters, allAssigned] = await Promise.all([
+                getTesters(),
+                getAssignedTasks()
+            ]);
             setTesters(fetchedTesters);
+            
+            // Count Not OK tasks across all documents
+            let count = 0;
+            allAssigned.forEach(doc => {
+                count += (doc.tasks || []).filter(t => t.status === TaskStatus.NotOK).length;
+            });
+            setNotOkCount(count);
+
         } catch (error: any) {
-            console.error("Error fetching testers: ", error);
+            console.error("Error fetching data: ", error);
             setError("An unexpected error occurred. Please check your network connection.");
         } finally {
             setIsLoading(false);
@@ -82,13 +90,14 @@ const App: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        fetchTesters();
-    }, [fetchTesters]);
+        fetchCoreData();
+    }, [fetchCoreData, taskRefreshKey]);
 
     const renderTabContent = () => {
         if (error) return null;
 
         switch (activeTab) {
+            case 'quality': return <QualityDashboard onResolve={triggerTaskRefresh} />;
             case 'import': return <ImportTab onTasksUpdated={triggerTaskRefresh} />;
             case 'tasks': return (
                 <TasksTab 
@@ -104,7 +113,7 @@ const App: React.FC = () => {
             case 'roster': return (
                 <RosterTab 
                     testers={testers} 
-                    onTestersUpdate={fetchTesters} 
+                    onTestersUpdate={fetchCoreData} 
                     selectedDate={globalSelectedDate}
                     onDateChange={setGlobalSelectedDate}
                 />
@@ -128,12 +137,12 @@ const App: React.FC = () => {
                     onShiftChange={setGlobalSelectedShift}
                 />
             );
-            case 'settings': return <SettingsTab testers={testers} onRefreshTesters={fetchTesters} onTasksUpdated={triggerTaskRefresh} />;
+            case 'settings': return <SettingsTab testers={testers} onRefreshTesters={fetchCoreData} onTasksUpdated={triggerTaskRefresh} />;
             default: return <ImportTab onTasksUpdated={triggerTaskRefresh} />;
         }
     };
     
-    const TabButton = ({ tabName, label, icon }: { tabName: string; label: string; icon: React.ReactNode }) => {
+    const TabButton = ({ tabName, label, icon, badge }: { tabName: string; label: string; icon: React.ReactNode; badge?: number }) => {
         const isActive = activeTab === tabName;
         return (
             <button
@@ -151,13 +160,18 @@ const App: React.FC = () => {
                 )}
                 
                 <div className={`
-                    p-2.5 rounded-xl transition-all duration-300 flex-shrink-0
+                    p-2.5 rounded-xl transition-all duration-300 flex-shrink-0 relative
                     ${isActive 
                         ? 'bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-lg shadow-primary-500/20 scale-110' 
                         : 'bg-white dark:bg-base-800 border border-base-100 dark:border-base-700 text-base-400 group-hover:scale-110 group-hover:bg-primary-50 dark:group-hover:bg-primary-900/20 group-hover:text-primary-500'
                     }
                 `}>
                     {icon}
+                    {badge !== undefined && badge > 0 && (
+                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-base-900 animate-pulse-subtle">
+                            {badge > 99 ? '99+' : badge}
+                        </div>
+                    )}
                 </div>
                 <span className={`font-black text-[13px] uppercase tracking-widest hidden lg:block transition-all ${isActive ? 'translate-x-1' : 'opacity-80'}`}>{label}</span>
             </button>
@@ -165,8 +179,8 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-base-50/50 dark:bg-base-950 font-sans text-base-800 dark:text-base-200 flex flex-col">
-            {error ? <ErrorModal onRetry={fetchTesters}>{error}</ErrorModal> : null}
+        <div className="min-h-screen bg-base-50/50 dark:bg-base-955 font-sans text-base-800 dark:text-base-200 flex flex-col">
+            {error ? <ErrorModal onRetry={fetchCoreData}>{error}</ErrorModal> : null}
             
             <header className="sticky top-0 z-40 bg-white/40 dark:bg-base-900/40 backdrop-blur-xl border-b border-white dark:border-base-800">
                 <div className="w-[96%] mx-auto px-6 h-20 flex items-center justify-between">
@@ -198,6 +212,8 @@ const App: React.FC = () => {
                 <div className="flex flex-col lg:flex-row gap-8 h-full">
                     <aside className="hidden lg:block w-64 flex-shrink-0 sticky top-28 self-start bg-white/30 dark:bg-base-900/30 backdrop-blur-md rounded-[2.5rem] p-4 border border-white dark:border-base-800 shadow-sm">
                         <nav className="space-y-1.5">
+                            <TabButton tabName="quality" label="Quality Center" icon={<AlertTriangleIcon className="h-5 w-5"/>} badge={notOkCount} />
+                            <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-4 mx-4"></div>
                             <TabButton tabName="import" label="Import Data" icon={<UploadIcon className="h-5 w-5"/>} />
                             <TabButton tabName="tasks" label="Assign Tasks" icon={<ClipboardListIcon className="h-5 w-5"/>} />
                             <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-4 mx-4"></div>
@@ -208,23 +224,15 @@ const App: React.FC = () => {
                             <TabButton tabName="roster" label="Roster & Shifts" icon={<DatabaseIcon className="h-5 w-5"/>} />
                             <TabButton tabName="settings" label="Settings" icon={<CogIcon className="h-5 w-5"/>} />
                         </nav>
-                        
-                        <div className="mt-8 p-5 bg-gradient-to-br from-primary-600 to-primary-800 rounded-[1.8rem] text-white shadow-xl shadow-primary-500/20">
-                            <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-60">System Status</p>
-                            <div className="flex items-center gap-2 mt-2">
-                                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-                                <span className="text-xs font-black tracking-tight">Cloud Synchronized</span>
-                            </div>
-                        </div>
                     </aside>
 
                     <div className="lg:hidden fixed bottom-6 left-6 right-6 bg-white/80 dark:bg-base-900/80 backdrop-blur-2xl border border-white dark:border-base-800 rounded-[2.5rem] p-3 z-50 flex justify-around shadow-2xl">
+                        <TabButton tabName="quality" label="" icon={<AlertTriangleIcon className="h-5 w-5"/>} badge={notOkCount} />
                         <TabButton tabName="import" label="" icon={<UploadIcon className="h-5 w-5"/>} />
                         <TabButton tabName="tasks" label="" icon={<ClipboardListIcon className="h-5 w-5"/>} />
                         <TabButton tabName="schedule" label="" icon={<CalendarIcon className="h-5 w-5"/>} />
                         <TabButton tabName="dashboard" label="" icon={<BeakerIcon className="h-5 w-5"/>} />
                         <TabButton tabName="equipment" label="" icon={<CogIcon className="h-5 w-5"/>} />
-                        <TabButton tabName="roster" label="" icon={<DatabaseIcon className="h-5 w-5"/>} />
                     </div>
 
                     <main className="flex-1 min-w-0 min-h-[calc(100vh-10rem)]">
