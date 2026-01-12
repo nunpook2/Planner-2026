@@ -32,7 +32,6 @@ export const saveEquipment = async (equipment: Omit<Equipment, 'id'> & { id?: st
     if (id) {
         await getCollection('equipments').doc(id).set(data);
     } else {
-        // Use 'data' instead of 'equipment' to ensure the 'id' field (which is undefined) is not sent to Firestore
         await getCollection('equipments').add(data);
     }
 };
@@ -166,11 +165,17 @@ export const assignItemsToPrepare = async (
 ) => {
     const itemsToAssign = indicesToAssign.map(index => {
          let item = { ...originalTask.tasks[index] } as RawTask;
+         
+         // CRITICAL: When re-assigning for preparation, we must wipe ALL previous history flags
+         // including return reasons and previous statuses to ensure the Assistant gets a clean task.
+         const { status, notOkReason, isReturned, returnReason, returnedBy, preparationStatus: oldPrep, ...cleanItem } = item;
+         
+         const freshItem = { ...cleanItem } as RawTask;
          if (originalTask.category === TaskCategory.Manual) {
-             item._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
+             freshItem._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
          }
-         item.preparationStatus = 'Awaiting Preparation';
-         return item;
+         freshItem.preparationStatus = 'Awaiting Preparation';
+         return freshItem;
     });
     
     const prepareTaskPayload: Omit<AssignedPrepareTask, 'id'> = {
@@ -186,10 +191,13 @@ export const assignItemsToPrepare = async (
     };
     await getCollection('assignedPrepareTasks').add(prepareTaskPayload);
 
+    // Update pool status so other planners see it's in prep
     if (originalTask.category !== TaskCategory.Manual) {
         const updatedTasks = originalTask.tasks.map((task, index) => {
             if (indicesToAssign.includes(index)) {
-                return { ...task, preparationStatus: 'Awaiting Preparation' } as RawTask;
+                // Clear return flags from pool task too
+                const { isReturned, returnReason, returnedBy, ...rest } = task;
+                return { ...rest, preparationStatus: 'Awaiting Preparation' } as RawTask;
             }
             return task;
         });
@@ -203,6 +211,11 @@ export const markItemAsPrepared = async (prepTask: AssignedPrepareTask, itemInde
     if (!targetItem) return;
     
     targetItem.preparationStatus = 'Prepared';
+    // Ensure clean state when prepared
+    delete targetItem.isReturned;
+    delete targetItem.returnReason;
+    delete targetItem.returnedBy;
+
     await getCollection('assignedPrepareTasks').doc(prepTask.id).update({ tasks: updatedPrepTasks });
 
     if (prepTask.category !== TaskCategory.Manual) {
@@ -222,8 +235,9 @@ export const markItemAsPrepared = async (prepTask: AssignedPrepareTask, itemInde
                 }
 
                 if (foundIndex !== -1) {
+                    const { isReturned, returnReason, returnedBy, ...rest } = originalTasks[foundIndex];
                     originalTasks[foundIndex] = { 
-                        ...originalTasks[foundIndex], 
+                        ...rest, 
                         preparationStatus: 'Ready for Testing' 
                     } as RawTask;
                     await getCollection('categorizedTasks').doc(prepTask.originalDocId).update({ tasks: originalTasks });

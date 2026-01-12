@@ -232,7 +232,6 @@ const ExpandableCell: React.FC<{
             const next = { ...prev };
             items.forEach(item => {
                 const currentSet = new Set(next[item.sourceDocId] || []);
-                // If not assigning to prep, we block items that are currently in prep from being selected
                 const isLockDisabled = !isAssigningToPrepare && item.task.preparationStatus === 'Awaiting Preparation';
                 if (checked && !isLockDisabled) currentSet.add(item.originalIndex); 
                 else currentSet.delete(item.originalIndex);
@@ -296,7 +295,7 @@ const ExpandableCell: React.FC<{
                                                 <div className="flex justify-between items-start mb-1 gap-4">
                                                     <div className="flex flex-col gap-1 min-w-0">
                                                         <div className="flex items-center gap-2">
-                                                            <span className="font-black text-[15px] uppercase truncate tracking-tight text-base-950 dark:text-white leading-tight">{String(getTaskValue(task, 'Sample Name'))}</span>
+                                                            <span className="font-black text-[15px] uppercase truncate tracking-tight text-base-955 dark:text-white leading-tight">{String(getTaskValue(task, 'Sample Name'))}</span>
                                                             {isPrepAwaiting && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black rounded-lg uppercase tracking-widest border border-amber-200">Awaiting Prep</span>}
                                                             {isReady && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[8px] font-black rounded-lg uppercase tracking-widest border border-emerald-200">Ready</span>}
                                                         </div>
@@ -389,7 +388,9 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
 
     const groupedByNormalizedId = useMemo<Record<string, { displayId: string, docs: CategorizedTask[] }>>(() => {
         const groups: Record<string, { displayId: string, docs: CategorizedTask[] }> = {};
-        categorizedTasks.forEach(doc => {
+        // Prioritize returned documents when grouping to ensure clean data wins over ghost intake data
+        const sortedTasks = [...categorizedTasks].sort((a, b) => (b.isReturnedPool ? 1 : 0) - (a.isReturnedPool ? 1 : 0));
+        sortedTasks.forEach(doc => {
             const rawId = String(doc.id || '').trim();
             if (!rawId) return;
             const normalizedKey = rawId.toLowerCase().replace(/^rs1-/, '');
@@ -505,10 +506,17 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
 
                 if (isAssigningToPrepare && !isManual) {
                     await assignItemsToPrepare(originalTaskGroup, selectedIndices, selectedPerson, selectedDate, selectedShift);
+                    
+                    // CRITICAL FIX: If we are assigning for prep FROM a 'Returned Pool' document,
+                    // we MUST remove the items from the pool document immediately to prevent ghosting or duplicates.
+                    if (originalTaskGroup.isReturnedPool) {
+                        const remaining = originalTaskGroup.tasks.filter((_, idx) => !selectedIndices.includes(idx));
+                        if (remaining.length > 0) await updateCategorizedTask(docId, { tasks: remaining });
+                        else await deleteCategorizedTask(docId);
+                    }
                 } else if (!isAssigningToPrepare) {
                     const itemsToAssign = selectedIndices.map(index => {
                         const t = { ...originalTaskGroup.tasks[index] };
-                        // CRITICAL: สำหรับงาน Manual ให้สร้าง ID ใหม่เสมอ เพื่อให้ Template เดิมยังคงอยู่
                         t._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
                         delete t.isReturned; delete t.returnReason; delete t.returnedBy; delete t.status; delete t.notOkReason; delete t.preparationStatus;
                         return t;
@@ -516,7 +524,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     
                     await addAssignedTask({ requestId: originalTaskGroup.id, tasks: itemsToAssign, category: originalTaskGroup.category, testerId: selectedPerson.id, testerName: selectedPerson.name, assignedDate: selectedDate, shift: selectedShift, status: TaskStatus.Pending });
                     
-                    // Logic: ไม่ลบออกจาก Pool หากเป็นงาน Manual (เพื่อให้ใช้เป็น Template ได้เรื่อยๆ)
                     if (!isManual) {
                         const remainingItems = originalTaskGroup.tasks.filter((_, index) => !selectedIndices.includes(index));
                         if (remainingItems.length > 0) await updateCategorizedTask(docId, { tasks: remainingItems });
@@ -633,7 +640,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                             <td className="p-1 border-r border-base-200 dark:border-base-800 bg-white dark:bg-[#1e293b]/20 sticky left-0 z-40 text-center">{row.minDueDate === Infinity ? '---' : <span className="font-black text-slate-900 dark:text-white">{(new Date(row.minDueDate)).getDate()}/{(new Date(row.minDueDate)).getMonth()+1}</span>}</td>
                                             <td className="px-4 py-4 border-r-4 border-primary-500/30 bg-white dark:bg-[#111827] sticky left-[60px] z-40 shadow-[12px_0px_25px_-10px_rgba(0,0,0,0.2)]">
                                                 <div className="flex flex-col gap-1.5 min-w-0">
-                                                    <div className="flex items-center justify-between"><span className="tracking-tighter text-[15px] font-black truncate leading-none uppercase text-base-950 dark:text-base-50">{row.requestId.replace(/^RS1-/, '')}</span><span className="px-2 py-0.5 bg-base-100 dark:bg-base-800 text-[10px] font-black rounded-lg text-base-400">#{row.totalItemCount}</span></div>
+                                                    <div className="flex items-center justify-between"><span className="tracking-tighter text-[15px] font-black truncate leading-none uppercase text-base-955 dark:text-base-50">{row.requestId.replace(/^RS1-/, '')}</span><span className="px-2 py-0.5 bg-base-100 dark:bg-base-800 text-[10px] font-black rounded-lg text-base-400">#{row.totalItemCount}</span></div>
                                                     <div className="flex flex-nowrap gap-1 mt-1 overflow-x-auto no-scrollbar">
                                                         {row.isPoCat && <span className="px-1.5 py-0.5 bg-orange-500 text-white text-[7px] rounded-md uppercase font-black shrink-0">PC</span>}
                                                         {row.isLSP && <span className="px-1.5 py-0.5 bg-cyan-600 text-white text-[7px] rounded-md uppercase font-black shrink-0">LSP</span>}
@@ -664,7 +671,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {manualTasksList.map((group) => (
                                         <div key={group.docId} className="bg-white dark:bg-base-800 border-2 border-purple-100 dark:border-purple-900/30 rounded-[2.5rem] shadow-xl flex flex-col hover:border-purple-500 transition-all duration-500 overflow-hidden group/card relative">
-                                            {/* Header */}
                                             <div className="px-8 py-4 bg-purple-50 dark:bg-purple-900/20 border-b border-purple-100 dark:border-purple-800 flex justify-between items-center">
                                                 <span className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-[0.2em]">{group.id}</span>
                                                 <button 
@@ -675,7 +681,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                                 </button>
                                             </div>
                                             
-                                            {/* Body */}
                                             <div className="p-8 flex-grow space-y-4">
                                                 {group.tasks.map((t, ti) => (
                                                     <div key={ti} className="space-y-3">
@@ -688,7 +693,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                                 ))}
                                             </div>
 
-                                            {/* Footer - Deployment Action */}
                                             <div className="p-3 bg-base-50/50 dark:bg-base-955/50 border-t border-base-100 dark:border-base-800">
                                                 {group.tasks.map((_, ti) => (
                                                     <label key={ti} className={`flex items-center justify-center gap-3 p-4 rounded-2xl cursor-pointer transition-all border-2 border-transparent ${selectedItems[group.docId!]?.has(ti) ? 'bg-purple-600 text-white shadow-lg' : 'bg-white dark:bg-base-800 hover:border-purple-400 text-purple-600'}`}>

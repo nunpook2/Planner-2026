@@ -305,12 +305,15 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 if (!reason) return;
                 const item = { ...group.tasks[itemIndex] };
                 
+                // CRITICAL FIX: Destructure and completely remove preparation and status flags
+                const { status, notOkReason, preparationStatus, isReturned: oldRet, returnReason: oldRes, returnedBy: oldBy, ...cleanItem } = item;
+                
                 const returnedItem = { 
-                    ...item, 
+                    ...cleanItem, 
                     isReturned: true, 
                     returnReason: reason, 
-                    returnedBy: group.assistantName, 
-                    preparationStatus: null 
+                    returnedBy: group.assistantName
+                    // No preparationStatus = unlocked in pool grid
                 };
 
                 await addCategorizedTask({ 
@@ -351,11 +354,15 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 if (!reason) return;
                 const item = { ...group.tasks[itemIndex] };
                 
+                // CRITICAL FIX: Destructure and completely remove ALL status flags
+                const { status, notOkReason, preparationStatus, isReturned: oldRet, returnReason: oldRes, returnedBy: oldBy, ...cleanItem } = item;
+                
                 const returnedItem = { 
-                    ...item, 
+                    ...cleanItem, 
                     isReturned: true, 
                     returnReason: reason, 
-                    returnedBy: group.testerName 
+                    returnedBy: group.testerName
+                    // preparationStatus explicitly removed so Planner can re-prep if needed
                 };
 
                 await addCategorizedTask({ 
