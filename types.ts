@@ -41,8 +41,10 @@ export interface CategorizedTask {
     returnReason?: string | null;
     returnedBy?: string | null;
     isReturnedPool?: boolean; 
+    isPrepReturn?: boolean; // Flag to identify returned prep work
     order?: number; 
     createdAt?: string; 
+    returnedDate?: string;
     shift?: 'day' | 'night'; 
 }
 

@@ -191,7 +191,14 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
             ]);
             setAssignedTasks((assigned || []).filter(t => t.assignedDate === selectedDate && t.shift === selectedShift));
             setPrepareTasks((prepared || []).filter(t => t.assignedDate === selectedDate && t.shift === selectedShift));
-            setReturnedPool((pool || []).filter(t => t.isReturnedPool === true)); 
+            
+            // Filter only tasks returned by staff in this specific date and shift
+            setReturnedPool((pool || []).filter(t => 
+                t.isReturnedPool === true && 
+                t.returnedDate === selectedDate && 
+                t.shift === selectedShift
+            )); 
+            
             setSchedule(dailySched);
             setShiftReport(report);
         } catch (e) { 
@@ -234,13 +241,15 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
             });
         }
         
-        const addActivity = (targetPersonId: string, task: RawTask, cat: TaskCategory, isReady: boolean, isPrep: boolean = false) => {
+        const addActivity = (targetPersonId: string, task: RawTask, cat: TaskCategory, isReady: boolean, isPrep: boolean = false, isForceReturned: boolean = false) => {
             if (!stats[targetPersonId]) return; 
             const person = stats[targetPersonId];
             const priority = isPrep ? 'normal' : getPriorityStatus(task, cat);
             const rawDesc = String(getTaskValue(task, 'Description') || 'General Task');
             const desc = isPrep ? `[PREP] ${rawDesc}` : rawDesc;
-            const status = isReady ? 'done' : (task.status === TaskStatus.NotOK ? 'failed' : (task.isReturned ? 'returned' : 'pending'));
+            
+            // If it's a returned pool item, forced status is returned. Otherwise normal calculation.
+            const status = isForceReturned ? 'returned' : (isReady ? 'done' : (task.status === TaskStatus.NotOK ? 'failed' : (task.isReturned ? 'returned' : 'pending')));
             
             if (status !== 'done') person.pendingTasks++;
             
@@ -263,14 +272,29 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
             item.samples.push({ name: String(getTaskValue(task, 'Sample Name') || 'N/A'), qty: String(getTaskValue(task, 'Quantity') || '1'), detail: String(getTaskValue(task, 'Variant') || '-'), status: status, isManual: item.isManual, isPrep: isPrep, reason: task.notOkReason || task.returnReason || undefined });
         };
 
+        // 1. Add current active tasks
         assignedTasks.forEach(g => (g.tasks || []).forEach(t => addActivity(g.testerId, t, g.category, t.status === TaskStatus.Done, false)));
         prepareTasks.forEach(g => (g.tasks || []).forEach(t => {
             const isDone = t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing';
             addActivity(g.assistantId, t, g.category, isDone, true);
         }));
 
+        // 2. Add tasks that were returned by personnel (Missing pieces fix)
+        returnedPool.forEach(poolDoc => {
+            if (!poolDoc.returnedBy) return;
+            // Find person by name since returnedBy is name string
+            const personObj = Object.values(stats).find(s => s.name === poolDoc.returnedBy);
+            if (personObj) {
+                (poolDoc.tasks || []).forEach(t => {
+                    // CRITICAL FIX: Use poolDoc.isPrepReturn to correctly categorize prep returns
+                    const isPrepWork = poolDoc.isPrepReturn === true; 
+                    addActivity(personObj.id, t, poolDoc.category, false, isPrepWork, true);
+                });
+            }
+        });
+
         return Object.values(stats).sort((a, b) => b.pendingTasks - a.pendingTasks);
-    }, [assignedTasks, prepareTasks, schedule, testers, selectedShift]);
+    }, [assignedTasks, prepareTasks, returnedPool, schedule, testers, selectedShift]);
 
     const activePerson = useMemo(() => {
         if (!selectedPersonId || selectedPersonId === ALL_PERSONNEL_ID) return null;
@@ -299,9 +323,9 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
     const wasteTheme = useMemo(() => {
         const level = shiftReport?.wasteLevel || 'none';
         switch(level) {
-            case 'high': return { bg: 'bg-red-600', text: 'text-red-50', badge: 'bg-red-950 text-red-400', glow: 'shadow-[0_20px_50px_-10px_rgba(220,38,38,0.5)]', label: 'Over Capacity', display: 'HIGH' };
-            case 'medium': return { bg: 'bg-amber-500', text: 'text-amber-50', badge: 'bg-amber-950 text-amber-300', glow: 'shadow-[0_20px_50px_-10px_rgba(245,158,11,0.5)]', label: 'Limited Space', display: 'MEDIUM' };
-            case 'low': return { bg: 'bg-emerald-600', text: 'text-emerald-50', badge: 'bg-emerald-950 text-emerald-400', glow: 'shadow-[0_20px_50px_-10px_rgba(16,185,129,0.5)]', label: 'Optimal', display: 'LOW' };
+            case 'high': return { bg: 'bg-red-600', text: 'text-red-50', badge: 'bg-red-955 text-red-400', glow: 'shadow-[0_20px_50px_-10px_rgba(220,38,38,0.5)]', label: 'Over Capacity', display: 'HIGH' };
+            case 'medium': return { bg: 'bg-amber-500', text: 'text-amber-50', badge: 'bg-amber-955 text-amber-300', glow: 'shadow-[0_20px_50px_-10px_rgba(245,158,11,0.5)]', label: 'Limited Space', display: 'MEDIUM' };
+            case 'low': return { bg: 'bg-emerald-600', text: 'text-emerald-50', badge: 'bg-emerald-955 text-emerald-400', glow: 'shadow-[0_20px_50px_-10px_rgba(16,185,129,0.5)]', label: 'Optimal', display: 'LOW' };
             default: return { bg: 'bg-white dark:bg-base-900', text: 'text-base-400 dark:text-base-500', badge: 'bg-base-100 dark:bg-base-800 text-base-400', glow: 'shadow-none', label: 'Not Set', display: 'N/A' };
         }
     }, [shiftReport]);

@@ -313,7 +313,6 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     isReturned: true, 
                     returnReason: reason, 
                     returnedBy: group.assistantName
-                    // No preparationStatus = unlocked in pool grid
                 };
 
                 await addCategorizedTask({ 
@@ -321,7 +320,9 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     category: group.category, 
                     tasks: [returnedItem], 
                     isReturnedPool: true, 
+                    isPrepReturn: true, // Identify as prep return for Dashboard
                     createdAt: new Date().toISOString(), 
+                    returnedDate: group.assignedDate, // Crucial for Dashboard filtering
                     shift: group.shift, 
                     returnedBy: group.assistantName, 
                     returnReason: reason 
@@ -362,7 +363,6 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     isReturned: true, 
                     returnReason: reason, 
                     returnedBy: group.testerName
-                    // preparationStatus explicitly removed so Planner can re-prep if needed
                 };
 
                 await addCategorizedTask({ 
@@ -370,11 +370,12 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     category: group.category, 
                     tasks: [returnedItem], 
                     isReturnedPool: true, 
+                    isPrepReturn: false, // Testing return
                     createdAt: new Date().toISOString(), 
+                    returnedDate: group.assignedDate, // Crucial for Dashboard filtering
                     shift: group.shift, 
                     returnedBy: group.testerName, 
-                    returnReason: reason, 
-                    returnedDate: group.assignedDate 
+                    returnReason: reason 
                 } as any);
 
                 const remaining = group.tasks.filter((_, idx) => idx !== itemIndex);
