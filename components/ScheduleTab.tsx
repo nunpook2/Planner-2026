@@ -322,7 +322,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     isReturnedPool: true, 
                     isPrepReturn: true, // Identify as prep return for Dashboard
                     createdAt: new Date().toISOString(), 
-                    returnedDate: group.assignedDate, // Crucial for Dashboard filtering
+                    returnedDate: group.assignedDate, // Use exact date from assignment
                     shift: group.shift, 
                     returnedBy: group.assistantName, 
                     returnReason: reason 
@@ -372,7 +372,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     isReturnedPool: true, 
                     isPrepReturn: false, // Testing return
                     createdAt: new Date().toISOString(), 
-                    returnedDate: group.assignedDate, // Crucial for Dashboard filtering
+                    returnedDate: group.assignedDate, // Use exact date from assignment
                     shift: group.shift, 
                     returnedBy: group.testerName, 
                     returnReason: reason 

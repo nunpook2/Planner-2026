@@ -189,10 +189,11 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
             const [assigned, pool, report, dailySched, prepared] = await Promise.all([
                 getAssignedTasks(), getCategorizedTasks(), getShiftReport(selectedDate, selectedShift), getDailySchedule(selectedDate), getAssignedPrepareTasks()
             ]);
+            
             setAssignedTasks((assigned || []).filter(t => t.assignedDate === selectedDate && t.shift === selectedShift));
             setPrepareTasks((prepared || []).filter(t => t.assignedDate === selectedDate && t.shift === selectedShift));
             
-            // Filter only tasks returned by staff in this specific date and shift
+            // Robust filtering for returned items - check both flags just in case
             setReturnedPool((pool || []).filter(t => 
                 t.isReturnedPool === true && 
                 t.returnedDate === selectedDate && 
@@ -228,6 +229,8 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
 
     const processedPersonnel = useMemo(() => {
         const stats: Record<string, PersonStats> = {};
+        
+        // 1. Initialize stats for everyone on the current shift schedule
         if (schedule) {
             const activeShiftIds = selectedShift === 'day' 
                 ? [...(schedule.dayShiftTesters || []), ...(schedule.dayShiftAssistants || [])]
@@ -245,16 +248,13 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
             if (!stats[targetPersonId]) return; 
             const person = stats[targetPersonId];
             const priority = isPrep ? 'normal' : getPriorityStatus(task, cat);
-            const rawDesc = String(getTaskValue(task, 'Description') || 'General Task');
+            const rawDesc = String(getTaskValue(task, 'Description') || 'General Task').trim();
             const desc = isPrep ? `[PREP] ${rawDesc}` : rawDesc;
             
-            // If it's a returned pool item, forced status is returned. Otherwise normal calculation.
             const status = isForceReturned ? 'returned' : (isReady ? 'done' : (task.status === TaskStatus.NotOK ? 'failed' : (task.isReturned ? 'returned' : 'pending')));
-            
             if (status !== 'done') person.pendingTasks++;
             
             const summaryKey = `${person.id}_${desc}`;
-            
             if (!person.summary[summaryKey]) {
                 person.summary[summaryKey] = { desc, total: 0, done: 0, failed: 0, returned: 0, priorityStatus: priority, isManual: task.ManualEntry === true || cat === TaskCategory.Manual, isPrepGroup: isPrep, samples: [] };
             }
@@ -269,24 +269,34 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                 if (priorities.indexOf(priority) < priorities.indexOf(item.priorityStatus)) item.priorityStatus = priority;
             }
             
-            item.samples.push({ name: String(getTaskValue(task, 'Sample Name') || 'N/A'), qty: String(getTaskValue(task, 'Quantity') || '1'), detail: String(getTaskValue(task, 'Variant') || '-'), status: status, isManual: item.isManual, isPrep: isPrep, reason: task.notOkReason || task.returnReason || undefined });
+            item.samples.push({ 
+                name: String(getTaskValue(task, 'Sample Name') || 'N/A'), 
+                qty: String(getTaskValue(task, 'Quantity') || '1'), 
+                detail: String(getTaskValue(task, 'Variant') || '-'), 
+                status: status, 
+                isManual: item.isManual, 
+                isPrep: isPrep, 
+                reason: task.notOkReason || task.returnReason || undefined 
+            });
         };
 
-        // 1. Add current active tasks
+        // 2. Add current active tasks
         assignedTasks.forEach(g => (g.tasks || []).forEach(t => addActivity(g.testerId, t, g.category, t.status === TaskStatus.Done, false)));
         prepareTasks.forEach(g => (g.tasks || []).forEach(t => {
             const isDone = t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing';
             addActivity(g.assistantId, t, g.category, isDone, true);
         }));
 
-        // 2. Add tasks that were returned by personnel (Missing pieces fix)
+        // 3. Add tasks that were returned by personnel (Missing pieces fix)
         returnedPool.forEach(poolDoc => {
             if (!poolDoc.returnedBy) return;
-            // Find person by name since returnedBy is name string
-            const personObj = Object.values(stats).find(s => s.name === poolDoc.returnedBy);
+            // Robust name matching with trim and case-insensitive check
+            const targetName = poolDoc.returnedBy.trim().toLowerCase();
+            const personObj = Object.values(stats).find(s => s.name.trim().toLowerCase() === targetName);
+            
             if (personObj) {
                 (poolDoc.tasks || []).forEach(t => {
-                    // CRITICAL FIX: Use poolDoc.isPrepReturn to correctly categorize prep returns
+                    // Check poolDoc flag to identify if this return was from a preparation mission
                     const isPrepWork = poolDoc.isPrepReturn === true; 
                     addActivity(personObj.id, t, poolDoc.category, false, isPrepWork, true);
                 });
@@ -340,7 +350,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
 
         return (
             <div key={person.id} className="bg-white dark:bg-base-900 rounded-[2.5rem] border-2 border-base-200 dark:border-base-800 shadow-xl overflow-hidden flex flex-col h-full hover:border-primary-500/50 transition-all duration-300 animate-fade-in">
-                {/* Compact Card Header */}
                 <div className={`px-6 py-4 flex items-center justify-between border-b-2 border-base-50 dark:border-base-800 ${person.role === 'ASST' ? 'bg-amber-50/30 dark:bg-amber-900/10' : 'bg-primary-50/30 dark:bg-primary-900/10'}`}>
                     <div className="flex items-center gap-4">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-black text-white shadow-lg ${person.role === 'ASST' ? 'person-avatar assistant' : 'person-avatar'}`}>
@@ -358,12 +367,10 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                     </div>
                 </div>
 
-                {/* Progress Bar Header Overlay */}
                 <div className="w-full h-1.5 bg-base-100 dark:bg-base-800 overflow-hidden">
                     <div className={`h-full transition-all duration-1000 ${isCompleted ? 'bg-emerald-500' : 'bg-primary-600'}`} style={{width: `${(totalDone/totalAll)*100}%`}}></div>
                 </div>
 
-                {/* Compact Mission List */}
                 <div className="flex-grow overflow-y-auto p-4 space-y-3 custom-scrollbar max-h-[500px]">
                     {missions.map(([key, sum]) => {
                         const isSumComplete = sum.done === sum.total;
@@ -409,7 +416,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                     })}
                 </div>
                 
-                {/* Mini Footer */}
                 <div className="px-6 py-3 bg-base-50/50 dark:bg-base-800/30 text-center">
                     <button 
                         onClick={() => setSelectedPersonId(person.id)}
@@ -437,7 +443,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
             <ReportEditorModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} report={shiftReport} onSave={handleSaveReport} date={selectedDate} shift={selectedShift} />
 
             <div className="flex-grow grid grid-cols-12 gap-5 h-full relative overflow-hidden">
-                {/* Sidebar for quick toggle */}
                 <aside className="col-span-1 flex flex-col bg-white dark:bg-base-900 rounded-[2rem] border border-base-200 dark:border-base-800 shadow-xl overflow-hidden h-full backdrop-blur-md">
                     <div className="flex-grow overflow-y-auto no-scrollbar p-3 space-y-3">
                         <button 
@@ -468,7 +473,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                 </aside>
 
                 <div className="col-span-11 flex flex-col min-w-0 bg-white dark:bg-base-900 rounded-[3rem] border border-base-200 dark:border-base-800 shadow-2xl overflow-hidden relative backdrop-blur-xl h-full">
-                    {/* Header with KPI and Filters */}
                     <div className="px-8 py-6 border-b border-base-100 dark:border-base-800 flex flex-col gap-6 bg-base-50/30 dark:bg-base-800/10 shrink-0 sticky top-0 z-20 backdrop-blur-xl">
                         <div className="flex justify-between items-center">
                             <div>
@@ -485,7 +489,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                             </div>
                         </div>
 
-                        {/* High-Level KPI Row */}
                         <div className="grid grid-cols-6 gap-4">
                             <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center">
                                 <span className="text-[10px] font-black text-primary-600 uppercase tracking-widest mb-1">Global Success</span>
@@ -544,7 +547,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                             <div className="max-w-6xl mx-auto">
                                 {activePerson ? (
                                     <div className="animate-fade-in">
-                                        {/* Original detailed view when selecting a single person */}
                                         <div className="flex items-center justify-between mb-8 px-6 py-6 bg-white dark:bg-base-900 rounded-[2.5rem] border-2 border-base-100 dark:border-base-800 shadow-xl">
                                             <div className="flex items-center gap-6">
                                                 <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-2xl font-black text-white shadow-2xl ${activePerson.role === 'ASST' ? 'person-avatar assistant' : 'person-avatar'}`}>
@@ -558,7 +560,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                             <div className="flex flex-col items-end">
                                                 <span className="text-[10px] font-black text-base-400 uppercase tracking-widest mb-1">Success Rate</span>
                                                 <span className="text-4xl font-black text-primary-700">
-                                                    {/* Explicitly cast to SummaryItemStats[] to avoid 'unknown' type issues during iteration */}
                                                     {(Object.values(activePerson.summary) as SummaryItemStats[]).reduce((acc, s) => acc + s.done, 0)}
                                                     <span className="text-base-200 mx-1 font-normal">/</span>
                                                     {(Object.values(activePerson.summary) as SummaryItemStats[]).reduce((acc, s) => acc + s.total, 0)}
@@ -567,7 +568,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                         </div>
                                         
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            {/* Explicitly cast to entries of SummaryItemStats to resolve type errors */}
                                             {(Object.entries(activePerson.summary) as [string, SummaryItemStats][]).map(([key, sum]) => (
                                                 <div key={key} className="bg-white dark:bg-base-900 rounded-[2rem] border-2 border-base-100 dark:border-base-800 p-8 shadow-lg">
                                                     <div className="flex justify-between items-start mb-6">
