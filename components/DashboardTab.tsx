@@ -4,17 +4,14 @@ import type { Tester, AssignedTask, RawTask, ShiftReport, DailySchedule, Assigne
 import { TaskStatus, TaskCategory } from '../types';
 import { 
     getAssignedTasks, getShiftReport, saveShiftReport, getDailySchedule, getAssignedPrepareTasks, getCategorizedTasks,
-    updateCategorizedTask
 } from '../services/dataService';
 import { 
     CheckCircleIcon, AlertTriangleIcon, 
     UserGroupIcon, RefreshIcon, 
     BeakerIcon, CalendarIcon,
     SunIcon, MoonIcon, DownloadIcon,
-    ChevronDownIcon, SparklesIcon,
-    TrashIcon, CogIcon, PlusIcon, XCircleIcon,
-    ClipboardListIcon,
-    ArrowUturnLeftIcon
+    XCircleIcon, SparklesIcon,
+    TrashIcon
 } from './common/Icons';
 
 declare const XLSX: any;
@@ -181,7 +178,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [notification, setNotification] = useState<{message: string, isError: boolean} | null>(null);
     const [selectedPersonId, setSelectedPersonId] = useState<string | null>(ALL_PERSONNEL_ID);
-    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
     const fetchData = useCallback(async () => {
         setIsFetching(true);
@@ -189,17 +185,9 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
             const [assigned, pool, report, dailySched, prepared] = await Promise.all([
                 getAssignedTasks(), getCategorizedTasks(), getShiftReport(selectedDate, selectedShift), getDailySchedule(selectedDate), getAssignedPrepareTasks()
             ]);
-            
             setAssignedTasks((assigned || []).filter(t => t.assignedDate === selectedDate && t.shift === selectedShift));
             setPrepareTasks((prepared || []).filter(t => t.assignedDate === selectedDate && t.shift === selectedShift));
-            
-            // Robust filtering for returned items - check both flags just in case
-            setReturnedPool((pool || []).filter(t => 
-                t.isReturnedPool === true && 
-                t.returnedDate === selectedDate && 
-                t.shift === selectedShift
-            )); 
-            
+            setReturnedPool((pool || []).filter(t => t.isReturnedPool === true)); 
             setSchedule(dailySched);
             setShiftReport(report);
         } catch (e) { 
@@ -213,24 +201,35 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
 
     const globalStats = useMemo(() => {
         let total = 0, done = 0, poCat = 0, lsp = 0, sprint = 0, urgent = 0;
-        assignedTasks.forEach(group => {
-            total += group.tasks.length;
-            group.tasks.forEach(t => {
-                const priority = getPriorityStatus(t, group.category);
+        
+        const processGroup = (groupTasks: RawTask[], category: TaskCategory) => {
+             total += groupTasks.length;
+             groupTasks.forEach(t => {
+                const priority = getPriorityStatus(t, category);
                 if (priority === 'lsp') lsp++;
                 else if (priority === 'sprint') sprint++;
                 else if (priority === 'urgent') urgent++;
                 else if (priority === 'pocat') poCat++;
-                if (t.status === TaskStatus.Done) done++;
+                if (t.status === TaskStatus.Done || t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing') done++;
             });
+        };
+
+        assignedTasks.forEach(g => processGroup(g.tasks, g.category));
+        prepareTasks.forEach(g => processGroup(g.tasks, g.category));
+        
+        // Also process returned items for this shift
+        returnedPool.forEach(g => {
+            const docDate = (g as any).returnedDate;
+            if (g.shift === selectedShift && docDate === selectedDate) {
+                processGroup(g.tasks, g.category);
+            }
         });
+
         return { total, done, poCat, lsp, sprint, urgent, percent: total > 0 ? Math.round((done / total) * 100) : 0 };
-    }, [assignedTasks]);
+    }, [assignedTasks, prepareTasks, returnedPool, selectedDate, selectedShift]);
 
     const processedPersonnel = useMemo(() => {
         const stats: Record<string, PersonStats> = {};
-        
-        // 1. Initialize stats for everyone on the current shift schedule
         if (schedule) {
             const activeShiftIds = selectedShift === 'day' 
                 ? [...(schedule.dayShiftTesters || []), ...(schedule.dayShiftAssistants || [])]
@@ -244,17 +243,18 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
             });
         }
         
-        const addActivity = (targetPersonId: string, task: RawTask, cat: TaskCategory, isReady: boolean, isPrep: boolean = false, isForceReturned: boolean = false) => {
+        const addActivity = (targetPersonId: string, task: RawTask, cat: TaskCategory, isReady: boolean, isPrep: boolean = false) => {
             if (!stats[targetPersonId]) return; 
             const person = stats[targetPersonId];
             const priority = isPrep ? 'normal' : getPriorityStatus(task, cat);
-            const rawDesc = String(getTaskValue(task, 'Description') || 'General Task').trim();
+            const rawDesc = String(getTaskValue(task, 'Description') || 'General Task');
             const desc = isPrep ? `[PREP] ${rawDesc}` : rawDesc;
+            const status = isReady ? 'done' : (task.status === TaskStatus.NotOK ? 'failed' : (task.isReturned ? 'returned' : 'pending'));
             
-            const status = isForceReturned ? 'returned' : (isReady ? 'done' : (task.status === TaskStatus.NotOK ? 'failed' : (task.isReturned ? 'returned' : 'pending')));
             if (status !== 'done') person.pendingTasks++;
             
             const summaryKey = `${person.id}_${desc}`;
+            
             if (!person.summary[summaryKey]) {
                 person.summary[summaryKey] = { desc, total: 0, done: 0, failed: 0, returned: 0, priorityStatus: priority, isManual: task.ManualEntry === true || cat === TaskCategory.Manual, isPrepGroup: isPrep, samples: [] };
             }
@@ -269,55 +269,36 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                 if (priorities.indexOf(priority) < priorities.indexOf(item.priorityStatus)) item.priorityStatus = priority;
             }
             
-            item.samples.push({ 
-                name: String(getTaskValue(task, 'Sample Name') || 'N/A'), 
-                qty: String(getTaskValue(task, 'Quantity') || '1'), 
-                detail: String(getTaskValue(task, 'Variant') || '-'), 
-                status: status, 
-                isManual: item.isManual, 
-                isPrep: isPrep, 
-                reason: task.notOkReason || task.returnReason || undefined 
-            });
+            item.samples.push({ name: String(getTaskValue(task, 'Sample Name') || 'N/A'), qty: String(getTaskValue(task, 'Quantity') || '1'), detail: String(getTaskValue(task, 'Variant') || '-'), status: status, isManual: item.isManual, isPrep: isPrep, reason: task.notOkReason || task.returnReason || undefined });
         };
 
-        // 2. Add current active tasks
         assignedTasks.forEach(g => (g.tasks || []).forEach(t => addActivity(g.testerId, t, g.category, t.status === TaskStatus.Done, false)));
         prepareTasks.forEach(g => (g.tasks || []).forEach(t => {
             const isDone = t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing';
             addActivity(g.assistantId, t, g.category, isDone, true);
         }));
 
-        // 3. Add tasks that were returned by personnel (Missing pieces fix)
-        returnedPool.forEach(poolDoc => {
-            if (!poolDoc.returnedBy) return;
-            // Robust name matching with trim and case-insensitive check
-            const targetName = poolDoc.returnedBy.trim().toLowerCase();
-            const personObj = Object.values(stats).find(s => s.name.trim().toLowerCase() === targetName);
-            
-            if (personObj) {
-                (poolDoc.tasks || []).forEach(t => {
-                    // Check poolDoc flag to identify if this return was from a preparation mission
-                    const isPrepWork = poolDoc.isPrepReturn === true; 
-                    addActivity(personObj.id, t, poolDoc.category, false, isPrepWork, true);
-                });
+        // CRITICAL FIX: Include returned pool items for shift history report
+        // This ensures returns made by testers/assistants are visible to planners in the summary
+        returnedPool.forEach(g => {
+            const docDate = (g as any).returnedDate;
+            if (g.shift === selectedShift && docDate === selectedDate) {
+                // Safely match person by name for returned entries
+                const person = testers.find(t => t.name.trim().toLowerCase() === String(g.returnedBy || '').trim().toLowerCase());
+                if (person) {
+                    const isPrep = (g as any).isPrep === true;
+                    (g.tasks || []).forEach(t => addActivity(person.id, t, g.category, false, isPrep));
+                }
             }
         });
 
         return Object.values(stats).sort((a, b) => b.pendingTasks - a.pendingTasks);
-    }, [assignedTasks, prepareTasks, returnedPool, schedule, testers, selectedShift]);
+    }, [assignedTasks, prepareTasks, returnedPool, schedule, testers, selectedShift, selectedDate]);
 
     const activePerson = useMemo(() => {
         if (!selectedPersonId || selectedPersonId === ALL_PERSONNEL_ID) return null;
         return processedPersonnel.find(p => p.id === selectedPersonId) || null;
     }, [processedPersonnel, selectedPersonId]);
-
-    const toggleGroup = (key: string) => {
-        setExpandedGroups(prev => {
-            const next = new Set(prev);
-            if (next.has(key)) next.delete(key); else next.add(key);
-            return next;
-        });
-    };
 
     const handleSaveReport = async (report: ShiftReport) => {
         try {
@@ -326,16 +307,16 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
     };
 
     const handleExport = () => {
-        const exportData = processedPersonnel.flatMap(person => Object.values(person.summary).flatMap((sum: SummaryItemStats) => sum.samples.map(sample => ({ 'Staff Name': person.name, 'Work Type': sample.isPrep ? 'Preparation' : 'Testing', 'Mission Desc': sum.desc, 'Sample Name': sample.name, 'Qty': sample.qty, 'Details': sample.detail, 'Status': sample.status, 'Issue/Reason': sample.reason || '-' }))));
+        const exportData = processedPersonnel.flatMap(person => (Object.values(person.summary) as SummaryItemStats[]).flatMap((sum: SummaryItemStats) => sum.samples.map(sample => ({ 'Staff Name': person.name, 'Work Type': sample.isPrep ? 'Preparation' : 'Testing', 'Mission Desc': sum.desc, 'Sample Name': sample.name, 'Qty': sample.qty, 'Details': sample.detail, 'Status': sample.status, 'Issue/Reason': sample.reason || '-' }))));
         const ws = XLSX.utils.json_to_sheet(exportData); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Shift Summary"); XLSX.writeFile(wb, `ShiftSummary_${selectedDate}_${selectedShift}.xlsx`);
     };
 
     const wasteTheme = useMemo(() => {
         const level = shiftReport?.wasteLevel || 'none';
         switch(level) {
-            case 'high': return { bg: 'bg-red-600', text: 'text-red-50', badge: 'bg-red-955 text-red-400', glow: 'shadow-[0_20px_50px_-10px_rgba(220,38,38,0.5)]', label: 'Over Capacity', display: 'HIGH' };
-            case 'medium': return { bg: 'bg-amber-500', text: 'text-amber-50', badge: 'bg-amber-955 text-amber-300', glow: 'shadow-[0_20px_50px_-10px_rgba(245,158,11,0.5)]', label: 'Limited Space', display: 'MEDIUM' };
-            case 'low': return { bg: 'bg-emerald-600', text: 'text-emerald-50', badge: 'bg-emerald-955 text-emerald-400', glow: 'shadow-[0_20px_50px_-10px_rgba(16,185,129,0.5)]', label: 'Optimal', display: 'LOW' };
+            case 'high': return { bg: 'bg-red-600', text: 'text-red-50', badge: 'bg-red-950 text-red-400', glow: 'shadow-[0_20px_50px_-10px_rgba(220,38,38,0.5)]', label: 'Over Capacity', display: 'HIGH' };
+            case 'medium': return { bg: 'bg-amber-500', text: 'text-amber-50', badge: 'bg-amber-950 text-amber-300', glow: 'shadow-[0_20px_50px_-10px_rgba(245,158,11,0.5)]', label: 'Limited Space', display: 'MEDIUM' };
+            case 'low': return { bg: 'bg-emerald-600', text: 'text-emerald-50', badge: 'bg-emerald-950 text-emerald-400', glow: 'shadow-[0_20px_50px_-10px_rgba(16,185,129,0.5)]', label: 'Optimal', display: 'LOW' };
             default: return { bg: 'bg-white dark:bg-base-900', text: 'text-base-400 dark:text-base-500', badge: 'bg-base-100 dark:bg-base-800 text-base-400', glow: 'shadow-none', label: 'Not Set', display: 'N/A' };
         }
     }, [shiftReport]);
@@ -344,9 +325,9 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         const missions = Object.entries(person.summary);
         if (missions.length === 0) return null;
 
-        const totalDone = Object.values(person.summary).reduce((acc, s) => acc + s.done, 0);
-        const totalAll = Object.values(person.summary).reduce((acc, s) => acc + s.total, 0);
-        const isCompleted = totalDone === totalAll;
+        const totalDone = (Object.values(person.summary) as SummaryItemStats[]).reduce((acc, s) => acc + s.done, 0);
+        const totalAll = (Object.values(person.summary) as SummaryItemStats[]).reduce((acc, s) => acc + s.total, 0);
+        const isCompleted = totalDone === totalAll && totalAll > 0;
 
         return (
             <div key={person.id} className="bg-white dark:bg-base-900 rounded-[2.5rem] border-2 border-base-200 dark:border-base-800 shadow-xl overflow-hidden flex flex-col h-full hover:border-primary-500/50 transition-all duration-300 animate-fade-in">
@@ -368,18 +349,18 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                 </div>
 
                 <div className="w-full h-1.5 bg-base-100 dark:bg-base-800 overflow-hidden">
-                    <div className={`h-full transition-all duration-1000 ${isCompleted ? 'bg-emerald-500' : 'bg-primary-600'}`} style={{width: `${(totalDone/totalAll)*100}%`}}></div>
+                    <div className={`h-full transition-all duration-1000 ${isCompleted ? 'bg-emerald-500' : 'bg-primary-600'}`} style={{width: totalAll > 0 ? `${(totalDone/totalAll)*100}%` : '0%'}}></div>
                 </div>
 
                 <div className="flex-grow overflow-y-auto p-4 space-y-3 custom-scrollbar max-h-[500px]">
-                    {missions.map(([key, sum]) => {
+                    {(missions as [string, SummaryItemStats][]).map(([key, sum]) => {
                         const isSumComplete = sum.done === sum.total;
                         const hasSumError = sum.failed > 0 || sum.returned > 0;
                         
                         return (
                             <div key={key} className={`p-4 rounded-2xl border-2 transition-all ${isSumComplete ? 'bg-emerald-50/10 border-emerald-100/50' : hasSumError ? 'bg-red-50/10 border-red-100 shadow-md' : 'bg-base-50/30 dark:bg-base-800/40 border-base-100 dark:border-base-700'}`}>
                                 <div className="flex justify-between items-start mb-2">
-                                    <h5 className={`text-[13px] font-black leading-tight uppercase flex-grow pr-2 ${isSumComplete ? 'text-emerald-900/40' : 'text-base-900 dark:text-base-100'}`}>
+                                    <h5 className={`text-[13px] font-black leading-tight uppercase flex-grow pr-2 ${isSumComplete ? 'text-emerald-900/40' : 'text-base-950 dark:text-base-100'}`}>
                                         {sum.desc}
                                     </h5>
                                     <span className={`text-[13px] font-black shrink-0 ${isSumComplete ? 'text-emerald-600/50' : hasSumError ? 'text-red-600' : 'text-primary-600'}`}>
@@ -403,7 +384,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                                     </span>
                                                 </div>
                                                 {s.reason && (
-                                                    <div className={`px-2 py-1.5 rounded-lg text-[11px] font-black text-white leading-tight shadow-md ${s.status === 'failed' ? 'bg-red-600' : 'bg-orange-600'}`}>
+                                                    <div className={`px-2 py-1.5 rounded-lg text-[10px] font-bold text-white leading-tight shadow-md ${s.status === 'failed' ? 'bg-red-600' : 'bg-orange-600'}`}>
                                                         {s.reason}
                                                     </div>
                                                 )}
@@ -441,6 +422,13 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
             `}</style>
 
             <ReportEditorModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} report={shiftReport} onSave={handleSaveReport} date={selectedDate} shift={selectedShift} />
+
+            {notification && (
+                <div className={`fixed bottom-10 right-10 z-[110] px-6 py-4 rounded-2xl shadow-2xl animate-slide-in-up flex items-center gap-3 font-black text-xs uppercase tracking-widest ${notification.isError ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'}`}>
+                    <CheckCircleIcon className="h-5 w-5" />
+                    {notification.message}
+                </div>
+            )}
 
             <div className="flex-grow grid grid-cols-12 gap-5 h-full relative overflow-hidden">
                 <aside className="col-span-1 flex flex-col bg-white dark:bg-base-900 rounded-[2rem] border border-base-200 dark:border-base-800 shadow-xl overflow-hidden h-full backdrop-blur-md">
@@ -578,14 +566,20 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                                         {sum.samples.map((s, si) => (
                                                             <div key={si} className="flex flex-col p-4 bg-base-50/50 dark:bg-base-800/50 rounded-2xl border border-base-100 dark:border-base-700">
                                                                 <div className="flex justify-between items-center">
-                                                                    <span className="text-[15px] font-black uppercase text-base-900 dark:text-base-100">{s.name}</span>
-                                                                    <span className={`text-[10px] px-3 py-1 rounded-lg font-black uppercase ${
-                                                                        s.status === 'done' ? 'bg-emerald-600 text-white' : 
-                                                                        s.status === 'failed' ? 'bg-red-600 text-white' : 
-                                                                        s.status === 'returned' ? 'bg-orange-600 text-white' : 'bg-base-200 text-base-600'
-                                                                    }`}>{s.status}</span>
+                                                                    <span className="text-[15px] font-black uppercase text-base-900 dark:text-base-100 truncate">{s.name}</span>
+                                                                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${
+                                                                        s.status === 'done' ? 'bg-emerald-100 text-emerald-700' : 
+                                                                        s.status === 'failed' ? 'bg-red-600 text-white animate-pulse' : 
+                                                                        s.status === 'returned' ? 'bg-orange-600 text-white animate-pulse' : 'bg-base-100 text-base-400'
+                                                                    }`}>
+                                                                        {s.status}
+                                                                    </span>
                                                                 </div>
-                                                                {s.reason && <p className="mt-3 text-[13px] font-bold text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-100 dark:border-red-900/50">{s.reason}</p>}
+                                                                {s.reason && (
+                                                                    <div className={`mt-3 p-3 rounded-xl text-[11px] font-bold ${s.status === 'failed' ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-orange-50 text-orange-700 border border-orange-100'}`}>
+                                                                        REMARK: {s.reason}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         ))}
                                                     </div>
@@ -594,9 +588,9 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="flex flex-col items-center justify-center opacity-10 text-base-300 py-32">
-                                        <UserGroupIcon className="h-32 w-32 mb-6" />
-                                        <span className="text-3xl font-black uppercase tracking-[0.5em] text-base-400">MANIFEST EMPTY</span>
+                                    <div className="py-40 text-center opacity-10 flex flex-col items-center">
+                                        <BeakerIcon className="h-32 w-32 mb-6" />
+                                        <span className="text-2xl font-black uppercase tracking-[0.5em]">Personnel data not found</span>
                                     </div>
                                 )}
                             </div>
@@ -604,7 +598,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                     </div>
                 </div>
             </div>
-            {notification && (<div className={`fixed bottom-10 left-1/2 -translate-x-1/2 px-10 py-6 rounded-[3rem] shadow-2xl z-[200] animate-slide-in-up flex items-center gap-5 border-2 backdrop-blur-3xl bg-white/10 ${notification.isError ? 'bg-red-600 border-red-400 text-white' : 'bg-emerald-600 border-emerald-400 text-white'}`}><CheckCircleIcon className="h-6 w-6"/><span className="font-black text-base uppercase tracking-widest">{notification.message}</span></div>)}
         </div>
     );
 };

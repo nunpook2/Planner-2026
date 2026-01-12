@@ -113,7 +113,7 @@ const LocalModal: React.FC<{
                     {(showInput || confirmText) && (
                         <button 
                             onClick={() => onConfirm(val)} 
-                            className={`px-8 py-3.5 text-[11px] font-black text-white rounded-2xl shadow-xl transition-all uppercase tracking-widest ${confirmColor} hover:brightness-110`}
+                            className={`px-8 py-3.5 text-[11px] font-black text-white rounded-2xl shadow-xl uppercase tracking-widest ${confirmColor} hover:brightness-110`}
                         >
                             {confirmText}
                         </button>
@@ -320,12 +320,12 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     category: group.category, 
                     tasks: [returnedItem], 
                     isReturnedPool: true, 
-                    isPrepReturn: true, // Identify as prep return for Dashboard
+                    isPrep: true,
                     createdAt: new Date().toISOString(), 
-                    returnedDate: group.assignedDate, // Use exact date from assignment
                     shift: group.shift, 
                     returnedBy: group.assistantName, 
-                    returnReason: reason 
+                    returnReason: reason,
+                    returnedDate: group.assignedDate 
                 } as any);
 
                 const remaining = group.tasks.filter((_, idx) => idx !== itemIndex);
@@ -370,12 +370,12 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     category: group.category, 
                     tasks: [returnedItem], 
                     isReturnedPool: true, 
-                    isPrepReturn: false, // Testing return
+                    isPrep: false,
                     createdAt: new Date().toISOString(), 
-                    returnedDate: group.assignedDate, // Use exact date from assignment
                     shift: group.shift, 
                     returnedBy: group.testerName, 
-                    returnReason: reason 
+                    returnReason: reason, 
+                    returnedDate: group.assignedDate 
                 } as any);
 
                 const remaining = group.tasks.filter((_, idx) => idx !== itemIndex);
@@ -389,7 +389,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             }
         });
     };
-
+    // Rest of the file content...
     const handleExport = () => {
         const exportDate = selectedDate;
         const [y, m, d] = exportDate.split('-');
