@@ -7,13 +7,14 @@ import {
     getAssignedPrepareTasks, markItemAsPrepared, 
     addCategorizedTask, unassignTaskToPool, updateAssignedPrepareTask,
     resetItemPreparation,
-    deleteAssignedPrepareTask
+    deleteAssignedPrepareTask,
+    getCategorizedTasks
 } from '../services/dataService';
 import { 
     CheckCircleIcon, XCircleIcon, ArrowUturnLeftIcon, 
     RefreshIcon, AlertTriangleIcon, BeakerIcon, 
     ClipboardListIcon, CalendarIcon, UserGroupIcon, DownloadIcon,
-    ChatBubbleLeftEllipsisIcon
+    ChatBubbleLeftEllipsisIcon, SearchIcon
 } from './common/Icons';
 
 declare const XLSX: any;
@@ -38,6 +39,171 @@ interface ScheduleTabProps {
     selectedShift: 'day' | 'night';
     onShiftChange: (shift: 'day' | 'night') => void;
 }
+
+const MissionLookupModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+}> = ({ isOpen, onClose }) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [results, setResults] = useState<{
+        assigned: (AssignedTask | AssignedPrepareTask)[];
+        inPool: CategorizedTask[];
+    } | null>(null);
+    const [isSearching, setIsSearching] = useState(false);
+
+    const handleSearch = async () => {
+        if (!searchQuery.trim()) return;
+        setIsSearching(true);
+        try {
+            const [assigned, prepare, pool] = await Promise.all([
+                getAssignedTasks(),
+                getAssignedPrepareTasks(),
+                getCategorizedTasks()
+            ]);
+
+            const query = searchQuery.toLowerCase().trim();
+            const filterById = (items: any[]) => items.filter(item => 
+                String(item.requestId || item.id || '').toLowerCase().includes(query)
+            );
+
+            setResults({
+                assigned: [...filterById(assigned), ...filterById(prepare)].sort((a, b) => b.assignedDate.localeCompare(a.assignedDate)),
+                inPool: filterById(pool)
+            });
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-base-900/95 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-fade-in" onClick={onClose}>
+            <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col border border-white/10" onClick={e => e.stopPropagation()}>
+                <div className="p-8 border-b border-base-100 dark:border-base-800 flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-primary-600 rounded-2xl shadow-lg text-white"><SearchIcon className="h-6 w-6" /></div>
+                        <div>
+                            <h3 className="text-2xl font-black text-base-955 dark:text-white tracking-tighter uppercase leading-none">Mission Finder</h3>
+                            <p className="text-[10px] font-black text-base-400 uppercase tracking-[0.3em] mt-2">Global Request Tracking System</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-3 hover:bg-base-100 dark:hover:bg-base-800 rounded-2xl transition-colors"><XCircleIcon className="h-6 w-6 text-base-300" /></button>
+                </div>
+
+                <div className="p-8 bg-base-50/50 dark:bg-base-800/20 shrink-0">
+                    <div className="relative group">
+                        <input 
+                            autoFocus
+                            type="text" 
+                            placeholder="Enter Request ID (e.g. RS1-12345)..." 
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                            className="w-full pl-14 pr-32 py-5 bg-white dark:bg-base-900 border-2 border-base-200 dark:border-base-700 rounded-[2rem] outline-none font-black text-lg focus:ring-8 focus:ring-primary-500/10 focus:border-primary-500 transition-all shadow-xl"
+                        />
+                        <div className="absolute left-6 top-1/2 -translate-y-1/2 text-base-300 group-focus-within:text-primary-500"><SearchIcon className="h-6 w-6" /></div>
+                        <button 
+                            onClick={handleSearch}
+                            disabled={isSearching}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 px-8 py-3 bg-primary-600 text-white font-black rounded-2xl uppercase text-[11px] tracking-widest hover:bg-primary-700 transition-all shadow-lg disabled:opacity-50"
+                        >
+                            {isSearching ? 'Searching...' : 'Locate'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex-grow overflow-y-auto p-8 custom-scrollbar space-y-8">
+                    {results ? (
+                        <>
+                            {results.assigned.length > 0 && (
+                                <div className="space-y-4">
+                                    <h4 className="text-[10px] font-black text-primary-500 uppercase tracking-[0.4em] ml-4">Deployment History</h4>
+                                    <div className="grid gap-3">
+                                        {results.assigned.map((entry, idx) => {
+                                            const isPrep = 'assistantName' in entry;
+                                            const staffName = isPrep ? (entry as AssignedPrepareTask).assistantName : (entry as AssignedTask).testerName;
+                                            const isDone = isPrep 
+                                                ? entry.tasks.every(t => t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing')
+                                                : (entry as AssignedTask).status === TaskStatus.Done;
+
+                                            return (
+                                                <div key={idx} className="flex items-center gap-6 p-6 bg-white dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-[2rem] shadow-md hover:border-primary-300 transition-all group">
+                                                    <div className="flex flex-col items-center gap-1 shrink-0 w-20">
+                                                        <span className="text-[10px] font-black text-base-400 uppercase">{entry.shift.toUpperCase()}</span>
+                                                        <span className="text-[16px] font-black text-base-900 dark:text-base-100">{entry.assignedDate.split('-').reverse().slice(0,2).join('/')}</span>
+                                                    </div>
+                                                    <div className="w-px h-10 bg-base-100 dark:bg-base-800"></div>
+                                                    <div className="flex-grow min-w-0">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-[17px] font-black text-base-955 dark:text-base-50 uppercase tracking-tighter">{entry.requestId}</span>
+                                                            <span className={`px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest ${isPrep ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>{isPrep ? 'PREPARATION' : 'TESTING'}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <UserGroupIcon className="h-3.5 w-3.5 text-base-300" />
+                                                            <span className="text-[12px] font-bold text-base-600 dark:text-base-400 uppercase">{staffName}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="shrink-0 flex items-center gap-3">
+                                                        <span className="text-[10px] font-black text-base-400 uppercase">{entry.tasks.length} items</span>
+                                                        <div className={`px-5 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest ${isDone ? 'bg-emerald-100 text-emerald-700' : 'bg-base-100 dark:bg-base-800 text-base-400 animate-pulse'}`}>
+                                                            {isDone ? 'COMPLETED' : 'IN PROGRESS'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {results.inPool.length > 0 && (
+                                <div className="space-y-4">
+                                    <h4 className="text-[10px] font-black text-orange-500 uppercase tracking-[0.4em] ml-4">Unassigned Queue</h4>
+                                    <div className="grid gap-3">
+                                        {results.inPool.map((entry, idx) => (
+                                            <div key={idx} className="flex items-center gap-6 p-6 bg-orange-50/30 dark:bg-orange-955/10 border-2 border-orange-100 dark:border-orange-900/30 rounded-[2rem] shadow-sm">
+                                                <div className="flex-grow min-w-0">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-[17px] font-black text-orange-955 dark:text-orange-100 uppercase tracking-tighter">{entry.id}</span>
+                                                        <span className={`px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest bg-orange-200 text-orange-800`}>AWAITING ASSIGNMENT</span>
+                                                    </div>
+                                                    <p className="text-[11px] font-bold text-orange-600/70 mt-1 uppercase">Stored in {entry.category} pool</p>
+                                                </div>
+                                                <div className="shrink-0 flex items-center gap-4">
+                                                    <span className="text-[10px] font-black text-orange-400 uppercase">{entry.tasks.length} items pending</span>
+                                                    <div className="w-10 h-10 rounded-full bg-white dark:bg-base-900 flex items-center justify-center text-orange-500 shadow-sm"><AlertTriangleIcon className="h-5 w-5" /></div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {results.assigned.length === 0 && results.inPool.length === 0 && (
+                                <div className="py-20 text-center opacity-30 flex flex-col items-center">
+                                    <BeakerIcon className="h-20 w-20 mb-4" />
+                                    <span className="text-lg font-black uppercase tracking-[0.3em]">No data found for this Request ID</span>
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <div className="py-20 text-center opacity-10 flex flex-col items-center">
+                            <BeakerIcon className="h-32 w-32 mb-6" />
+                            <span className="text-2xl font-black uppercase tracking-[0.5em]">Global Database Ready</span>
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-6 bg-base-50 dark:bg-base-800/40 text-center border-t border-base-100 dark:border-base-800">
+                    <p className="text-[9px] font-black text-base-300 uppercase tracking-[0.5em]">Mission Integrity Monitoring active • End-to-end trace established</p>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const LocalModal: React.FC<{
     isOpen: boolean;
@@ -161,6 +327,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     const [activePersonId, setActivePersonId] = useState<string>('');
     const [isPlannerAuthorized, setIsPlannerAuthorized] = useState<boolean>(false);
     const [notification, setNotification] = useState<{message: string, isError: boolean} | null>(null);
+    const [isLookupOpen, setIsLookupOpen] = useState(false);
 
     const [modalConfig, setModalConfig] = useState<{
         isOpen: boolean; title: string; message: string; initialValue?: string; showInput?: boolean; isTextArea?: boolean; inputPlaceholder?: string; confirmText?: string; confirmColor?: string; icon?: React.ReactNode; onConfirm: (val?: string) => void; preventOutsideClick?: boolean;
@@ -389,7 +556,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             }
         });
     };
-    // Rest of the file content...
+    
     const handleExport = () => {
         const exportDate = selectedDate;
         const [y, m, d] = exportDate.split('-');
@@ -553,6 +720,11 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 preventOutsideClick={modalConfig.preventOutsideClick}
             />
 
+            <MissionLookupModal 
+                isOpen={isLookupOpen} 
+                onClose={() => setIsLookupOpen(false)} 
+            />
+
             {notification && (
                 <div className={`fixed bottom-10 right-10 z-[110] px-6 py-4 rounded-2xl shadow-2xl animate-slide-in-up flex items-center gap-3 font-black text-xs uppercase tracking-widest ${notification.isError ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'}`}>
                     <CheckCircleIcon className="h-5 w-5" />
@@ -565,6 +737,13 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     <div className="p-4 border-b border-white dark:border-base-800 bg-white/20 flex justify-between items-center shrink-0">
                         <h3 className="text-[10px] font-black text-base-400 uppercase tracking-[0.4em] ml-1">Duty Roster</h3>
                         <div className="flex gap-1.5">
+                            <button 
+                                onClick={() => setIsLookupOpen(true)}
+                                title="Mission Lookup (Search Request ID)"
+                                className="p-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-all shadow-md active:scale-95"
+                            >
+                                <SearchIcon className="h-4 w-4" />
+                            </button>
                             <button 
                                 onClick={() => setIsPlannerAuthorized(!isPlannerAuthorized)} 
                                 title={isPlannerAuthorized ? "Planner Tools: Unlocked" : "Planner Tools: Locked"} 
@@ -654,7 +833,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                     </button>
                                                                 </div>
                                                                 <div className="flex-grow min-w-0 flex flex-row items-center gap-5 ml-2">
-                                                                    <div className={`flex-grow font-black uppercase leading-tight line-clamp-2 ${isPrepared ? 'text-emerald-800 opacity-60' : 'text-base-950 dark:text-base-100'} text-[16px]`}>
+                                                                    <div className={`flex-grow font-black uppercase leading-tight line-clamp-2 ${isPrepared ? 'text-emerald-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>
                                                                         {desc}
                                                                     </div>
                                                                     <div className="flex flex-shrink-0 items-center gap-3">
@@ -721,7 +900,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                     </button>
                                                                 </div>
                                                                 <div className="flex-grow min-w-0 flex flex-row items-center gap-5 ml-2">
-                                                                    <div className={`flex-grow font-black uppercase leading-tight line-clamp-2 ${isDone ? 'text-emerald-800 opacity-60' : isNotOk ? 'text-red-800 opacity-60' : 'text-base-950 dark:text-base-100'} text-[16px]`}>
+                                                                    <div className={`flex-grow font-black uppercase leading-tight line-clamp-2 ${isDone ? 'text-emerald-800 opacity-60' : isNotOk ? 'text-red-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>
                                                                         {desc}
                                                                     </div>
                                                                     <div className="flex flex-shrink-0 items-center gap-3">

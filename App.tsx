@@ -74,7 +74,6 @@ const App: React.FC = () => {
             ]);
             setTesters(fetchedTesters);
             
-            // Count Not OK tasks across all documents
             let count = 0;
             allAssigned.forEach(doc => {
                 count += (doc.tasks || []).filter(t => t.status === TaskStatus.NotOK).length;
@@ -183,44 +182,34 @@ const App: React.FC = () => {
             {error ? <ErrorModal onRetry={fetchCoreData}>{error}</ErrorModal> : null}
             
             <header className="sticky top-0 z-40 bg-white/40 dark:bg-base-900/40 backdrop-blur-xl border-b border-white dark:border-base-800">
-                <div className="w-[96%] mx-auto px-6 h-20 flex items-center justify-between">
+                <div className="w-[98%] mx-auto px-6 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <div className="bg-gradient-to-br from-primary-600 to-primary-800 p-2.5 rounded-2xl shadow-xl shadow-primary-500/30">
-                            <BeakerIcon className="h-6 w-6 text-white"/>
+                        <div className="bg-gradient-to-br from-primary-600 to-primary-800 p-2 rounded-xl shadow-xl shadow-primary-500/30">
+                            <BeakerIcon className="h-5 w-5 text-white"/>
                         </div>
                         <div>
-                            <h1 className="text-2xl font-black tracking-tighter text-base-900 dark:text-white leading-none">
+                            <h1 className="text-xl font-black tracking-tighter text-base-900 dark:text-white leading-none">
                                 Planner V2
                             </h1>
-                            <p className="text-[10px] text-base-400 font-black uppercase tracking-[0.3em] mt-1.5">Lab Intelligence System</p>
-                        </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-4 bg-white/50 dark:bg-base-800/50 p-1.5 pr-5 rounded-3xl border border-white dark:border-base-700 shadow-sm">
-                        <div className="h-11 w-11 rounded-[1.1rem] bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-black text-sm shadow-lg border-2 border-white dark:border-base-800">
-                            AU
-                        </div>
-                        <div className="hidden sm:block">
-                            <p className="text-sm font-black text-base-900 dark:text-base-100 tracking-tight">Admin User</p>
-                            <p className="text-[10px] text-base-400 font-bold uppercase tracking-widest">Master Planner</p>
+                            <p className="text-[9px] text-base-400 font-black uppercase tracking-[0.3em] mt-1">Lab Intelligence System</p>
                         </div>
                     </div>
                 </div>
             </header>
             
-            <div className="flex-1 w-[96%] mx-auto px-2 py-8">
-                <div className="flex flex-col lg:flex-row gap-8 h-full">
-                    <aside className="hidden lg:block w-64 flex-shrink-0 sticky top-28 self-start bg-white/30 dark:bg-base-900/30 backdrop-blur-md rounded-[2.5rem] p-4 border border-white dark:border-base-800 shadow-sm">
-                        <nav className="space-y-1.5">
+            <div className="flex-1 w-[98%] mx-auto px-2 py-4">
+                <div className="flex flex-col lg:flex-row gap-6 h-full">
+                    <aside className="hidden lg:block w-64 flex-shrink-0 sticky top-20 self-start bg-white/30 dark:bg-base-900/30 backdrop-blur-md rounded-[2.5rem] p-4 border border-white dark:border-base-800 shadow-sm">
+                        <nav className="space-y-1">
                             <TabButton tabName="quality" label="Quality Center" icon={<AlertTriangleIcon className="h-5 w-5"/>} badge={notOkCount} />
-                            <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-4 mx-4"></div>
+                            <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
                             <TabButton tabName="import" label="Import Data" icon={<UploadIcon className="h-5 w-5"/>} />
                             <TabButton tabName="tasks" label="Assign Tasks" icon={<ClipboardListIcon className="h-5 w-5"/>} />
-                            <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-4 mx-4"></div>
+                            <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
                             <TabButton tabName="schedule" label="Shift Tracking" icon={<CalendarIcon className="h-5 w-5"/>} />
                             <TabButton tabName="dashboard" label="Shift Summary" icon={<BeakerIcon className="h-5 w-5"/>} />
                             <TabButton tabName="equipment" label="Equipment" icon={<CogIcon className="h-5 w-5"/>} />
-                            <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-4 mx-4"></div>
+                            <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
                             <TabButton tabName="roster" label="Roster & Shifts" icon={<DatabaseIcon className="h-5 w-5"/>} />
                             <TabButton tabName="settings" label="Settings" icon={<CogIcon className="h-5 w-5"/>} />
                         </nav>
@@ -232,10 +221,9 @@ const App: React.FC = () => {
                         <TabButton tabName="tasks" label="" icon={<ClipboardListIcon className="h-5 w-5"/>} />
                         <TabButton tabName="schedule" label="" icon={<CalendarIcon className="h-5 w-5"/>} />
                         <TabButton tabName="dashboard" label="" icon={<BeakerIcon className="h-5 w-5"/>} />
-                        <TabButton tabName="equipment" label="" icon={<CogIcon className="h-5 w-5"/>} />
                     </div>
 
-                    <main className="flex-1 min-w-0 min-h-[calc(100vh-10rem)]">
+                    <main className="flex-1 min-w-0 min-h-[calc(100vh-8rem)]">
                         <div className="bg-white/60 dark:bg-base-900/60 rounded-[3rem] border border-white dark:border-base-800 p-1 h-full shadow-2xl overflow-hidden relative">
                            {isLoading ? <LoadingSpinner /> : renderTabContent()}
                        </div>

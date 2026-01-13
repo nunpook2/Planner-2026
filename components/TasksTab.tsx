@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Tester, CategorizedTask, DailySchedule, RawTask, AssignedTask, TestMapping } from '../types';
+import type { Tester, CategorizedTask, DailySchedule, RawTask, AssignedTask, TestMapping, AssignedPrepareTask } from '../types';
 import { TaskCategory, TaskStatus } from '../types';
 import { 
     getCategorizedTasks, 
@@ -12,23 +12,58 @@ import {
     getTestMappings,
     addCategorizedTask as saveCategorizedTask,
     getAssignedTasks,
+    getAssignedPrepareTasks,
     firestore
 } from '../services/dataService';
-import { CheckCircleIcon, ChevronDownIcon, TrashIcon, AlertTriangleIcon, RefreshIcon, PlusIcon, DownloadIcon, ChatBubbleLeftEllipsisIcon, BeakerIcon, XCircleIcon } from './common/Icons';
+import { CheckCircleIcon, ChevronDownIcon, TrashIcon, AlertTriangleIcon, RefreshIcon, PlusIcon, DownloadIcon, ChatBubbleLeftEllipsisIcon, BeakerIcon, XCircleIcon, SearchIcon, PencilIcon } from './common/Icons';
 
 declare const XLSX: any;
 
 // --- CONSTANTS ---
 const COL_DUE_WIDTH = 60;
 const COL_RID_WIDTH = 200;
+
 const HEADER_THEMES = [
-    { name: 'Indigo', headerBg: 'bg-indigo-700', headerText: 'text-white', borderColor: 'border-indigo-500', subHeaderBg: 'bg-indigo-50 dark:bg-indigo-900/40', subHeaderText: 'text-indigo-950 dark:text-indigo-50' },
-    { name: 'Emerald', headerBg: 'bg-emerald-700', headerText: 'text-white', borderColor: 'border-emerald-500', subHeaderBg: 'bg-emerald-50 dark:bg-indigo-900/40', subHeaderText: 'text-emerald-950 dark:text-emerald-50' },
-    { name: 'Amber', headerBg: 'bg-amber-600', headerText: 'text-white', borderColor: 'border-amber-400', subHeaderBg: 'bg-amber-50 dark:bg-indigo-900/40', subHeaderText: 'text-amber-950 dark:text-amber-50' },
-    { name: 'Rose', headerBg: 'bg-rose-700', headerText: 'text-white', borderColor: 'border-rose-500', subHeaderBg: 'bg-rose-50 dark:bg-indigo-900/40', subHeaderText: 'text-rose-950 dark:text-rose-50' },
-    { name: 'Cyan', headerBg: 'bg-cyan-700', headerText: 'text-white', borderColor: 'border-cyan-500', subHeaderBg: 'bg-cyan-50 dark:bg-indigo-900/40', subHeaderText: 'text-cyan-950 dark:text-cyan-50' },
-    { name: 'Violet', headerBg: 'bg-violet-700', headerText: 'text-white', borderColor: 'border-violet-500', subHeaderBg: 'bg-violet-50 dark:bg-indigo-900/40', subHeaderText: 'text-violet-950 dark:text-violet-50' },
+    { name: 'Indigo', headerBg: 'bg-indigo-900', headerText: 'text-white', borderColor: 'border-indigo-800', subHeaderBg: 'bg-indigo-700', subHeaderText: 'text-white' },
+    { name: 'Emerald', headerBg: 'bg-emerald-900', headerText: 'text-white', borderColor: 'border-emerald-800', subHeaderBg: 'bg-emerald-700', subHeaderText: 'text-white' },
+    { name: 'Amber', headerBg: 'bg-amber-800', headerText: 'text-white', borderColor: 'border-amber-700', subHeaderBg: 'bg-amber-600', subHeaderText: 'text-white' },
+    { name: 'Rose', headerBg: 'bg-rose-900', headerText: 'text-white', borderColor: 'border-rose-800', subHeaderBg: 'bg-rose-700', subHeaderText: 'text-white' },
+    { name: 'Cyan', headerBg: 'bg-cyan-900', headerText: 'text-white', borderColor: 'border-cyan-800', subHeaderBg: 'bg-cyan-700', subHeaderText: 'text-white' },
+    { name: 'Violet', headerBg: 'bg-violet-900', headerText: 'text-white', borderColor: 'border-violet-800', subHeaderBg: 'bg-violet-700', subHeaderText: 'text-white' },
 ];
+
+const CATEGORY_STYLES: Record<string, { active: string, inactive: string, badge: string, dot: string }> = {
+    all: { 
+        active: 'bg-slate-900 text-white border-slate-700 shadow-xl', 
+        inactive: 'bg-white/60 dark:bg-base-800/40 text-slate-500 border-base-200 dark:border-white/5 hover:border-slate-400', 
+        badge: 'bg-slate-100 dark:bg-base-955 text-slate-700',
+        dot: 'bg-slate-400'
+    },
+    pocat: { 
+        active: 'bg-gradient-to-br from-orange-400 to-orange-600 text-white border-orange-300 shadow-[0_10px_20px_-5px_rgba(249,115,22,0.3)]', 
+        inactive: 'bg-orange-50/40 dark:bg-orange-900/10 text-orange-600 dark:text-orange-400 border-orange-200/50 dark:border-orange-800/30 hover:border-orange-400', 
+        badge: 'bg-orange-100 dark:bg-orange-955 text-orange-700',
+        dot: 'bg-orange-500'
+    },
+    urgent: { 
+        active: 'bg-gradient-to-br from-red-500 to-red-700 text-white border-red-400 shadow-[0_10px_20px_-5px_rgba(220,38,38,0.3)]', 
+        inactive: 'bg-red-50/40 dark:bg-red-900/10 text-red-600 dark:text-red-400 border-red-200/50 dark:border-red-800/30 hover:border-red-400', 
+        badge: 'bg-red-100 dark:bg-red-955 text-red-700',
+        dot: 'bg-red-600'
+    },
+    normal: { 
+        active: 'bg-gradient-to-br from-blue-500 to-blue-700 text-white border-blue-400 shadow-[0_10px_20px_-5px_rgba(37,99,235,0.3)]', 
+        inactive: 'bg-blue-50/40 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400 border-blue-200/50 dark:border-blue-800/30 hover:border-blue-400', 
+        badge: 'bg-blue-100 dark:bg-blue-955 text-blue-700',
+        dot: 'bg-blue-600'
+    },
+    manual: { 
+        active: 'bg-gradient-to-br from-indigo-500 to-indigo-700 text-white border-indigo-400 shadow-[0_10px_20px_-5px_rgba(79,70,229,0.3)]', 
+        inactive: 'bg-indigo-50/40 dark:bg-indigo-900/10 text-indigo-600 dark:text-indigo-400 border-indigo-200/50 dark:border-indigo-800/30 hover:border-indigo-400', 
+        badge: 'bg-indigo-100 dark:bg-indigo-955 text-indigo-700',
+        dot: 'bg-indigo-600'
+    }
+};
 
 // --- UTILITIES ---
 const excelDateToJSDate = (serial: any): Date | null => {
@@ -45,7 +80,6 @@ const getTaskValue = (task: RawTask, headerType: string): any => {
     if (!task) return '';
     const keys = Object.keys(task);
     const target = headerType.toLowerCase().trim();
-    
     if (target === 'due date' || target === 'due') {
         const priorities = ['due date', 'due finish', 'due', 'deadline', 'requested date', 'target date'];
         for (const p of priorities) {
@@ -54,13 +88,12 @@ const getTaskValue = (task: RawTask, headerType: string): any => {
         }
         return '';
     }
-
     let matchedKey = keys.find(k => k.toLowerCase().trim() === target);
     if (!matchedKey) {
-        if (target === 'description') matchedKey = keys.find(k => ['desc', 'test name', 'testname', 'item'].includes(k.toLowerCase().trim()));
-        if (target === 'variant') matchedKey = keys.find(k => ['var', 'method', 'condition'].includes(k.toLowerCase().trim()));
-        if (target === 'sample name') matchedKey = keys.find(k => ['sample', 'samplename', 'sample_name'].includes(k.toLowerCase().trim()));
-        if (target === 'quantity') matchedKey = keys.find(k => ['qty', 'quantity', 'amount'].includes(k.toLowerCase().trim()));
+        if (target === 'description') matchedKey = keys.find(k => ['description', 'desc', 'test name', 'testname', 'item'].includes(k.toLowerCase().trim()));
+        if (target === 'variant') matchedKey = keys.find(k => ['variant', 'var', 'method', 'condition'].includes(k.toLowerCase().trim()));
+        if (target === 'sample name') matchedKey = keys.find(k => ['sample name', 'sample', 'samplename', 'sample_name'].includes(k.toLowerCase().trim()));
+        if (target === 'quantity') matchedKey = keys.find(k => ['quantity', 'qty', 'amount'].includes(k.toLowerCase().trim()));
     }
     return matchedKey ? task[matchedKey] : '';
 };
@@ -75,19 +108,7 @@ const getDueDateTimestamp = (tasks: RawTask[]): number => {
             if (time < minTime) minTime = time;
         }
     }
-    return minTime;
-};
-
-const getSpecialStatus = (task: RawTask, category: string) => {
-    const allContent = Object.values(task).map(v => String(v).toLowerCase()).join(' ');
-    const lowerCategory = category.toLowerCase();
-    return {
-        isPoCat: lowerCategory === 'pocat' || allContent.includes('po cat'),
-        isSprint: allContent.includes('sprint'),
-        isUrgent: lowerCategory === 'urgent' || allContent.includes('urgent'),
-        isLSP: allContent.includes('lsp'),
-        isReturned: task.isReturned === true
-    };
+    return minTime === Infinity ? Date.now() : minTime;
 };
 
 const getTaskGridColumnKey = (task: RawTask, mappings: TestMapping[]): string | null => {
@@ -102,90 +123,114 @@ const getTaskGridColumnKey = (task: RawTask, mappings: TestMapping[]): string | 
 const Toast: React.FC<{ message: string; isError?: boolean; onDismiss: () => void }> = ({ message, isError, onDismiss }) => {
     useEffect(() => { const timer = setTimeout(onDismiss, 3000); return () => clearTimeout(timer); }, [onDismiss]);
     return (
-        <div className={`fixed top-24 right-8 py-3 px-6 rounded-xl shadow-lg flex items-center gap-3 animate-fade-in z-[100] border ${isError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
-            {isError ? <AlertTriangleIcon className="h-5 w-5" /> : <CheckCircleIcon className="h-5 w-5" />}
-            <span className="font-bold text-sm">{message}</span>
+        <div className={`fixed top-24 right-8 py-4 px-8 rounded-2xl shadow-2xl flex items-center gap-4 animate-fade-in z-[120] border-2 backdrop-blur-xl ${isError ? 'bg-red-50/90 border-red-200 text-red-700' : 'bg-emerald-50/90 border-emerald-200 text-emerald-700'}`}>
+            {isError ? <AlertTriangleIcon className="h-6 w-6" /> : <CheckCircleIcon className="h-6 w-6" />}
+            <span className="font-black text-sm uppercase tracking-wider">{message}</span>
         </div>
     );
 };
 
-const NoteModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: (val: string) => void; initialNote: string }> = ({ isOpen, onClose, onConfirm, initialNote }) => {
-    const [val, setVal] = useState(initialNote);
-    useEffect(() => { if (isOpen) setVal(initialNote); }, [isOpen, initialNote]);
+const AddManualTaskModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (rid: string, desc: string, qty: string) => void; isProcessing: boolean }> = ({ isOpen, onClose, onSave, isProcessing }) => {
+    const [rid, setRid] = useState('');
+    const [desc, setDesc] = useState('');
+    const [qty, setQty] = useState('1');
+
     if (!isOpen) return null;
+
     return (
         <div className="fixed inset-0 bg-base-900/80 backdrop-blur-md flex items-center justify-center z-[110] animate-fade-in" onClick={onClose}>
-            <div className="bg-white dark:bg-base-800 rounded-[2.5rem] shadow-2xl p-8 w-full max-w-lg m-4 space-y-6 animate-slide-in-up border border-white/20 dark:border-base-700" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center gap-4">
-                    <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600"><ChatBubbleLeftEllipsisIcon className="h-6 w-6" /></div>
-                    <h3 className="text-2xl font-black text-base-900 dark:text-base-100 tracking-tighter">Mission Briefing</h3>
+            <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl p-10 w-full max-w-lg m-4 space-y-6 border border-white/20" onClick={e => e.stopPropagation()}>
+                <div className="text-center space-y-2">
+                    <h2 className="text-2xl font-black text-base-955 dark:text-white uppercase tracking-tighter leading-none">Initialize Manual Mission</h2>
+                    <p className="text-sm font-bold text-base-400 italic">Create a recurring manual task template</p>
                 </div>
-                <textarea autoFocus value={val} onChange={e => setVal(e.target.value)} placeholder="Instructions..." rows={5} className="w-full p-5 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-3xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none dark:text-white font-bold text-[15px] resize-none transition-all"/>
-                <div className="flex justify-end gap-4">
-                    <button onClick={onClose} className="px-6 py-3 text-[11px] font-black text-base-400 hover:text-base-800 dark:hover:text-white uppercase tracking-widest transition-colors">Cancel</button>
-                    <button onClick={() => onConfirm(val)} className="px-8 py-3.5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl hover:brightness-110 transition-all uppercase tracking-widest text-[11px]">Save</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const ManualTaskModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (task: { jobId: string; description: string; quantity: string, groupName: string }) => void; isProcessing: boolean }> = ({ isOpen, onClose, onSave, isProcessing }) => {
-    const [jobId, setJobId] = useState('');
-    const [description, setDescription] = useState('');
-    const [quantity, setQuantity] = useState('1');
-    const [groupName, setGroupName] = useState('');
-    if (!isOpen) return null;
-    return (
-        <div className="fixed inset-0 bg-base-900/70 backdrop-blur-sm flex items-center justify-center z-[100] animate-fade-in" onClick={!isProcessing ? onClose : undefined}>
-            <div className="bg-white dark:bg-base-800 rounded-[2rem] shadow-2xl p-8 w-full max-w-md m-4 space-y-5 animate-slide-in-up border border-base-200 dark:border-base-700" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center gap-4 mb-2"><div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600"><PlusIcon className="h-6 w-6" /></div><h2 className="text-2xl font-black text-base-900 dark:text-base-100 tracking-tighter">Add Manual Template</h2></div>
                 <div className="space-y-4">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase text-base-400 ml-2 tracking-widest">Internal Category (For Filter Only)</label>
-                        <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="e.g. MIPE, Density..." className="w-full p-4 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-2xl outline-none dark:text-white font-bold text-sm"/>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase text-base-400 ml-2 tracking-widest">Request ID</label>
-                        <input type="text" value={jobId} onChange={e => setJobId(e.target.value)} placeholder="Request ID (e.g. M-01)" className="w-full p-4 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-2xl outline-none dark:text-white font-bold text-sm"/>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase text-base-400 ml-2 tracking-widest">Task Description</label>
-                        <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Description..." rows={3} className="w-full p-4 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-2xl outline-none dark:text-white font-bold text-sm resize-none"/>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase text-base-400 ml-2 tracking-widest">Quantity</label>
-                        <input type="text" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Quantity" className="w-full p-4 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-2xl outline-none dark:text-white font-bold text-sm"/>
-                    </div>
+                    <div className="space-y-1"><label className="text-[10px] font-black uppercase text-base-400 ml-2 tracking-widest">Request ID (รหัสงาน)</label><input type="text" value={rid} onChange={e => setRid(e.target.value.toUpperCase())} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-black text-sm dark:text-white placeholder:text-base-300" placeholder="E.G. AD-HOC-01"/></div>
+                    <div className="space-y-1"><label className="text-[10px] font-black uppercase text-base-400 ml-2 tracking-widest">Description (รายละเอียดงาน)</label><input type="text" value={desc} onChange={e => setDesc(e.target.value)} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-black text-sm dark:text-white placeholder:text-base-300" placeholder="E.G. Cleaning Instrument..."/></div>
+                    <div className="space-y-1"><label className="text-[10px] font-black uppercase text-base-400 ml-2 tracking-widest">Quantity (จำนวนตัวอย่าง)</label><input type="number" value={qty} onChange={e => setQty(e.target.value)} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-black text-sm dark:text-white"/></div>
                 </div>
-                <div className="flex justify-end gap-3 pt-4">
-                    <button onClick={onClose} className="px-6 py-3 text-[11px] font-black text-base-400 hover:text-base-800 uppercase tracking-widest transition-colors">Cancel</button>
-                    <button onClick={() => onSave({ jobId, description, quantity, groupName })} disabled={isProcessing || !jobId.trim() || !description.trim()} className="px-8 py-3.5 bg-primary-600 text-white font-black rounded-2xl shadow-xl hover:brightness-110 transition-all uppercase tracking-widest text-[11px] disabled:opacity-50">Create Template</button>
+                <div className="flex flex-col gap-2 pt-4">
+                    <button onClick={() => { onSave(rid, desc, qty); setRid(''); setDesc(''); setQty('1'); }} disabled={isProcessing || !rid || !desc} className="w-full py-5 bg-indigo-600 border-indigo-800 text-white font-black rounded-2xl shadow-xl uppercase text-[11px] tracking-widest border-b-4 hover:bg-indigo-700 transition-all disabled:opacity-50">Deploy to Pool</button>
+                    <button onClick={onClose} disabled={isProcessing} className="w-full py-3 text-[10px] font-black text-base-400 hover:text-base-800 uppercase tracking-widest">Discard</button>
                 </div>
             </div>
         </div>
     );
 };
 
-const AssignmentModal: React.FC<{ isOpen: boolean; onClose: () => void; onAssign: (person: Tester) => void; personnel: { testers: Tester[]; assistants: Tester[] }; isPreparation: boolean; selectedItemCount: number; isProcessing: boolean; }> = ({ isOpen, onClose, onAssign, personnel, isPreparation, selectedItemCount, isProcessing }) => {
+const EditManualTaskModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (updatedTask: RawTask) => void; task: RawTask | null; isProcessing: boolean }> = ({ isOpen, onClose, onSave, task, isProcessing }) => {
+    const [formData, setFormData] = useState<RawTask>({});
+    useEffect(() => { if (isOpen && task) setFormData({ ...task }); }, [isOpen, task]);
+    if (!isOpen || !task) return null;
+
+    return (
+        <div className="fixed inset-0 bg-base-900/80 backdrop-blur-md flex items-center justify-center z-[110] animate-fade-in" onClick={onClose}>
+            <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl p-10 w-full max-w-xl m-4 space-y-6 border border-white/20" onClick={e => e.stopPropagation()}>
+                <div className="text-center space-y-2">
+                    <h2 className="text-2xl font-black text-base-955 dark:text-white uppercase tracking-tighter leading-none">Modify Manual Task</h2>
+                    <p className="text-sm font-bold text-base-400">Update persistent mission parameters</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1"><label className="text-[10px] font-black uppercase text-base-400 ml-2 tracking-widest">Description</label><input type="text" value={formData.Description || ''} onChange={e => setFormData({...formData, Description: e.target.value})} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white"/></div>
+                    <div className="space-y-1"><label className="text-[10px] font-black uppercase text-base-400 ml-2 tracking-widest">Variant / Method</label><input type="text" value={formData.Variant || ''} onChange={e => setFormData({...formData, Variant: e.target.value})} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white"/></div>
+                    <div className="space-y-1"><label className="text-[10px] font-black uppercase text-base-400 ml-2 tracking-widest">Sample Name</label><input type="text" value={formData['Sample Name'] || ''} onChange={e => setFormData({...formData, ['Sample Name']: e.target.value})} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white"/></div>
+                    <div className="space-y-1"><label className="text-[10px] font-black uppercase text-base-400 ml-2 tracking-widest">Quantity</label><input type="text" value={formData.Quantity || ''} onChange={e => setFormData({...formData, Quantity: e.target.value})} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white"/></div>
+                </div>
+                <div className="flex flex-col gap-2 pt-4">
+                    <button onClick={() => onSave(formData)} disabled={isProcessing} className="w-full py-5 bg-primary-600 border-primary-800 text-white font-black rounded-2xl shadow-xl uppercase text-[11px] tracking-widest border-b-4 hover:bg-primary-700 transition-all">Save Changes</button>
+                    <button onClick={onClose} disabled={isProcessing} className="w-full py-3 text-[10px] font-black text-base-400 hover:text-base-800 uppercase tracking-widest">Discard</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AssignmentModal: React.FC<{ isOpen: boolean; onClose: () => void; onAssign: (person: Tester) => void; personnel: { testers: Tester[]; assistants: Tester[] }; schedule: DailySchedule | null; shift: 'day' | 'night'; isPreparation: boolean; selectedItemCount: number; isProcessing: boolean; }> = ({ isOpen, onClose, onAssign, personnel, schedule, shift, isPreparation, selectedItemCount, isProcessing }) => {
+    const filteredPersonnelList = useMemo(() => {
+        if (!schedule) return [];
+        const scheduledIds = shift === 'day' ? [...(schedule.dayShiftTesters || []), ...(schedule.dayShiftAssistants || [])] : [...(schedule.nightShiftTesters || []), ...(schedule.nightShiftAssistants || [])];
+        const scheduledSet = new Set(scheduledIds);
+        return [...personnel.testers, ...personnel.assistants].filter(p => scheduledSet.has(p.id));
+    }, [schedule, shift, personnel]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-base-900/80 backdrop-blur-md flex items-center justify-center z-[100] animate-fade-in" onClick={!isProcessing ? onClose : undefined}>
+            <div className="bg-white dark:bg-base-800 rounded-[3rem] shadow-2xl p-8 w-full max-w-lg m-4 space-y-6 border border-base-200 dark:border-base-700" onClick={e => e.stopPropagation()}>
+                <div className="text-center space-y-2">
+                    <h2 className="text-2xl font-black text-base-900 dark:text-base-100 tracking-tight uppercase leading-none">{isPreparation ? "Assign Preparation" : "Assign Testing Mission"}</h2>
+                    <p className="text-sm font-bold text-base-500">Scheduled for: <span className="text-primary-600 uppercase">{shift} Shift</span></p>
+                    <div className="inline-block px-4 py-1 bg-primary-50 dark:bg-primary-900/30 rounded-full"><span className="text-xs font-black text-primary-700 dark:text-primary-400 uppercase tracking-widest">{selectedItemCount} Items Selected</span></div>
+                </div>
+                <div className="border-2 border-base-100 dark:border-base-700 rounded-[2rem] bg-base-50 dark:bg-base-900/50 max-h-[50vh] overflow-y-auto custom-scrollbar">
+                    {filteredPersonnelList.length > 0 ? (
+                        <ul className="divide-y-2 divide-base-100 dark:divide-base-700">
+                            {filteredPersonnelList.map(p => (
+                                <li key={p.id} className="flex justify-between items-center p-4 hover:bg-white dark:hover:bg-base-800 transition-all group">
+                                    <div className="flex flex-col"><span className="font-black text-[15px] text-base-800 dark:text-base-100">{p.name}</span><span className={`text-[9px] uppercase font-black tracking-widest ${p.team === 'assistants_4_2' ? 'text-amber-600' : 'text-primary-600'}`}>{p.team === 'assistants_4_2' ? 'Assistant' : 'Analyst'}</span></div>
+                                    <button onClick={() => onAssign(p)} disabled={isProcessing} className="px-6 py-2.5 text-[10px] font-black bg-white dark:bg-base-900 border-2 border-base-200 dark:border-base-600 text-base-800 dark:text-white rounded-xl hover:bg-primary-600 hover:text-white hover:border-primary-600 transition-all uppercase tracking-widest shadow-sm active:scale-95">Select</button>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <div className="p-12 text-center space-y-4"><AlertTriangleIcon className="h-10 w-10 text-base-300 mx-auto" /><p className="text-xs font-bold text-base-400 leading-relaxed px-4">No staff scheduled in the Roster for this date and shift.</p></div>
+                    )}
+                </div>
+                <div className="pt-2 flex justify-center"><button onClick={onClose} className="px-10 py-3 text-[10px] font-black text-base-400 hover:text-base-800 transition-colors uppercase tracking-[0.3em]">Cancel Assignment</button></div>
+            </div>
+        </div>
+    );
+};
+
+const DeleteConfirmationModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: () => void; label: string; isProcessing: boolean; }> = ({ isOpen, onClose, onConfirm, label, isProcessing }) => {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 bg-base-900/70 backdrop-blur-sm flex items-center justify-center z-[100] animate-fade-in" onClick={!isProcessing ? onClose : undefined}>
-            <div className="bg-white dark:bg-base-800 rounded-2xl shadow-2xl p-6 w-full max-w-lg m-4 space-y-4 animate-slide-in-up border border-base-200 dark:border-base-700" onClick={e => e.stopPropagation()}>
-                <div className={`h-2 w-20 rounded-full mx-auto mb-2 ${isPreparation ? 'bg-amber-400' : 'bg-primary-50'}`}></div>
-                <h2 className="text-xl font-black text-base-900 dark:text-base-100 text-center tracking-tight">{isPreparation ? "Assign for Preparation" : "Assign for Testing"}</h2>
-                <p className="text-sm font-bold text-base-600 dark:text-base-400 text-center">Assigning <span className={`font-black ${isPreparation ? 'text-amber-600' : 'text-primary-600'}`}>{selectedItemCount} items</span></p>
-                <div className="border-2 border-base-100 dark:border-base-700 rounded-xl bg-base-50 dark:bg-base-900/50 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                    <ul className="divide-y-2 divide-base-100 dark:divide-base-700">
-                        {[...personnel.assistants, ...personnel.testers].map(p => (
-                            <li key={p.id} className="flex justify-between items-center p-3 hover:bg-base-50 dark:hover:bg-base-700 transition-colors">
-                                <div className="flex flex-col"><span className="font-black text-sm text-base-800 dark:text-base-100">{p.name}</span><span className="text-[9px] uppercase font-bold text-base-400">{p.team === 'assistants_4_2' ? 'Assistant' : 'Tester'}</span></div>
-                                <button onClick={() => onAssign(p)} disabled={isProcessing} className="px-5 py-2 text-xs font-black bg-white dark:bg-base-800 border-2 border-base-200 dark:border-base-600 text-base-800 dark:text-white rounded-xl hover:bg-base-50 transition-all uppercase tracking-widest">Assign</button>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-                <div className="pt-2 flex justify-center"><button onClick={onClose} className="px-6 py-2.5 text-xs font-black text-base-400 hover:text-base-800 transition-colors uppercase tracking-[0.2em]">Cancel</button></div>
+        <div className="fixed inset-0 bg-base-900/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-fade-in" onClick={onClose}>
+            <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-md overflow-hidden p-10 text-center space-y-6 border border-white/20" onClick={e => e.stopPropagation()}>
+                <div className="w-20 h-20 bg-red-50 dark:bg-red-900/20 rounded-[2rem] flex items-center justify-center mx-auto text-red-600 shadow-inner"><TrashIcon className="h-10 w-10" /></div>
+                <div><h3 className="text-2xl font-black text-base-955 dark:text-white uppercase tracking-tighter leading-none">Confirm Deletion</h3><p className="text-base-500 mt-4 text-[15px] font-bold leading-relaxed px-2">Are you sure you want to remove <span className="text-red-600">"{label}"</span>? This action will permanently erase the item.</p></div>
+                <div className="flex flex-col gap-2 pt-4"><button onClick={onConfirm} disabled={isProcessing} className="w-full py-5 bg-red-600 border-red-800 text-white font-black rounded-2xl shadow-xl uppercase text-[11px] tracking-widest border-b-4 hover:bg-red-700 transition-all disabled:opacity-50">{isProcessing ? 'Processing...' : 'Delete Permanently'}</button><button onClick={onClose} disabled={isProcessing} className="w-full py-3 text-[10px] font-black text-base-400 hover:text-base-800 uppercase tracking-widest">Cancel</button></div>
             </div>
         </div>
     );
@@ -193,7 +238,7 @@ const AssignmentModal: React.FC<{ isOpen: boolean; onClose: () => void; onAssign
 
 const ExpandableCell: React.FC<{ 
     headerKey: string; 
-    items: { task: RawTask; originalIndex: number; sourceDocId: string }[]; 
+    items: { task: RawTask; originalIndex: number; sourceDocId: string; }[]; 
     isGroupEnd?: boolean;
     expandedCell: { docId: string; headerKey: string } | null;
     setExpandedCell: (val: { docId: string; headerKey: string } | null) => void;
@@ -201,27 +246,21 @@ const ExpandableCell: React.FC<{
     handleSelectItem: (docId: string, taskId: string, isChecked: boolean) => void;
     setSelectedItems: React.Dispatch<React.SetStateAction<Record<string, Set<string>>>>;
     isAssigningToPrepare: boolean;
-    setNoteEditor: (val: { docId: string, index: number, text: string } | null) => void;
-    onInitiateDelete: (docId: string, itemIndex: number, label: string) => void; 
-}> = ({ 
-    headerKey, items, isGroupEnd, expandedCell, setExpandedCell, 
-    selectedItems, handleSelectItem, setSelectedItems, 
-    isAssigningToPrepare, setNoteEditor, onInitiateDelete
-}) => {
+    setNoteEditor: (val: any) => void;
+    onInitiateDelete: (docId: string, index: number, label: string) => void;
+    onInitiateEdit?: (docId: string, index: number, task: RawTask) => void;
+}> = ({ headerKey, items, isGroupEnd, expandedCell, setExpandedCell, selectedItems, handleSelectItem, setSelectedItems, isAssigningToPrepare, setNoteEditor, onInitiateDelete, onInitiateEdit }) => {
     if (items.length === 0) return <td className={`p-0 align-top border border-base-300 dark:border-base-700 ${isGroupEnd ? 'border-r-2 border-r-base-400 dark:border-r-base-600' : ''}`}></td>;
     
     const anchorDocId = items[0].sourceDocId;
     const isExpanded = expandedCell?.headerKey === headerKey && expandedCell?.docId === anchorDocId;
-    
     const selectedForThisCell = items.filter(item => selectedItems[item.sourceDocId]?.has(item.task._id!));
     const numSelected = selectedForThisCell.length;
     const itemCount = items.length;
-
     const hasInPrep = items.some(item => item.task.preparationStatus === 'Awaiting Preparation');
     const hasPrepared = items.some(item => item.task.preparationStatus === 'Prepared' || item.task.preparationStatus === 'Ready for Testing');
     const hasReturned = items.some(item => item.task.isReturned);
-    const hasPlannerNote = items.some(item => item.task.plannerNote);
-    const areAllSelected = items.length > 0 && numSelected === items.length;
+    const areAllSelected = itemCount > 0 && numSelected === itemCount;
 
     const toggleAll = (checked: boolean) => {
         setSelectedItems(prev => {
@@ -237,79 +276,59 @@ const ExpandableCell: React.FC<{
         });
     };
 
-    let cellTextColor = 'text-primary-700 dark:text-primary-400';
-    if (hasReturned) cellTextColor = 'text-red-600 dark:text-red-500 font-black';
-    else if (hasInPrep) cellTextColor = 'text-amber-600 dark:text-amber-500 font-black';
-    else if (hasPrepared) cellTextColor = 'text-emerald-600 dark:text-emerald-500';
+    let cellTextColor = 'text-primary-955 dark:text-primary-300 font-black';
+    if (hasReturned) cellTextColor = 'text-purple-800 dark:text-purple-400 font-black';
+    else if (hasInPrep) cellTextColor = 'text-amber-700 dark:text-amber-500 font-black';
+    else if (hasPrepared) cellTextColor = 'text-emerald-800 dark:text-emerald-500 font-black';
 
     return (
-        <td className={`p-0 align-top transition-all relative border border-base-300 dark:border-base-700 ${isGroupEnd ? 'border-r-2 border-r-base-400 dark:border-r-base-600' : ''} ${isExpanded ? 'bg-white dark:bg-base-800 ring-2 ring-primary-500 shadow-2xl z-[80] rounded-sm' : 'hover:bg-base-100/50 dark:hover:bg-base-700/50'}`}>
-            <div className="p-1 text-center cursor-pointer h-full flex flex-col justify-center min-h-[46px] relative" onClick={() => setExpandedCell(isExpanded ? null : { docId: anchorDocId, headerKey })}>
+        <td className={`p-0 align-top transition-all relative border border-base-300 dark:border-base-700 ${isGroupEnd ? 'border-r-2 border-r-base-400 dark:border-r-base-600' : ''} ${isExpanded ? 'bg-white dark:bg-base-800 ring-2 ring-primary-500 z-[80]' : 'hover:bg-base-100/50 dark:hover:bg-base-700/50'}`}>
+            <div className={`p-1 text-center cursor-pointer h-full flex flex-col justify-center min-h-[46px] relative`} onClick={() => setExpandedCell(isExpanded ? null : { docId: anchorDocId, headerKey })}>
                 <div className="flex flex-col items-center">
-                    <span className={`font-black text-[18px] tracking-tighter leading-none ${numSelected > 0 ? 'text-white bg-primary-600 rounded-md px-1.5 py-0.5 shadow-sm' : cellTextColor}`}>
+                    <span className={`font-black text-[22px] tracking-tighter leading-none ${numSelected > 0 ? 'text-white bg-primary-600 rounded-md px-2 py-0.5' : cellTextColor}`}>
                         {numSelected > 0 ? `${numSelected}/${itemCount}` : itemCount}
                     </span>
-                    <div className="flex justify-center gap-1 mt-1">
-                        {hasReturned && <div className="w-1.5 h-1.5 rounded-full bg-red-600 shadow-sm animate-pulse"></div>}
-                        {hasPlannerNote && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-sm"></div>}
-                        {hasInPrep && <div className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
-                        {hasPrepared && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm"></div>}
+                    <div className="flex justify-center gap-1 mt-1.5">
+                        {hasReturned && <div className="w-2 h-2 rounded-full bg-purple-600 animate-pulse"></div>}
+                        {hasInPrep && <div className="w-2 h-2 rounded-full bg-amber-500"></div>}
+                        {hasPrepared && <div className="w-2 h-2 rounded-full bg-emerald-500"></div>}
                     </div>
                 </div>
             </div>
             {isExpanded && (
-                <div className="absolute top-full left-0 min-w-[440px] bg-white dark:bg-base-900 border-2 border-primary-500 dark:border-primary-400 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] rounded-b-[2.5rem] overflow-hidden z-[90] animate-fade-in origin-top-left">
-                    <div className="p-4 bg-base-50 dark:bg-base-800 border-b-2 dark:border-base-700 flex justify-between items-center shrink-0">
-                        <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase tracking-[0.25em] text-base-400 leading-none mb-1">Deployment Detail</span>
-                            <span className="text-[11px] font-black text-primary-600 dark:text-primary-400 uppercase tracking-widest">{headerKey.split('|')[1] || headerKey}</span>
-                        </div>
-                        <label className="flex items-center gap-2 text-[10px] font-black uppercase cursor-pointer text-primary-700 dark:text-primary-300 bg-white dark:bg-base-900 px-3 py-1.5 rounded-xl border border-primary-100 dark:border-primary-800 shadow-sm">
-                            <input type="checkbox" className="h-4 w-4 rounded" checked={areAllSelected} onChange={e => toggleAll(e.target.checked)}/> Select All
-                        </label>
+                <div className="absolute top-full left-0 min-w-[440px] bg-white dark:bg-base-900 border-2 border-primary-500 shadow-2xl rounded-b-[2rem] overflow-hidden z-[90] animate-fade-in origin-top-left">
+                    <div className="p-4 bg-base-100 dark:bg-base-800 border-b-2 dark:border-base-700 flex justify-between items-center shrink-0">
+                        <span className="text-[12px] font-black text-primary-800 dark:text-primary-300 uppercase tracking-widest">{headerKey.split('|')[1] || headerKey}</span>
+                        <label className="flex items-center gap-2 text-[10px] font-black uppercase cursor-pointer text-primary-800 dark:text-primary-200"><input type="checkbox" className="h-4 w-4 rounded" checked={areAllSelected} onChange={e => toggleAll(e.target.checked)}/> Select All</label>
                     </div>
-                    <div className="max-h-96 overflow-y-auto overscroll-contain custom-scrollbar bg-white dark:bg-base-900">
+                    <div className="max-h-96 overflow-y-auto custom-scrollbar bg-white dark:bg-base-955">
                         <table className="w-full border-collapse">
-                            <tbody className="divide-y divide-base-50 dark:divide-base-800">
+                            <tbody className="divide-y divide-base-100 dark:divide-base-800">
                                 {items.map(({ task, originalIndex, sourceDocId }) => {
                                     const isReady = task.preparationStatus === 'Prepared' || task.preparationStatus === 'Ready for Testing';
                                     const isInPrep = task.preparationStatus === 'Awaiting Preparation';
                                     const isLockedForTesting = !isAssigningToPrepare && isInPrep;
                                     const sampleLabel = String(getTaskValue(task, 'Sample Name'));
-
                                     return (
-                                        <tr key={task._id} className={`bg-white dark:bg-base-900 hover:bg-primary-50/20 transition-colors ${isLockedForTesting ? 'opacity-50' : ''}`}>
-                                            <td className="p-4 w-12 text-center" onClick={e => e.stopPropagation()}>
-                                                <input 
-                                                    type="checkbox" 
-                                                    disabled={isLockedForTesting}
-                                                    className={`h-5 w-5 rounded cursor-pointer border-2 border-base-300 dark:border-base-600 text-primary-600 focus:ring-primary-500`} 
-                                                    checked={selectedItems[sourceDocId]?.has(task._id!) || false} 
-                                                    onChange={e => handleSelectItem(sourceDocId, task._id!, e.target.checked)}
-                                                />
-                                            </td>
+                                        <tr key={task._id} className={`bg-white dark:bg-base-900 hover:bg-primary-50/20 ${isLockedForTesting ? 'opacity-50' : ''}`}>
+                                            <td className="p-4 w-12 text-center"><input type="checkbox" disabled={isLockedForTesting} className="h-5 w-5 rounded cursor-pointer border-2 border-base-300 dark:border-base-600 text-primary-600" checked={selectedItems[sourceDocId]?.has(task._id!) || false} onChange={e => handleSelectItem(sourceDocId, task._id!, e.target.checked)}/></td>
                                             <td className="p-4">
                                                 <div className="flex justify-between items-start mb-1 gap-4">
                                                     <div className="flex flex-col gap-1 min-w-0">
                                                         <div className="flex items-center gap-2">
-                                                            <span className="font-black text-[15px] uppercase truncate tracking-tight text-base-955 dark:text-white leading-tight">{sampleLabel}</span>
-                                                            {isReady && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[8px] font-black rounded-lg uppercase tracking-widest border border-emerald-200">Ready</span>}
-                                                            {isInPrep && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black rounded-lg uppercase tracking-widest border border-amber-200">In Prep</span>}
+                                                            <span className="font-black text-[16px] uppercase truncate text-base-955 dark:text-white leading-tight tracking-tight">{sampleLabel}</span>
+                                                            {isReady && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded uppercase tracking-widest border border-emerald-300">Ready</span>}
+                                                            {isInPrep && <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded uppercase tracking-widest border border-amber-300">In Prep</span>}
                                                         </div>
-                                                        {task.isReturned && (
-                                                            <div className="px-3 py-2 bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-800 rounded-xl mt-1.5">
-                                                                <div className="flex items-center gap-1.5"><AlertTriangleIcon className="h-3 v-3 text-red-500" /><span className="text-[9px] font-black text-red-600 dark:text-red-400 uppercase tracking-widest italic">Aborted By {task.returnedBy || 'Staff'}</span></div>
-                                                                <span className="text-[11px] font-bold text-red-800 dark:text-red-200 leading-tight block mt-1">Reason: {task.returnReason || 'N/A'}</span>
-                                                            </div>
-                                                        )}
+                                                        <p className="text-[12px] font-bold text-indigo-700 dark:text-indigo-300">{String(getTaskValue(task, 'Variant'))}</p>
                                                     </div>
-                                                    <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
-                                                        <button onClick={(e) => { e.stopPropagation(); setNoteEditor({ docId: sourceDocId, index: originalIndex, text: task.plannerNote || '' }); }} className={`p-2 rounded-xl transition-all border-2 ${task.plannerNote ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg animate-pulse' : 'bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`} title="Edit Note"><ChatBubbleLeftEllipsisIcon className="h-4 w-4" /></button>
-                                                        <button onClick={(e) => { e.stopPropagation(); onInitiateDelete(sourceDocId, originalIndex, sampleLabel); }} className="p-2 bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 rounded-xl text-base-300 hover:text-red-600 hover:border-red-300 transition-all" title="Delete from Pool"><TrashIcon className="h-4 w-4"/></button>
-                                                        <div className="px-2.5 py-1 bg-primary-50 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 rounded-xl text-[11px] font-black border border-primary-100 dark:border-primary-800">x{String(getTaskValue(task, 'Quantity'))}</div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        {onInitiateEdit && <button onClick={() => onInitiateEdit(sourceDocId, originalIndex, task)} className="p-2.5 bg-base-50 dark:bg-base-955 border-base-200 rounded-xl text-base-400 hover:text-indigo-600 transition-all shadow-sm"><PencilIcon className="h-5 w-5"/></button>}
+                                                        <button onClick={() => setNoteEditor({ docId: sourceDocId, index: originalIndex, text: task.plannerNote || '' })} className={`p-2.5 rounded-xl border-2 ${task.plannerNote ? 'bg-indigo-700 border-indigo-500 text-white shadow-lg' : 'bg-base-50 dark:bg-base-955 border-base-200 text-base-400'}`}><ChatBubbleLeftEllipsisIcon className="h-5 w-5" /></button>
+                                                        <button onClick={() => onInitiateDelete(sourceDocId, originalIndex, sampleLabel)} className="p-2.5 bg-base-50 dark:bg-base-955 border-base-200 rounded-xl text-base-400 hover:text-red-600 transition-all shadow-sm active:scale-90"><TrashIcon className="h-5 w-5"/></button>
+                                                        <div className="px-3 py-1.5 bg-primary-100 dark:bg-primary-900/40 text-primary-900 dark:text-primary-100 rounded-xl text-[12px] font-black border border-primary-200 shadow-inner">x{String(getTaskValue(task, 'Quantity'))}</div>
                                                     </div>
                                                 </div>
-                                                <p className="text-[11px] font-bold text-indigo-500/80 dark:text-indigo-400/80 truncate">{String(getTaskValue(task, 'Variant'))}</p>
                                             </td>
                                         </tr>
                                     );
@@ -327,549 +346,425 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     const [categorizedTasks, setCategorizedTasks] = useState<CategorizedTask[]>([]);
     const [assignedGlobal, setAssignedGlobal] = useState<AssignedTask[]>([]); 
     const [testMappings, setTestMappings] = useState<TestMapping[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
     const [schedule, setSchedule] = useState<DailySchedule | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
     const [activeCategory, setActiveCategory] = useState<string>('all');
     const [filterRequestId, setFilterRequestId] = useState('');
-    const [manualFilter, setManualFilter] = useState('');
-    const [selectedManualSubGroup, setSelectedManualSubGroup] = useState<string>('all');
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+    const [isAddManualModalOpen, setIsAddManualModalOpen] = useState(false);
+    const [deleteConfirm, setDeleteConfirm] = useState<{ docId: string, index: number, label: string } | null>(null);
+    const [editTask, setEditTask] = useState<{ docId: string, index: number, task: RawTask } | null>(null);
     const [isAssigningToPrepare, setIsAssigningToPrepare] = useState(false); 
     const [notification, setNotification] = useState<{message: string, isError?: boolean} | null>(null);
     const [selectedItems, setSelectedItems] = useState<Record<string, Set<string>>>({});
     const [expandedCell, setExpandedCell] = useState<{ docId: string; headerKey: string } | null>(null);
-    const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
+    const [hideEmptyColumns, setHideEmptyColumns] = useState(true);
     const [isAssigning, setIsAssigning] = useState(false);
-    const [isSavingManual, setIsSavingManual] = useState(false);
     const [noteEditor, setNoteEditor] = useState<{ docId: string, index: number, text: string } | null>(null);
-    
-    // Deletion targets
-    const [templateToDelete, setTemplateToDelete] = useState<CategorizedTask | null>(null);
-    const [gridItemToDelete, setGridItemToDelete] = useState<{ docId: string, index: number, label: string } | null>(null);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [tasks, dailySchedule, mappings, allAssigned] = await Promise.all([
+            const [tasks, mappings, allAssigned, dailySched] = await Promise.all([
                 getCategorizedTasks(), 
-                getDailySchedule(selectedDate), 
                 getTestMappings(),
-                getAssignedTasks() 
+                getAssignedTasks(),
+                getDailySchedule(selectedDate)
             ]);
-            
             setAssignedGlobal(allAssigned || []);
-            setCategorizedTasks(tasks.sort((a,b) => (a.order ?? Infinity) - (b.order ?? Infinity)));
-            setSchedule(dailySchedule);
+            setCategorizedTasks(tasks);
             setTestMappings(mappings);
+            setSchedule(dailySched);
         } catch (error) { console.error(error); } finally { setIsLoading(false); }
     }, [selectedDate]);
 
     useEffect(() => { fetchData(); }, [fetchData, refreshKey]);
 
-    const handleUpdatePlannerNote = async (docId: string, itemIndex: number, note: string) => {
+    const handleSelectItem = useCallback((docId: string, taskId: string, isChecked: boolean) => {
+        setSelectedItems(prev => {
+            const next = { ...prev };
+            const currentSet = new Set(next[docId] || []);
+            if (isChecked) currentSet.add(taskId);
+            else currentSet.delete(taskId);
+            next[docId] = currentSet;
+            return next;
+        });
+    }, []);
+
+    const assignedStateGlobal = useMemo(() => {
+        const ids = new Set<string>();
+        assignedGlobal.forEach(a => a.tasks.forEach(t => { if (t._id) ids.add(t._id); }));
+        return { ids };
+    }, [assignedGlobal]);
+
+    const inventoryAudit = useMemo(() => {
+        let totalDBItems = 0;
+        let visibleInGrid = 0;
+        let assignedToStaff = 0;
+        categorizedTasks.forEach(doc => {
+            doc.tasks.forEach(task => {
+                totalDBItems++;
+                const isAssigned = task._id && assignedStateGlobal.ids.has(task._id);
+                if (isAssigned && doc.category !== TaskCategory.Manual) assignedToStaff++;
+                else visibleInGrid++;
+            });
+        });
+        return { totalDBItems, visibleInGrid, assignedToStaff };
+    }, [categorizedTasks, assignedStateGlobal]);
+
+    const categoryTotals = useMemo(() => {
+        const counts: Record<string, number> = { all: 0, pocat: 0, urgent: 0, normal: 0, manual: 0 };
+        const localAssignedIds = assignedStateGlobal.ids;
+        categorizedTasks.forEach(doc => {
+            const cat = doc.category.toLowerCase();
+            doc.tasks.forEach(task => {
+                const isAssigned = task._id && localAssignedIds.has(task._id);
+                if (isAssigned && cat !== 'manual') return;
+                counts.all++;
+                if (counts[cat] !== undefined) counts[cat]++;
+            });
+        });
+        return counts;
+    }, [categorizedTasks, assignedStateGlobal]);
+
+    const selectedItemCount = useMemo(() => Object.values(selectedItems).reduce((acc: number, s: Set<string>) => acc + s.size, 0), [selectedItems]);
+
+    const handleAddManualMission = async (rid: string, desc: string, qty: string) => {
+        setIsAssigning(true);
         try {
-            const taskGroup = categorizedTasks.find(t => t.docId === docId);
-            if (!taskGroup) return;
-            const updatedTasks = [...taskGroup.tasks];
-            updatedTasks[itemIndex] = { ...updatedTasks[itemIndex], plannerNote: note.trim() || null };
-            await updateCategorizedTask(docId, { tasks: updatedTasks });
-            setNotification({ message: "Mission briefed." });
-            setNoteEditor(null);
+            const newTask: RawTask = { _id: Math.random().toString(36).substring(2) + Date.now(), Description: desc, Quantity: qty, 'Sample Name': desc, Variant: 'Manual Mission', ManualEntry: true };
+            await saveCategorizedTask({ id: rid, category: TaskCategory.Manual, tasks: [newTask], createdAt: new Date().toISOString() });
+            setNotification({ message: "Manual mission created." });
             fetchData();
-        } catch (e) { setNotification({ message: "Error", isError: true }); }
+            setIsAddManualModalOpen(false);
+        } catch (e) { setNotification({ message: "Failed to create mission", isError: true }); } finally { setIsAssigning(false); }
     };
 
-    const handleDeleteItemFromPool = async () => {
-        if (!gridItemToDelete) return;
-        const { docId, index } = gridItemToDelete;
+    const handleDeleteConfirm = async () => {
+        if (!deleteConfirm) return;
+        setIsAssigning(true);
         try {
-            const doc = categorizedTasks.find(t => t.docId === docId);
-            if (!doc) return;
-            const updatedTasks = doc.tasks.filter((_, i) => i !== index);
-            if (updatedTasks.length === 0) {
-                await deleteCategorizedTask(docId);
-            } else {
-                await updateCategorizedTask(docId, { tasks: updatedTasks });
-            }
-            setNotification({ message: "Item purged from pool." });
-            setGridItemToDelete(null);
+            const { docId, index, label } = deleteConfirm;
+            const doc = categorizedTasks.find(d => d.docId === docId);
+            if (!doc) throw new Error("Document not found");
+            const updatedTasks = doc.tasks.filter((_, idx) => idx !== index);
+            if (updatedTasks.length > 0) await updateCategorizedTask(docId, { tasks: updatedTasks });
+            else await deleteCategorizedTask(docId);
+            setNotification({ message: `Successfully deleted "${label}"` });
             fetchData();
-        } catch (e) { setNotification({ message: "Purge Failed", isError: true }); }
+        } catch (e) { setNotification({ message: "Failed to delete task.", isError: true }); } finally { setIsAssigning(false); setDeleteConfirm(null); }
     };
 
-    const handleDeleteManualTemplate = async () => {
-        if (!templateToDelete || !templateToDelete.docId) return;
+    const handleSaveTaskEdit = async (updatedTask: RawTask) => {
+        if (!editTask) return;
+        setIsAssigning(true);
         try {
-            await deleteCategorizedTask(templateToDelete.docId);
-            setNotification({ message: "Manual Template Purged." });
-            setTemplateToDelete(null);
+            const doc = categorizedTasks.find(d => d.docId === editTask.docId);
+            if (!doc) throw new Error("Document not found");
+            const updatedTasks = [...doc.tasks];
+            updatedTasks[editTask.index] = updatedTask;
+            await updateCategorizedTask(editTask.docId, { tasks: updatedTasks });
+            setNotification({ message: "Task updated successfully." });
             fetchData();
-        } catch (err) {
-            setNotification({ message: "Failed to purge template.", isError: true });
-        }
+        } catch (e) { setNotification({ message: "Failed to update task.", isError: true }); } finally { setIsAssigning(false); setEditTask(null); }
     };
 
     const gridHeaders = useMemo(() => {
-        const groupMinOrders: Record<string, number> = {};
-        testMappings.forEach(m => { if (!m.headerGroup) return; const c = groupMinOrders[m.headerGroup] ?? Infinity; if ((m.order ?? Infinity) < c) groupMinOrders[m.headerGroup] = m.order ?? Infinity; });
-        const groupsContent: Record<string, { key: string; order: number }[]> = {};
+        const groupsContent: Record<string, string[]> = {};
+        const groupOrders: Record<string, number> = {};
         testMappings.forEach(m => {
             if (!m.headerGroup || !m.headerSub) return;
             if (!groupsContent[m.headerGroup]) groupsContent[m.headerGroup] = [];
             const key = `${m.headerGroup}|${m.headerSub}`;
-            const ex = groupsContent[m.headerGroup].find(x => x.key === key);
-            const mOrd = m.order ?? Infinity;
-            if (!ex) groupsContent[m.headerGroup].push({ key, order: mOrd });
-            else if (mOrd < ex.order) ex.order = mOrd;
+            if (!groupsContent[m.headerGroup].includes(key)) groupsContent[m.headerGroup].push(key);
+            groupOrders[m.headerGroup] = Math.min(groupOrders[m.headerGroup] ?? Infinity, m.order ?? Infinity);
         });
-        const sortedGroups = Object.keys(groupsContent).sort((a, b) => (groupMinOrders[a] ?? Infinity) - (groupMinOrders[b] ?? Infinity));
-        return sortedGroups.map(gn => [gn, groupsContent[gn].sort((a, b) => a.order - b.order).map(x => x.key)] as [string, string[]]);
+        return Object.keys(groupsContent).sort((a, b) => (groupOrders[a] ?? Infinity) - (groupOrders[b] ?? Infinity)).map(g => [g, groupsContent[g]] as [string, string[]]);
     }, [testMappings]);
 
-    // CRITICAL FIX: Create smart "Digital Signatures" of all assigned tasks
-    const assignedSignaturesGlobal = useMemo(() => {
-        const sigs = new Set<string>();
-        assignedGlobal.forEach(a => {
-            const rid = String(a.requestId || '').trim().toLowerCase().replace(/^rs1-/, '');
-            a.tasks.forEach(t => {
-                const sample = String(getTaskValue(t, 'Sample Name') || '').trim().toLowerCase();
-                const desc = String(getTaskValue(t, 'Description') || '').trim().toLowerCase();
-                const variant = String(getTaskValue(t, 'Variant') || '').trim().toLowerCase();
-                sigs.add(`${rid}|${sample}|${desc}|${variant}`.replace(/\s+/g, ''));
-            });
-        });
-        return sigs;
-    }, [assignedGlobal]);
-
-    // Calculate accurate counts for Category Pills
-    const accurateCategoryCounts = useMemo(() => {
-        const counts = { all: 0, pocat: 0, urgent: 0, normal: 0, manual: 0 };
-        const seenInPoolCounting = new Set<string>();
-        
+    const manualTasksFlattened = useMemo(() => {
+        const search = filterRequestId.toLowerCase().trim();
+        const list: { docId: string, id: string, task: RawTask, index: number }[] = [];
         categorizedTasks.forEach(doc => {
-            const cat = (doc.category || '').toLowerCase();
-            const normalizedRid = String(doc.id || '').trim().toLowerCase().replace(/^rs1-/, '');
-            
-            doc.tasks.forEach(task => {
-                const sample = String(getTaskValue(task, 'Sample Name') || '').trim().toLowerCase();
-                const desc = String(getTaskValue(task, 'Description') || '').trim().toLowerCase();
-                const variant = String(getTaskValue(task, 'Variant') || '').trim().toLowerCase();
-                const signature = `${normalizedRid}|${sample}|${desc}|${variant}`.replace(/\s+/g, '');
-                
-                if (!seenInPoolCounting.has(signature) && !assignedSignaturesGlobal.has(signature)) {
-                    seenInPoolCounting.add(signature);
-                    counts.all++;
-                    if (cat === 'pocat') counts.pocat++;
-                    else if (cat === 'urgent') counts.urgent++;
-                    else if (cat === 'normal') counts.normal++;
-                    else if (cat === 'manual') counts.manual++;
-                }
-            });
-        });
-        
-        return counts;
-    }, [categorizedTasks, assignedSignaturesGlobal]);
-
-    const manualAvailableGroups = useMemo(() => {
-        const manualTasks = categorizedTasks.filter(t => (t.category || '').toLowerCase() === 'manual');
-        const groups = new Set<string>();
-        manualTasks.forEach(t => { if (t.manualGroup) groups.add(t.manualGroup); });
-        return ['all', ...Array.from(groups).sort()];
-    }, [categorizedTasks]);
-
-    const manualGroupedData = useMemo(() => {
-        const activeCat = activeCategory.toLowerCase();
-        if (activeCat !== 'all' && activeCat !== 'manual') return {};
-        
-        const manualTasks = categorizedTasks.filter(t => (t.category || '').toLowerCase() === 'manual');
-        const search = manualFilter.toLowerCase().trim();
-        
-        const filtered = manualTasks.filter(m => {
-            const matchesGroup = selectedManualSubGroup === 'all' || m.manualGroup === selectedManualSubGroup;
-            if (!matchesGroup) return false;
-
-            if (!search) return true;
-            if (m.id.toLowerCase().includes(search)) return true;
-            if (m.manualGroup?.toLowerCase().includes(search)) return true;
-            return m.tasks.some(t => String(getTaskValue(t, 'Description')).toLowerCase().includes(search));
-        });
-
-        const groups: Record<string, CategorizedTask[]> = {};
-        filtered.forEach(doc => {
-            const g = doc.manualGroup || 'UNGROUPED';
-            if (!groups[g]) groups[g] = [];
-            groups[g].push(doc);
-        });
-        return groups;
-    }, [categorizedTasks, activeCategory, manualFilter, selectedManualSubGroup]);
-
-    const groupedByNormalizedId = useMemo<Record<string, { displayId: string, docs: CategorizedTask[] }>>(() => {
-        const groups: Record<string, { displayId: string, docs: CategorizedTask[] }> = {};
-        const sortedTasks = [...categorizedTasks].sort((a, b) => (b.isReturnedPool ? 1 : 0) - (a.isReturnedPool ? 1 : 0));
-        sortedTasks.forEach(doc => {
-            const rawId = String(doc.id || '').trim();
-            if (!rawId) return;
-            const normalizedKey = rawId.toLowerCase().replace(/^rs1-/, '');
-            if (!groups[normalizedKey]) {
-                groups[normalizedKey] = { displayId: rawId, docs: [] };
+            if (doc.category === TaskCategory.Manual) {
+                if (search && !doc.id.toLowerCase().includes(search) && !String(doc.tasks[0]?.Description || '').toLowerCase().includes(search)) return;
+                doc.tasks.forEach((task, index) => {
+                    list.push({ docId: doc.docId!, id: doc.id, task, index });
+                });
             }
-            groups[normalizedKey].docs.push(doc);
         });
-        return groups;
-    }, [categorizedTasks]);
+        return list;
+    }, [categorizedTasks, filterRequestId]);
 
     const gridData = useMemo(() => {
         const rows: any[] = [];
         const activeCat = activeCategory.toLowerCase();
         const search = filterRequestId.toLowerCase().trim();
 
-        Object.values(groupedByNormalizedId).forEach(({ displayId: rid, docs: taskDocs }) => {
+        Object.entries(categorizedTasks.reduce((acc, doc) => { 
+            const k = doc.id.toLowerCase().replace(/^rs1-/, ''); 
+            if (!acc[k]) acc[k] = { rid: doc.id, docs: [] }; 
+            acc[k].docs.push(doc); return acc; 
+        }, {} as any)).forEach(([_, group]: any) => {
             const filteredDocs = activeCat === 'all' 
-                ? taskDocs 
-                : taskDocs.filter(d => (d.category || '').toLowerCase() === activeCat);
-
+                ? group.docs.filter((d: any) => d.category !== TaskCategory.Manual) 
+                : group.docs.filter((d: any) => d.category.toLowerCase() === activeCat && d.category !== TaskCategory.Manual);
+            
             if (filteredDocs.length === 0) return;
-            const isManual = filteredDocs.some(g => (g.category || '').toLowerCase() === 'manual');
-            if (isManual) return; 
+            if (search && !group.rid.toLowerCase().includes(search)) return;
 
-            const matchesSearch = !search || rid.toLowerCase().includes(search);
-            if (matchesSearch) {
-                const row = {
-                    requestId: rid,
-                    cells: {} as Record<string, { task: RawTask; originalIndex: number; sourceDocId: string }[]>,
-                    unmappedItems: [] as { task: RawTask; originalIndex: number; sourceDocId: string }[],
-                    minDueDate: Infinity,
-                    totalItemCount: 0,
-                    availableItemCount: 0,
-                    isPoCat: false, isSprint: false, isUrgent: false, isLSP: false, isReturned: false
-                };
+            const row = { requestId: group.rid, cells: {} as any, unmappedItems: [] as any, minDueDate: Infinity, itemCount: 0, availableItems: 0, isPoCat: false, isUrgent: false, isManual: false };
+            filteredDocs.forEach((doc: any) => {
+                if (doc.category === 'pocat') row.isPoCat = true;
+                if (doc.category === 'urgent') row.isUrgent = true;
+                
+                doc.tasks.forEach((task: any, index: number) => {
+                    const isFullyAssigned = task._id && assignedStateGlobal.ids.has(task._id);
+                    if (isFullyAssigned) return;
 
-                const seenSignaturesInRow = new Set<string>();
-                const normalizedRid = rid.toLowerCase().replace(/^rs1-/, '');
-
-                filteredDocs.forEach(doc => {
-                    const groupDate = getDueDateTimestamp(doc.tasks);
-                    if (groupDate < row.minDueDate) row.minDueDate = groupDate;
-
-                    doc.tasks.forEach((task, index) => {
-                        const sample = String(getTaskValue(task, 'Sample Name') || '').trim().toLowerCase();
-                        const desc = String(getTaskValue(task, 'Description') || '').trim().toLowerCase();
-                        const variant = String(getTaskValue(task, 'Variant') || '').trim().toLowerCase();
-                        const signature = `${normalizedRid}|${sample}|${desc}|${variant}`.replace(/\s+/g, '');
-
-                        if (seenSignaturesInRow.has(signature) || assignedSignaturesGlobal.has(signature)) return;
-                        seenSignaturesInRow.add(signature);
-                        row.totalItemCount++;
-                        if (task.preparationStatus !== 'Awaiting Preparation') row.availableItemCount++;
-
-                        const spec = getSpecialStatus(task, doc.category);
-                        if (spec.isPoCat) row.isPoCat = true;
-                        if (spec.isSprint) row.isSprint = true;
-                        if (spec.isUrgent) row.isUrgent = true;
-                        if (spec.isLSP) row.isLSP = true;
-                        if (spec.isReturned) row.isReturned = true;
-
-                        const item = { task, originalIndex: index, sourceDocId: doc.docId! };
-                        const colKey = getTaskGridColumnKey(task, testMappings);
-                        if (colKey) {
-                            if (!row.cells[colKey]) row.cells[colKey] = [];
-                            row.cells[colKey].push(item);
-                        } else {
-                            row.unmappedItems.push(item);
-                        }
-                    });
+                    const dateVal = getDueDateTimestamp([task]);
+                    if (dateVal < row.minDueDate) row.minDueDate = dateVal;
+                    row.itemCount++;
+                    if (task.preparationStatus !== 'Awaiting Preparation') row.availableItems++;
+                    
+                    const item = { task, originalIndex: index, sourceDocId: doc.docId! };
+                    const colKey = getTaskGridColumnKey(task, testMappings);
+                    if (colKey) { 
+                        if (!row.cells[colKey]) row.cells[colKey] = []; 
+                        row.cells[colKey].push(item); 
+                    } else {
+                        row.unmappedItems.push(item);
+                    }
                 });
-                if (row.totalItemCount > 0) rows.push(row);
-            }
+            });
+            if (row.itemCount > 0) rows.push(row);
         });
         return rows.sort((a, b) => a.minDueDate - b.minDueDate);
-    }, [groupedByNormalizedId, activeCategory, filterRequestId, testMappings, assignedSignaturesGlobal]);
+    }, [categorizedTasks, activeCategory, filterRequestId, testMappings, assignedStateGlobal]);
 
     const activeColumnKeys = useMemo(() => {
-        if (!hideEmptyColumns) return gridHeaders.flatMap(([, subKeys]) => subKeys);
-        const activeKeys = new Set<string>();
-        gridData.forEach(row => Object.keys(row.cells).forEach(k => { if (row.cells[k].length > 0) activeKeys.add(k); }));
-        return gridHeaders.flatMap(([, subKeys]) => subKeys).filter(k => activeKeys.has(k));
+        const keys = gridHeaders.flatMap(([, sk]) => sk);
+        if (!hideEmptyColumns) return keys;
+        const used = new Set<string>();
+        gridData.forEach(r => Object.keys(r.cells).forEach(k => used.add(k)));
+        return keys.filter(k => used.has(k));
     }, [gridHeaders, gridData, hideEmptyColumns]);
 
-    const activeGridHeaders = useMemo(() => {
-        if (!hideEmptyColumns) return gridHeaders;
-        return gridHeaders.map(([group, subKeys]) => {
-            const activeSubs = subKeys.filter(k => activeColumnKeys.includes(k));
-            return [group, activeSubs] as [string, string[]];
-        }).filter(([, subKeys]) => subKeys.length > 0);
-    }, [gridHeaders, activeColumnKeys, hideEmptyColumns]);
+    const lastKeysOfGroups = useMemo(() => {
+        const lastKeys = new Set<string>();
+        gridHeaders.forEach(([, subKeys]) => {
+            const visibleInGroup = subKeys.filter(k => activeColumnKeys.includes(k));
+            if (visibleInGroup.length > 0) lastKeys.add(visibleInGroup[visibleInGroup.length-1]);
+        });
+        return lastKeys;
+    }, [gridHeaders, activeColumnKeys]);
 
-    const lastKeysOfGroups = useMemo(() => new Set(activeGridHeaders.map(([_, subKeys]) => subKeys[subKeys.length - 1])), [activeGridHeaders]);
-
-    const onShiftPersonnel = useMemo(() => {
-        const findByIds = (ids: string[]) => (ids || []).map(id => testers.find(t => t.id === id)).filter((t): t is Tester => !!t);
-        if (!schedule) return { testers: [], assistants: [] };
-        const shiftTesters = selectedShift === 'day' ? schedule.dayShiftTesters : schedule.nightShiftTesters;
-        const shiftAssistants = selectedShift === 'day' ? schedule.dayShiftAssistants : schedule.nightShiftAssistants;
-        return { testers: findByIds(shiftTesters), assistants: findByIds(shiftAssistants) };
-    }, [schedule, testers, selectedShift]);
-
-    const handleConfirmAssignment = async (selectedPerson: Tester) => {
+    const handleConfirmAssignment = async (person: Tester) => {
         if (isAssigning) return;
-        const hasSelection = Object.values(selectedItems).some(val => val instanceof Set && val.size > 0);
-        if (!hasSelection) return;
+        if (selectedItemCount === 0) return;
         setIsAssigning(true);
         try {
             const batch = firestore.batch();
             const assignments: Record<string, RawTask[]> = {};
-            const assignedIdsThisSession = new Set<string>();
             for (const docId in selectedItems) {
-                const selectedIdsForThisDoc = selectedItems[docId];
-                if (!selectedIdsForThisDoc || selectedIdsForThisDoc.size === 0) continue;
-                const originalDoc = categorizedTasks.find(t => t.docId === docId);
-                if (!originalDoc) continue;
-                const isManual = originalDoc.category.toLowerCase() === 'manual';
-                const selectedTasksInThisDoc = originalDoc.tasks.filter(t => selectedIdsForThisDoc.has(t._id!));
-                if (selectedTasksInThisDoc.length === 0) continue;
-                if (isAssigningToPrepare && !isManual) {
-                    const indices = originalDoc.tasks.map((t, i) => selectedIdsForThisDoc.has(t._id!) ? i : -1).filter(i => i !== -1);
-                    await assignItemsToPrepare(originalDoc, indices, selectedPerson, selectedDate, selectedShift);
-                } else if (!isAssigningToPrepare) {
-                    selectedTasksInThisDoc.forEach(t => {
-                        if (t._id) assignedIdsThisSession.add(t._id);
-                        const clean = { ...t };
-                        clean._id = t._id;
-                        delete clean.isReturned; delete clean.returnReason; delete clean.returnedBy; 
-                        delete clean.status; delete clean.notOkReason; delete clean.preparationStatus;
-                        const reqId = originalDoc.id;
-                        if (!assignments[reqId]) assignments[reqId] = [];
-                        assignments[reqId].push(clean);
+                const ids = selectedItems[docId]; if (!ids || ids.size === 0) continue;
+                const original = categorizedTasks.find(t => t.docId === docId); if (!original) continue;
+                const selectedTasks = original.tasks.filter(t => ids.has(t._id!));
+                if (isAssigningToPrepare && original.category !== 'manual') {
+                    const indices = original.tasks.map((t, i) => ids.has(t._id!) ? i : -1).filter(i => i !== -1);
+                    await assignItemsToPrepare(original, indices, person, selectedDate, selectedShift);
+                } else {
+                    selectedTasks.forEach(t => { 
+                        const clean = { ...t }; delete clean.status; delete clean.preparationStatus;
+                        if (original.category === 'manual') clean._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
+                        if (!assignments[original.id]) assignments[original.id] = []; assignments[original.id].push(clean);
                     });
                 }
             }
             if (!isAssigningToPrepare) {
-                const affectedRequestIds = Object.keys(assignments);
-                categorizedTasks.forEach(poolDoc => {
-                    if (affectedRequestIds.includes(poolDoc.id)) {
-                        const remaining = poolDoc.tasks.filter(t => !t._id || !assignedIdsThisSession.has(t._id));
-                        const docRef = firestore.collection('categorizedTasks').doc(poolDoc.docId);
-                        if (remaining.length === 0) batch.delete(docRef);
-                        else if (remaining.length < poolDoc.tasks.length) batch.update(docRef, { tasks: remaining });
-                    }
-                });
-                for (const [requestId, tasks] of Object.entries(assignments)) {
-                    const assignedDocRef = firestore.collection('assignedTasks').doc();
-                    batch.set(assignedDocRef, {
-                        requestId, tasks, category: categorizedTasks.find(c => c.id === requestId)?.category || TaskCategory.Normal,
-                        testerId: selectedPerson.id, testerName: selectedPerson.name, assignedDate: selectedDate, shift: selectedShift, status: TaskStatus.Pending
-                    });
+                for (const [rid, tasks] of Object.entries(assignments)) {
+                    batch.set(firestore.collection('assignedTasks').doc(), { requestId: rid, tasks, category: categorizedTasks.find(c => c.id === rid)?.category || 'normal', testerId: person.id, testerName: person.name, assignedDate: selectedDate, shift: selectedShift, status: 'Pending' });
                 }
             }
-            await batch.commit();
-            setNotification({ message: "Pool Cleaned. Mission Assigned." });
-            setSelectedItems({});
-            setExpandedCell(null);
-            fetchData();
-        } catch (err) { 
-            console.error(err);
-            setNotification({ message: "Sync Error", isError: true }); 
-        } finally { 
-            setIsAssigning(false); 
-            setIsModalOpen(false); 
-        }
+            await batch.commit(); setSelectedItems({}); setExpandedCell(null); fetchData(); setNotification({ message: "Assignment Complete." });
+        } catch (e) { setNotification({ message: "Error in assignment", isError: true }); } finally { setIsAssigning(false); setIsModalOpen(false); }
     };
-
-    const handleSaveManualTask = async (data: { jobId: string; description: string; quantity: string, groupName: string }) => {
-        setIsSavingManual(true);
-        try {
-            const manualTask: RawTask = { _id: Math.random().toString(36).substring(2) + Date.now().toString(36), 'Request ID': data.jobId, 'Description': data.description, 'Quantity': data.quantity, 'Sample Name': data.jobId, 'ManualEntry': true };
-            await saveCategorizedTask({ id: data.jobId, category: TaskCategory.Manual, tasks: [manualTask], manualGroup: data.groupName || null });
-            setNotification({ message: "Template Created." });
-            setIsManualModalOpen(false);
-            fetchData();
-        } catch (err) { setNotification({ message: "Failed", isError: true }); } finally { setIsSavingManual(false); }
-    };
-
-    const handleSelectItem = useCallback((docId: string, taskId: string, isChecked: boolean) => {
-        setSelectedItems(prev => {
-            const newSelection = { ...prev };
-            const currentSet = new Set(newSelection[docId] || []);
-            if (isChecked) currentSet.add(taskId); else currentSet.delete(taskId);
-            newSelection[docId] = currentSet;
-            return newSelection;
-        });
-    }, []);
-
-    const totalSelectedCount = useMemo(() => {
-        let count = 0;
-        for (const set of Object.values(selectedItems)) { if (set instanceof Set) count += set.size; }
-        return count;
-    }, [selectedItems]);
-
-    const manualGroups = useMemo(() => Object.keys(manualGroupedData).sort(), [manualGroupedData]);
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] space-y-4 animate-slide-in-up relative overflow-hidden">
+        <div className="flex flex-col h-[calc(100vh-120px)] space-y-3 animate-slide-in-up relative overflow-hidden">
             {notification && <Toast message={notification.message} isError={notification.isError} onDismiss={() => setNotification(null)} />}
-            <AssignmentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAssign={handleConfirmAssignment} personnel={onShiftPersonnel} isPreparation={isAssigningToPrepare} selectedItemCount={totalSelectedCount} isProcessing={isAssigning}/>
-            <ManualTaskModal isOpen={isManualModalOpen} onClose={() => setIsManualModalOpen(false)} onSave={handleSaveManualTask} isProcessing={isSavingManual} />
-            <NoteModal isOpen={!!noteEditor} onClose={() => setNoteEditor(null)} initialNote={noteEditor?.text || ''} onConfirm={(val) => { if(noteEditor) handleUpdatePlannerNote(noteEditor.docId, noteEditor.index, val); }} />
-            
-            {/* Delete Confirmation Modal for Manual Templates */}
-            {templateToDelete && (
-                <div className="fixed inset-0 bg-base-900/90 backdrop-blur-xl flex items-center justify-center z-[150] p-4 animate-fade-in" onClick={() => setTemplateToDelete(null)}>
-                    <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-md overflow-hidden p-10 text-center space-y-8 border border-white/20" onClick={e => e.stopPropagation()}>
-                        <div className="w-20 h-20 bg-red-50 dark:bg-red-900/20 rounded-[2rem] flex items-center justify-center mx-auto text-red-600 shadow-inner"><TrashIcon className="h-10 w-10" /></div>
-                        <div><h3 className="text-2xl font-black text-base-955 dark:text-white uppercase tracking-tighter leading-none">Delete Manual Template?</h3><p className="text-base-500 mt-4 text-[14px] font-bold leading-relaxed">Are you sure? This will permanently remove the template "{templateToDelete.id}" from the list.</p></div>
-                        <div className="flex flex-col gap-3 pt-4"><button onClick={handleDeleteManualTemplate} className="w-full py-5 bg-red-600 text-white font-black rounded-2xl shadow-xl hover:bg-red-700 uppercase text-[11px] tracking-widest border-b-4 border-red-800">Confirm Deletion</button><button onClick={() => setTemplateToDelete(null)} className="w-full py-3 text-[10px] font-black text-base-400 hover:text-base-800 uppercase tracking-widest">Discard Action</button></div>
-                    </div>
-                </div>
-            )}
+            <AssignmentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAssign={handleConfirmAssignment} personnel={{ testers: testers.filter(t => t.team !== 'assistants_4_2'), assistants: testers.filter(t => t.team === 'assistants_4_2') }} schedule={schedule} shift={selectedShift} isPreparation={isAssigningToPrepare} selectedItemCount={selectedItemCount} isProcessing={isAssigning}/>
+            <DeleteConfirmationModal isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} onConfirm={handleDeleteConfirm} label={deleteConfirm?.label || ''} isProcessing={isAssigning} />
+            <EditManualTaskModal isOpen={!!editTask} onClose={() => setEditTask(null)} onSave={handleSaveTaskEdit} task={editTask?.task || null} isProcessing={isAssigning} />
+            <AddManualTaskModal isOpen={isAddManualModalOpen} onClose={() => setIsAddManualModalOpen(false)} onSave={handleAddManualMission} isProcessing={isAssigning} />
 
-            {/* Delete Confirmation Modal for Grid Items */}
-            {gridItemToDelete && (
-                <div className="fixed inset-0 bg-base-900/90 backdrop-blur-xl flex items-center justify-center z-[150] p-4 animate-fade-in" onClick={() => setGridItemToDelete(null)}>
-                    <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-md overflow-hidden p-10 text-center space-y-8 border border-white/20" onClick={e => e.stopPropagation()}>
-                        <div className="w-20 h-20 bg-red-50 dark:bg-red-900/20 rounded-[2rem] flex items-center justify-center mx-auto text-red-600 shadow-inner"><TrashIcon className="h-10 w-10" /></div>
-                        <div><h3 className="text-2xl font-black text-base-955 dark:text-white uppercase tracking-tighter leading-none">Purge Item?</h3><p className="text-base-500 mt-4 text-[14px] font-bold leading-relaxed">Remove item "{gridItemToDelete.label}" from the deployment pool?</p></div>
-                        <div className="flex flex-col gap-3 pt-4"><button onClick={handleDeleteItemFromPool} className="w-full py-5 bg-red-600 text-white font-black rounded-2xl shadow-xl hover:bg-red-700 uppercase text-[11px] tracking-widest border-b-4 border-red-800">Wipe Item</button><button onClick={() => setGridItemToDelete(null)} className="w-full py-3 text-[10px] font-black text-base-400 hover:text-base-800 uppercase tracking-widest">Keep Item</button></div>
+            {/* EXPANDED TOP SUMMARY SECTION */}
+            <div className="px-6 space-y-4 shrink-0 mt-6">
+                <div className="flex items-center justify-between p-5 bg-[#0a0f1e] rounded-[2.5rem] border border-white/5 shadow-2xl">
+                    <div className="flex items-center gap-12 ml-6">
+                        <div className="flex flex-col"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1">Global Database</span><span className="text-3xl font-black text-white leading-none tracking-tighter">{inventoryAudit.totalDBItems} <span className="text-xs text-slate-600 ml-1">REQS</span></span></div>
+                        <div className="w-px h-14 bg-white/10"></div>
+                        <div className="flex flex-col"><span className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.3em] mb-1">Mission Pool</span><span className="text-3xl font-black text-white leading-none tracking-tighter">{inventoryAudit.visibleInGrid}</span></div>
+                        <div className="w-px h-14 bg-white/10"></div>
+                        <div className="flex flex-col"><span className="text-[11px] font-black text-primary-400 uppercase tracking-[0.3em] mb-1">Active Staff</span><span className="text-3xl font-black text-white leading-none tracking-tighter">{inventoryAudit.assignedToStaff}</span></div>
+                    </div>
+                    <div className="flex gap-3 pr-4">
+                        {activeCategory === 'manual' && (
+                            <button onClick={() => setIsAddManualModalOpen(true)} className="px-8 py-4 bg-gradient-to-br from-indigo-500 to-indigo-700 text-white text-[12px] font-black rounded-2xl hover:brightness-110 transition-all uppercase tracking-widest flex items-center gap-2 shadow-xl border-b-4 border-indigo-900 active:scale-95"><PlusIcon className="h-5 w-5" /> Create Template</button>
+                        )}
+                        <button onClick={() => setHideEmptyColumns(!hideEmptyColumns)} className={`px-8 py-4 rounded-2xl text-[12px] font-black uppercase tracking-widest transition-all shadow-xl ${hideEmptyColumns ? 'bg-primary-600 text-white border-b-4 border-primary-800' : 'bg-slate-800 text-slate-400 border border-white/5'}`}>{hideEmptyColumns ? 'Standard View' : 'Compact Mode'}</button>
+                        <button onClick={fetchData} className="p-4 bg-slate-800 rounded-2xl text-primary-400 hover:text-white transition-all shadow-lg active:scale-90"><RefreshIcon className={`h-6 w-6 ${isLoading ? 'animate-spin' : ''}`} /></button>
                     </div>
                 </div>
-            )}
 
-            <div className="flex-shrink-0 space-y-3 px-4 pt-2">
-                <div className="flex justify-between items-center">
-                    <h2 className="text-3xl font-black text-base-955 dark:text-base-50 tracking-tighter">Queue Deployment</h2>
-                    <div className="flex gap-2">
-                        <button onClick={() => setIsManualModalOpen(true)} className="px-5 py-2 text-[10px] font-black rounded-xl transition-all border-2 bg-purple-600 text-white border-purple-500 uppercase tracking-widest flex items-center gap-2 shadow-md hover:brightness-110 active:scale-95"><PlusIcon className="h-4 w-4" /> Add Manual Template</button>
-                        <button onClick={() => setHideEmptyColumns(!hideEmptyColumns)} className={`px-5 py-2 text-[10px] font-black rounded-xl transition-all border-2 uppercase tracking-widest flex items-center gap-2 shadow-md ${hideEmptyColumns ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-white dark:bg-base-800 text-base-500 border-base-200'}`}>{hideEmptyColumns ? <CheckCircleIcon className="h-4 w-4" /> : <div className="w-4 h-4 rounded border-2 border-base-300"></div>}Hide Empty Columns</button>
-                    </div>
-                </div>
-                <div className="p-5 bg-white/80 dark:bg-base-800/80 rounded-3xl border-2 border-white dark:border-base-700 shadow-xl space-y-5 backdrop-blur-md">
-                    <div className="flex flex-wrap gap-2.5">
+                {/* PREMIUM CATEGORY & SELECTION HUB - Frosted Glass Version */}
+                <div className="p-2.5 bg-white/70 dark:bg-base-900/40 backdrop-blur-2xl rounded-[3rem] border border-white/40 dark:border-white/10 shadow-2xl flex items-center gap-4">
+                    <div className="flex items-center gap-1 p-1 bg-base-100/50 dark:bg-black/20 rounded-[2.5rem] border border-white/10 flex-grow overflow-x-auto no-scrollbar">
                         {['all', 'pocat', 'urgent', 'normal', 'manual'].map(c => {
-                            const countKey = c === 'all' ? 'all' : c === 'pocat' ? 'pocat' : c === 'urgent' ? 'urgent' : c === 'normal' ? 'normal' : 'manual';
-                            const taskCount = accurateCategoryCounts[countKey];
+                            const isActive = activeCategory === c;
+                            const style = CATEGORY_STYLES[c];
                             return (
-                                <button key={c} onClick={() => { setActiveCategory(c); setManualFilter(''); setSelectedManualSubGroup('all'); }} className={`px-5 py-2 text-xs font-black rounded-xl transition-all border-2 uppercase tracking-[0.1em] shadow-md ${activeCategory === c ? 'bg-primary-700 text-white border-primary-600' : 'bg-white dark:bg-base-800 text-base-800 dark:text-base-100 border-base-200 dark:border-base-700'}`}>
-                                    {c === 'all' ? 'Show All' : c === 'pocat' ? 'Po cat' : c.toUpperCase()} <span className="ml-2 px-2 py-0.5 rounded-lg text-[10px] bg-base-100 dark:bg-base-900 text-primary-600 font-black">{taskCount}</span>
+                                <button 
+                                    key={c} 
+                                    onClick={() => setActiveCategory(c)} 
+                                    className={`relative flex items-center gap-3 px-6 py-3 rounded-[2rem] border-2 transition-all duration-500 min-w-[125px] shrink-0 font-black uppercase tracking-widest text-[12px] ${isActive ? style.active : style.inactive} active:scale-95`}
+                                >
+                                    <div className={`w-1.5 h-1.5 rounded-full ${style.dot} ${isActive ? 'animate-pulse ring-4 ring-white/30' : 'opacity-40'}`}></div>
+                                    {c}
+                                    <div className={`ml-auto px-2 py-0.5 rounded-lg text-[9px] font-black shadow-inner transition-all ${isActive ? 'bg-black/10' : style.badge}`}>{categoryTotals[c] || 0}</div>
+                                    {isActive && <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-8 h-1 bg-white rounded-full blur-[2px] shadow-white"></div>}
                                 </button>
                             );
                         })}
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t-2 border-base-100 dark:border-base-700 pt-5">
-                        <input type="text" placeholder="Search Request ID..." value={filterRequestId} onChange={e => setFilterRequestId(e.target.value)} className="md:col-span-2 p-4 rounded-2xl bg-base-50 dark:bg-base-955 border-2 border-base-200 dark:border-base-700 text-[15px] font-black outline-none"/>
-                        <input type="date" value={selectedDate} onChange={e => onDateChange(e.target.value)} className="w-full p-4 rounded-2xl bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 font-black text-[15px] outline-none"/>
-                        <select value={selectedShift} onChange={e => onShiftChange(e.target.value as any)} className="w-full p-4 rounded-2xl bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 font-black text-[15px] uppercase outline-none"><option value="day">Day Shift (08:00)</option><option value="night">Night Shift (20:00)</option></select>
+
+                    <div className="h-10 w-px bg-base-200 dark:bg-white/10 mx-1"></div>
+
+                    {/* SELECTION INTERFACE - Smart & Minimalist */}
+                    <div className={`flex items-center gap-4 transition-all duration-700 shrink-0 ${selectedItemCount > 0 ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
+                        <div className="flex flex-col items-center justify-center px-7 py-2.5 bg-gradient-to-br from-primary-50 to-indigo-50 dark:from-primary-900/10 dark:to-indigo-900/10 rounded-[1.8rem] border border-primary-200 dark:border-primary-800/50 shadow-inner min-w-[110px]">
+                            <span className="text-[8px] font-black text-primary-500 dark:text-primary-400 uppercase tracking-[0.25em] leading-none mb-1">Selected</span>
+                            <span className="text-3xl font-black text-primary-800 dark:text-white leading-none">{selectedItemCount}</span>
+                        </div>
+                        
+                        {selectedItemCount > 0 && (
+                            <div className="flex gap-2 animate-fade-in shrink-0">
+                                <button onClick={() => { setIsAssigningToPrepare(true); setIsModalOpen(true); }} className="px-7 py-3.5 bg-amber-400 text-amber-950 text-[11px] font-black rounded-2xl hover:brightness-110 uppercase shadow-lg transition-all active:scale-95 border-b-4 border-amber-600">Assign Prep</button>
+                                <button onClick={() => { setIsAssigningToPrepare(false); setIsModalOpen(true); }} className="px-7 py-3.5 bg-primary-600 text-white text-[11px] font-black rounded-2xl hover:brightness-110 uppercase shadow-lg transition-all active:scale-95 border-b-4 border-primary-800">Assign Test</button>
+                                <button onClick={() => setSelectedItems({})} className="p-3.5 text-base-300 hover:text-red-500 transition-all hover:rotate-90"><XCircleIcon className="h-7 w-7"/></button>
+                            </div>
+                        )}
                     </div>
-                </div>
-                <div className="p-4 bg-primary-800 rounded-3xl flex justify-between items-center shadow-2xl sticky top-0 z-30">
-                    <div className="flex items-center gap-5 px-4"><span className="text-[11px] font-black text-white/60 uppercase tracking-[0.3em]">Selection</span><span className="text-4xl font-black text-white leading-none">{totalSelectedCount}</span></div>
-                    <div className="flex gap-3">
-                        <button onClick={() => setSelectedItems({})} className="px-6 py-3.5 text-[11px] font-black text-white/60 hover:text-white uppercase tracking-widest transition-colors">Clear All</button>
-                        {activeCategory !== 'manual' && <button onClick={() => { setIsAssigningToPrepare(true); setIsModalOpen(true); }} disabled={totalSelectedCount === 0} className="px-8 py-3.5 text-[11px] font-black bg-amber-400 text-amber-950 rounded-2xl hover:bg-amber-300 uppercase disabled:opacity-30 transition-all border-b-4 border-amber-600">Move To Preparation</button>}
-                        <button onClick={() => { setIsAssigningToPrepare(false); setIsModalOpen(true); }} disabled={totalSelectedCount === 0} className="px-8 py-3.5 text-[11px] font-black bg-white text-primary-900 rounded-2xl hover:bg-base-100 uppercase disabled:opacity-30 transition-all border-b-4 border-base-300">Assign Missions</button>
+
+                    <div className="h-10 w-px bg-base-200 dark:bg-white/10 mx-1"></div>
+
+                    {/* Logistics - Unified on the glass bar */}
+                    <div className="flex items-center gap-3 shrink-0">
+                        <div className="relative group w-52">
+                            <input 
+                                type="text" 
+                                placeholder="Trace Mission ID..." 
+                                value={filterRequestId} 
+                                onChange={e => setFilterRequestId(e.target.value)} 
+                                className="w-full pl-11 pr-3 py-3.5 bg-base-50/50 dark:bg-white/5 border border-base-200 dark:border-white/10 rounded-[1.8rem] text-[12px] font-bold dark:text-white outline-none focus:border-primary-500 transition-all shadow-inner"
+                            />
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-base-400 dark:text-white/20 group-focus-within:text-primary-500 transition-colors"><SearchIcon className="h-4 w-4" /></div>
+                        </div>
+                        
+                        <div className="flex bg-base-50/50 dark:bg-white/5 border border-base-200 dark:border-white/10 rounded-[1.8rem] overflow-hidden shadow-inner shrink-0">
+                            <input type="date" value={selectedDate} onChange={e => onDateChange(e.target.value)} className="px-5 py-3 bg-transparent border-none text-[12px] font-black dark:text-white outline-none cursor-pointer" />
+                            <div className="w-px bg-base-200 dark:bg-white/10 my-2"></div>
+                            <select value={selectedShift} onChange={e => onShiftChange(e.target.value as any)} className="px-5 py-3 bg-transparent border-none text-[11px] font-black uppercase dark:text-white outline-none cursor-pointer tracking-widest"><option value="day" className="bg-white dark:bg-base-900">Day</option><option value="night" className="bg-white dark:bg-base-900">Night</option></select>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div className="flex-1 min-h-0 flex flex-col mx-4 mb-4 bg-white dark:bg-base-900 rounded-[2.5rem] border-2 border-base-200 dark:border-base-800 shadow-2xl overflow-hidden relative">
-                 {isLoading ? (
-                    <div className="flex flex-col items-center justify-center h-full text-base-500 font-black gap-4 uppercase bg-base-50 dark:bg-base-955"><RefreshIcon className="animate-spin h-14 w-14 text-primary-500"/>Syncing...</div>
-                 ) : (
-                    <div className="flex-1 overflow-auto custom-scrollbar bg-white dark:bg-base-955">
-                        {gridData.length > 0 && activeCategory !== 'manual' && (
+            {/* TABLE SECTION */}
+            <div className="flex-1 min-h-0 mx-6 mb-6 bg-white dark:bg-base-900 rounded-[3.5rem] border-2 border-base-200 dark:border-base-800 shadow-2xl overflow-hidden flex flex-col relative">
+                <div className="flex-1 overflow-auto custom-scrollbar bg-white dark:bg-base-955">
+                    {activeCategory === 'manual' ? (
+                        <div className="p-8">
+                            <div className="overflow-hidden rounded-[2.5rem] border-2 border-indigo-100 dark:border-indigo-900/30 shadow-2xl">
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="bg-gradient-to-r from-indigo-900 to-indigo-950 text-white">
+                                        <tr>
+                                            <th className="p-6 w-20 text-center border-r border-white/10"><input type="checkbox" className="h-7 w-7 rounded" onChange={e => {
+                                                const checked = e.target.checked;
+                                                setSelectedItems(prev => {
+                                                    const next = { ...prev };
+                                                    manualTasksFlattened.forEach(item => {
+                                                        const currentSet = new Set(next[item.docId] || []);
+                                                        if (checked) currentSet.add(item.task._id!);
+                                                        else currentSet.delete(item.task._id!);
+                                                        next[item.docId] = currentSet;
+                                                    });
+                                                    return next;
+                                                });
+                                            }} /></th>
+                                            <th className="p-8 font-black uppercase text-[14px] tracking-[0.2em] border-r border-white/10 w-80">Mission Identifier</th>
+                                            <th className="p-8 font-black uppercase text-[14px] tracking-[0.2em]">Operational Parameters</th>
+                                            <th className="p-8 font-black uppercase text-[14px] tracking-[0.2em] w-32 text-center border-l border-white/10">Units</th>
+                                            <th className="p-8 font-black uppercase text-[14px] tracking-[0.2em] w-48 text-center border-l border-white/10">Control</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-base-100 dark:divide-base-800 bg-white dark:bg-base-900">
+                                        {manualTasksFlattened.map(({ docId, id, task, index }) => (
+                                            <tr key={`${docId}_${task._id}`} className="hover:bg-indigo-50/40 transition-colors duration-300">
+                                                <td className="p-6 text-center border-r border-base-100 dark:border-base-800"><input type="checkbox" className="h-8 w-8 rounded border-2 border-indigo-200 text-indigo-600 cursor-pointer" checked={selectedItems[docId]?.has(task._id!) || false} onChange={e => handleSelectItem(docId, task._id!, e.target.checked)}/></td>
+                                                <td className="p-8 font-black text-indigo-900 dark:text-indigo-400 text-2xl tracking-tighter uppercase border-r border-base-100 dark:border-base-800">{id}</td>
+                                                <td className="p-8"><div className="flex flex-col"><span className="font-black text-2xl text-base-955 dark:text-base-50 uppercase leading-none tracking-tight">{task.Description}</span><span className="text-[12px] font-black text-base-400 mt-3 uppercase tracking-[0.3em] italic opacity-60">{task.Variant}</span></div></td>
+                                                <td className="p-8 text-center border-l border-base-100 dark:border-base-800"><span className="inline-block px-6 py-2.5 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-black rounded-2xl text-2xl shadow-inner border border-indigo-100">x{task.Quantity}</span></td>
+                                                <td className="p-8 text-center border-l border-base-100 dark:border-base-800"><div className="flex justify-center gap-4"><button onClick={() => setEditTask({ docId, index, task })} className="p-5 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-3xl text-base-400 hover:text-indigo-600 transition-all shadow-md active:scale-90"><PencilIcon className="h-7 w-7" /></button><button onClick={() => setDeleteConfirm({ docId, index, label: task.Description! })} className="p-5 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-3xl text-base-400 hover:text-red-600 transition-all shadow-md active:scale-90"><TrashIcon className="h-7 w-7" /></button></div></td>
+                                            </tr>
+                                        ))}
+                                        {manualTasksFlattened.length === 0 && (
+                                            <tr><td colSpan={5} className="py-32 text-center opacity-20"><BeakerIcon className="h-24 w-24 mx-auto mb-8" /><span className="text-3xl font-black uppercase tracking-[0.6em]">Standby - Empty Pool</span></td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : (
+                        gridData.length > 0 ? (
                             <table className="min-w-full text-xs text-left border-collapse table-fixed relative">
-                                <thead className="bg-[#0f172a] text-white sticky top-0 z-[60]">
+                                <thead className="bg-[#0a0f1e] text-white sticky top-0 z-[60]">
                                     <tr>
-                                        <th rowSpan={2} style={{ width: `${COL_DUE_WIDTH}px` }} className="px-5 py-5 font-black uppercase border-r border-white/10 sticky left-0 z-[70] bg-[#0f172a] text-center text-[10px]">Due</th>
-                                        <th rowSpan={2} style={{ width: `${COL_RID_WIDTH}px` }} className="px-5 py-5 font-black uppercase border-r-4 border-primary-500/50 sticky left-[60px] z-[70] bg-[#0f172a] text-center shadow-[12px_0_20px_-8px_rgba(0,0,0,0.5)]">ID & ITEMS</th>
-                                        {activeGridHeaders.map(([group, subKeys], i) => <th key={group} colSpan={subKeys.length} className={`px-4 py-4 font-black text-center border-b border-r border-white/10 uppercase ${HEADER_THEMES[i % HEADER_THEMES.length].headerBg}`}>{group}</th>)}
-                                        <th rowSpan={2} className="px-6 py-5 font-black uppercase bg-slate-800 w-48 text-center border-l border-white/10">Unmapped</th>
+                                        <th rowSpan={2} style={{ width: `${COL_DUE_WIDTH}px` }} className="p-5 font-black uppercase border-r border-white/5 sticky left-0 z-[70] bg-[#0a0f1e] text-center text-[10px]">Due</th>
+                                        <th rowSpan={2} style={{ width: `${COL_RID_WIDTH}px` }} className="p-5 font-black uppercase border-r-4 border-primary-500 sticky left-[60px] z-[70] bg-[#0a0f1e] text-center shadow-2xl">Request ID</th>
+                                        {gridHeaders.map(([group, subKeys], i) => {
+                                            const visibleInGroup = subKeys.filter(k => activeColumnKeys.includes(k));
+                                            return visibleInGroup.length > 0 ? ( <th key={group} colSpan={visibleInGroup.length} className={`px-4 py-6 font-black text-center border-b border-r border-white/10 uppercase tracking-[0.2em] text-[14px] ${HEADER_THEMES[i % HEADER_THEMES.length].headerBg}`}>{group}</th> ) : null;
+                                        })}
+                                        <th rowSpan={2} className="px-6 py-6 font-black uppercase bg-slate-900 w-48 text-center border-l border-white/10">Unmapped</th>
                                     </tr>
-                                    <tr>{activeGridHeaders.flatMap(([group, subKeys], i) => subKeys.map(key => <th key={key} className={`p-3 font-black text-[10px] text-center border-b border-r border-white/5 uppercase w-24 ${HEADER_THEMES[i % HEADER_THEMES.length].subHeaderBg} ${HEADER_THEMES[i % HEADER_THEMES.length].subHeaderText}`}>{key.split('|')[1]}</th>))}</tr>
+                                    <tr>{gridHeaders.flatMap(([group, subKeys], i) => subKeys.filter(k => activeColumnKeys.includes(k)).map(key => ( <th key={key} className={`p-4 font-black text-[17px] text-center border-b border-r border-white/10 uppercase w-24 shadow-inner ${HEADER_THEMES[i % HEADER_THEMES.length].subHeaderBg} ${HEADER_THEMES[i % HEADER_THEMES.length].subHeaderText}`}>{key.split('|')[1]}</th> )) )}</tr>
                                 </thead>
                                 <tbody className="divide-y-2 divide-base-100 dark:divide-base-800">
                                     {gridData.map(row => (
-                                        <tr key={row.requestId} className="hover:bg-primary-50/30 group">
-                                            <td className="p-1 border-r border-base-200 dark:border-base-800 bg-white dark:bg-[#1e293b]/20 sticky left-0 z-40 text-center">{row.minDueDate === Infinity ? '---' : <span className="font-black text-slate-900 dark:text-white">{(new Date(row.minDueDate)).getDate()}/{(new Date(row.minDueDate)).getMonth()+1}</span>}</td>
-                                            <td className="px-4 py-4 border-r-4 border-primary-500/30 bg-white dark:bg-[#111827] sticky left-[60px] z-40 shadow-[12px_0px_25px_-10px_rgba(0,0,0,0.2)]">
-                                                <div className="flex flex-col gap-1.5 min-w-0">
-                                                    <div className="flex items-center justify-between"><span className="tracking-tighter text-[15px] font-black truncate leading-none uppercase text-base-955 dark:text-base-50">{row.requestId.replace(/^RS1-/, '')}</span><span className="px-2 py-0.5 bg-base-100 dark:bg-base-800 text-[10px] font-black rounded-lg text-base-400 font-black">#{row.availableItemCount}/{row.totalItemCount}</span></div>
-                                                    <div className="flex flex-nowrap gap-1 mt-1 overflow-x-auto no-scrollbar">
-                                                        {row.isPoCat && <span className="px-1.5 py-0.5 bg-orange-500 text-white text-[7px] rounded-md uppercase font-black shrink-0">PC</span>}
-                                                        {row.isLSP && <span className="px-1.5 py-0.5 bg-cyan-600 text-white text-[7px] rounded-md uppercase font-black shrink-0">LSP</span>}
-                                                        {row.isSprint && <span className="px-1.5 py-0.5 bg-rose-500 text-white text-[7px] rounded-md uppercase font-black shrink-0">SPR</span>}
-                                                        {row.isUrgent && <span className="px-1.5 py-0.5 bg-red-600 text-white text-[7px] rounded-md uppercase font-black shrink-0">URG</span>}
-                                                        {row.isReturned && <span className="px-1.5 py-0.5 bg-amber-600 text-white text-[7px] rounded-md uppercase font-black shrink-0">RET</span>}
-                                                    </div>
+                                        <tr key={row.requestId} className="hover:bg-primary-50/20 group transition-colors duration-300">
+                                            <td className="p-1 border-r border-base-200 dark:border-base-800 bg-white dark:bg-[#1e293b]/20 sticky left-0 z-40 text-center font-black text-base-955 dark:text-white">{`${(new Date(row.minDueDate)).getDate()}/${(new Date(row.minDueDate)).getMonth()+1}`}</td>
+                                            <td className="px-6 py-6 border-r-4 border-primary-500 bg-white dark:bg-[#111827] sticky left-[60px] z-40 shadow-xl">
+                                                <div className="flex flex-col gap-2">
+                                                    <div className="flex items-center justify-between"><span className="text-[20px] font-black uppercase text-base-955 dark:text-base-50 leading-none tracking-tighter">{row.requestId.replace(/^RS1-/, '')}</span><span className="text-[11px] font-black text-base-400 bg-base-50 dark:bg-base-800 px-2 py-1 rounded-lg">#{row.availableItems}/{row.itemCount}</span></div>
+                                                    <div className="flex gap-2">{row.isPoCat && <span className="px-3 py-1 bg-orange-600 text-white text-[10px] rounded-lg uppercase font-black shadow-md">PoCat</span>}{row.isUrgent && <span className="px-3 py-1 bg-red-600 text-white text-[10px] rounded-lg uppercase font-black shadow-md">Urgent</span>}</div>
                                                 </div>
                                             </td>
-                                            {activeColumnKeys.map(header => <ExpandableCell key={header} headerKey={header} items={row.cells[header] || []} isGroupEnd={lastKeysOfGroups.has(header)} expandedCell={expandedCell} setExpandedCell={setExpandedCell} selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems} isAssigningToPrepare={isAssigningToPrepare} setNoteEditor={setNoteEditor} onInitiateDelete={(d, i, l) => setGridItemToDelete({ docId: d, index: i, label: l })} />)}
-                                            <ExpandableCell headerKey="unmapped" items={row.unmappedItems} expandedCell={expandedCell} setExpandedCell={setExpandedCell} selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems} isAssigningToPrepare={isAssigningToPrepare} setNoteEditor={setNoteEditor} onInitiateDelete={(d, i, l) => setGridItemToDelete({ docId: d, index: i, label: l })} />
+                                            {activeColumnKeys.map(header => <ExpandableCell key={header} headerKey={header} items={row.cells[header] || []} isGroupEnd={lastKeysOfGroups.has(header)} expandedCell={expandedCell} setExpandedCell={setExpandedCell} selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems} isAssigningToPrepare={isAssigningToPrepare} setNoteEditor={setNoteEditor} onInitiateDelete={(d, i, l) => setDeleteConfirm({ docId: d, index: i, label: l })} />)}
+                                            <ExpandableCell headerKey="unmapped" items={row.unmappedItems} isGroupEnd={false} expandedCell={expandedCell} setExpandedCell={setExpandedCell} selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems} isAssigningToPrepare={isAssigningToPrepare} setNoteEditor={setNoteEditor} onInitiateDelete={(d, i, l) => setDeleteConfirm({ docId: d, index: i, label: l })} />
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
-                        )}
-                        {(activeCategory === 'manual' || activeCategory === 'all') && manualGroups.length > 0 && (
-                            <div className="space-y-8 p-10 bg-purple-50/20 dark:bg-purple-900/10 min-h-full">
-                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-6 border-b border-purple-200 dark:border-purple-800">
-                                    <div className="flex items-center gap-4">
-                                        <div className="p-3 bg-purple-600 rounded-2xl shadow-lg shadow-purple-500/30"><BeakerIcon className="h-6 w-6 text-white" /></div>
-                                        <div><h3 className="text-2xl font-black uppercase tracking-tighter text-purple-900 dark:text-purple-100">Mission Template Center</h3><p className="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Recurring Deployment Templates</p></div>
-                                    </div>
-                                    <div className="relative group w-full md:w-80"><input type="text" placeholder="Search templates..." value={manualFilter} onChange={e => setManualFilter(e.target.value)} className="w-full pl-5 pr-5 py-4 bg-white dark:bg-base-800 border-2 border-purple-100 dark:border-purple-900 rounded-[1.5rem] outline-none font-black text-sm text-purple-900 dark:text-purple-100 focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 transition-all shadow-md"/></div>
-                                </div>
-
-                                <div className="flex items-center gap-2 p-2 bg-white/50 dark:bg-base-900/50 backdrop-blur-md rounded-[2.5rem] border border-white dark:border-base-800 shadow-sm shrink-0 w-fit">
-                                    {manualAvailableGroups.map(g => (
-                                        <button key={g} onClick={() => setSelectedManualSubGroup(g)} className={`px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${selectedManualSubGroup === g ? 'bg-purple-600 text-white shadow-lg' : 'text-base-500 hover:bg-white dark:hover:bg-base-800'}`}>
-                                            {g} {g !== 'all' && <span className="ml-2 px-2 py-0.5 rounded-lg bg-base-100 dark:bg-base-800 text-purple-600 text-[8px]">{categorizedTasks.filter(t => t.category === TaskCategory.Manual && t.manualGroup === g).length}</span>}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {manualGroups.map(groupName => (
-                                    <div key={groupName} className="space-y-6 animate-fade-in">
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-px flex-grow bg-purple-200 dark:bg-purple-800/40"></div>
-                                            <span className="px-5 py-1.5 bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 rounded-full text-[11px] font-black uppercase tracking-[0.3em] border border-purple-200 dark:border-purple-800 shadow-sm">{groupName}</span>
-                                            <div className="h-px flex-grow bg-purple-200 dark:bg-purple-800/40"></div>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            {manualGroupedData[groupName].map((group) => (
-                                                <div key={group.docId} className="bg-white dark:bg-base-800 border-2 border-purple-100 dark:border-purple-900/30 rounded-[2.5rem] shadow-xl flex flex-col hover:border-purple-500 transition-all duration-500 overflow-hidden group/card relative">
-                                                    <div className="px-8 py-4 bg-purple-50 dark:bg-purple-900/20 border-b border-purple-100 dark:border-purple-800 flex justify-between items-center"><span className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-[0.2em]">{group.id}</span><button onClick={() => setTemplateToDelete(group)} className="p-2 text-red-300 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"><TrashIcon className="h-4 w-4" /></button></div>
-                                                    <div className="p-8 flex-grow space-y-4">
-                                                        {group.tasks.map((t, ti) => (
-                                                            <div key={ti} className="space-y-3">
-                                                                <h4 className="text-xl font-black text-base-955 dark:text-white uppercase leading-tight line-clamp-2">{String(getTaskValue(t, 'Description'))}</h4>
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="px-3 py-1 bg-purple-600 text-white rounded-lg text-[11px] font-black shadow-md shadow-purple-500/20">QTY: {String(getTaskValue(t, 'Quantity'))}</div>
-                                                                    <div className="px-3 py-1 bg-base-100 dark:bg-base-700 text-base-500 dark:text-base-300 rounded-lg text-[11px] font-black uppercase tracking-widest border border-base-200 dark:border-base-600">Manual ID: {group.id}</div>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                    <div className="p-3 bg-base-50/50 dark:bg-base-955/50 border-t border-base-100 dark:border-base-800">
-                                                        {group.tasks.map((t, ti) => (
-                                                            <label key={t._id} className={`flex items-center justify-center gap-3 p-4 rounded-2xl cursor-pointer transition-all border-2 border-transparent ${selectedItems[group.docId!]?.has(t._id!) ? 'bg-purple-600 text-white shadow-lg' : 'bg-white dark:bg-base-800 hover:border-purple-400 text-purple-600'}`}>
-                                                                <input type="checkbox" className="h-5 w-5 rounded-lg border-2 border-purple-200 focus:ring-purple-500 text-purple-600" checked={selectedItems[group.docId!]?.has(t._id!) || false} onChange={e => handleSelectItem(group.docId!, t._id!, e.target.checked)}/>
-                                                                <span className={`text-[12px] font-black uppercase tracking-widest ${selectedItems[group.docId!]?.has(t._id!) ? 'text-white' : 'text-purple-700'}`}>{selectedItems[group.docId!]?.has(t._id!) ? 'Ready for Deployment' : 'Select for Mission'}</span>
-                                                            </label>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        {gridData.length === 0 && manualGroups.length === 0 && !isLoading && <div className="flex flex-col items-center justify-center py-32 opacity-20 text-slate-300 flex-1"><BeakerIcon className="h-24 w-24 mb-4" /><span className="text-xl font-black uppercase tracking-[0.5em]">No Missions in Queue</span></div>}
-                    </div>
-                 )}
+                        ) : (
+                            <div className="py-48 text-center opacity-10 flex flex-col items-center"><BeakerIcon className="h-32 w-32 mb-8" /><span className="text-3xl font-black uppercase tracking-[0.6em]">Fleet Standby - No Missions</span></div>
+                        )
+                    )}
+                </div>
             </div>
-            <div className="px-4 py-2 bg-base-50 dark:bg-base-955 border-t border-base-200 dark:border-base-800 text-[9px] font-bold text-base-400 text-center uppercase tracking-widest">Hierarchy: Po cat &gt; LSP &gt; Sprint &gt; Urgent &gt; Normal</div>
+            <div className="px-8 text-[10px] font-black text-base-300 text-center uppercase tracking-[0.8em] pb-3">Operational Intelligence Grid • System V2.9.4 Core</div>
         </div>
     );
 };
+
 export default TasksTab;

@@ -144,6 +144,26 @@ export const deleteAssignedTask = async (id: string): Promise<void> => {
     await getCollection('assignedTasks').doc(id).delete();
 };
 
+// --- Quality History (Resolution Log) ---
+export const logResolutionEntries = async (entries: any[]): Promise<void> => {
+    if (!firestore || entries.length === 0) return;
+    const batch = firestore.batch();
+    const collection = getCollection('resolutionHistory');
+    entries.forEach(entry => {
+        batch.set(collection.doc(), {
+            ...entry,
+            timestamp: new Date().toISOString()
+        });
+    });
+    await batch.commit();
+};
+
+export const getResolutionHistory = async (): Promise<any[]> => {
+    if (!firestore) return [];
+    const snapshot = await safeGet(getCollection('resolutionHistory').orderBy('timestamp', 'desc'));
+    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+};
+
 // --- Prepare Task Management ---
 export const getAssignedPrepareTasks = async (): Promise<AssignedPrepareTask[]> => {
     if (!firestore) throw new Error("Database not initialized");
@@ -168,11 +188,7 @@ export const assignItemsToPrepare = async (
 ) => {
     const itemsToAssign = indicesToAssign.map(index => {
          let item = { ...originalTask.tasks[index] } as RawTask;
-         
-         // CRITICAL: When re-assigning for preparation, we must wipe ALL previous history flags
-         // including return reasons and previous statuses to ensure the Assistant gets a clean task.
          const { status, notOkReason, isReturned, returnReason, returnedBy, preparationStatus: oldPrep, ...cleanItem } = item;
-         
          const freshItem = { ...cleanItem } as RawTask;
          if (originalTask.category === TaskCategory.Manual) {
              freshItem._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -194,11 +210,9 @@ export const assignItemsToPrepare = async (
     };
     await getCollection('assignedPrepareTasks').add(prepareTaskPayload);
 
-    // Update pool status so other planners see it's in prep
     if (originalTask.category !== TaskCategory.Manual) {
         const updatedTasks = originalTask.tasks.map((task, index) => {
             if (indicesToAssign.includes(index)) {
-                // Clear return flags from pool task too
                 const { isReturned, returnReason, returnedBy, ...rest } = task;
                 return { ...rest, preparationStatus: 'Awaiting Preparation' } as RawTask;
             }
@@ -214,7 +228,6 @@ export const markItemAsPrepared = async (prepTask: AssignedPrepareTask, itemInde
     if (!targetItem) return;
     
     targetItem.preparationStatus = 'Prepared';
-    // Ensure clean state when prepared
     delete targetItem.isReturned;
     delete targetItem.returnReason;
     delete targetItem.returnedBy;
@@ -228,27 +241,18 @@ export const markItemAsPrepared = async (prepTask: AssignedPrepareTask, itemInde
                 const data = originalDoc.data() as CategorizedTask;
                 const originalTasks = [...data.tasks];
                 let foundIndex = -1;
-                
-                if (targetItem._id) {
-                    foundIndex = originalTasks.findIndex(t => t._id === targetItem._id);
-                } 
+                if (targetItem._id) foundIndex = originalTasks.findIndex(t => t._id === targetItem._id);
                 if (foundIndex === -1 && prepTask.originalIndices && prepTask.originalIndices[itemIndex] !== undefined) {
                     const idx = prepTask.originalIndices[itemIndex];
                     if (originalTasks[idx]) foundIndex = idx;
                 }
-
                 if (foundIndex !== -1) {
                     const { isReturned, returnReason, returnedBy, ...rest } = originalTasks[foundIndex];
-                    originalTasks[foundIndex] = { 
-                        ...rest, 
-                        preparationStatus: 'Ready for Testing' 
-                    } as RawTask;
+                    originalTasks[foundIndex] = { ...rest, preparationStatus: 'Ready for Testing' } as RawTask;
                     await getCollection('categorizedTasks').doc(prepTask.originalDocId).update({ tasks: originalTasks });
                 }
             }
-        } catch (e) {
-            console.error(e);
-        }
+        } catch (e) { console.error(e); }
     }
 };
 
@@ -267,26 +271,17 @@ export const resetItemPreparation = async (prepTask: AssignedPrepareTask, itemIn
                 const data = originalDoc.data() as CategorizedTask;
                 const originalTasks = [...data.tasks];
                 let foundIndex = -1;
-                
-                if (targetItem._id) {
-                    foundIndex = originalTasks.findIndex(t => t._id === targetItem._id);
-                } 
+                if (targetItem._id) foundIndex = originalTasks.findIndex(t => t._id === targetItem._id);
                 if (foundIndex === -1 && prepTask.originalIndices && prepTask.originalIndices[itemIndex] !== undefined) {
                     const idx = prepTask.originalIndices[itemIndex];
                     if (originalTasks[idx]) foundIndex = idx;
                 }
-
                 if (foundIndex !== -1) {
-                    originalTasks[foundIndex] = { 
-                        ...originalTasks[foundIndex], 
-                        preparationStatus: 'Awaiting Preparation' 
-                    } as RawTask;
+                    originalTasks[foundIndex] = { ...originalTasks[foundIndex], preparationStatus: 'Awaiting Preparation' } as RawTask;
                     await getCollection('categorizedTasks').doc(prepTask.originalDocId).update({ tasks: originalTasks });
                 }
             }
-        } catch (e) {
-            console.error(e);
-        }
+        } catch (e) { console.error(e); }
     }
 };
 
@@ -298,6 +293,50 @@ export const unassignTaskToPool = async (categorizedTask: CategorizedTask): Prom
     });
     const payload = { ...cleanBase, tasks: cleanTasks, returnReason: null, returnedBy: null, isReturnedPool: false };
     await getCollection('categorizedTasks').add(payload);
+};
+
+// FORCE RECALL: Pulls a task back from an assignment and makes it available in the pool
+export const forceRecallTask = async (taskId: string) => {
+    const batch = firestore.batch();
+    
+    // 1. Find and remove from Assigned Tasks (Analyst)
+    const assignedSnapshot = await getCollection('assignedTasks').get();
+    assignedSnapshot.forEach((doc: any) => {
+        const data = doc.data() as AssignedTask;
+        const taskIdx = data.tasks.findIndex(t => t._id === taskId);
+        if (taskIdx !== -1) {
+            const remaining = data.tasks.filter(t => t._id !== taskId);
+            if (remaining.length === 0) batch.delete(doc.ref);
+            else batch.update(doc.ref, { tasks: remaining });
+        }
+    });
+
+    // 2. Find and remove from Prepare Tasks (Assistant)
+    const prepareSnapshot = await getCollection('assignedPrepareTasks').get();
+    prepareSnapshot.forEach((doc: any) => {
+        const data = doc.data() as AssignedPrepareTask;
+        const taskIdx = data.tasks.findIndex(t => t._id === taskId);
+        if (taskIdx !== -1) {
+            const remaining = data.tasks.filter(t => t._id !== taskId);
+            if (remaining.length === 0) batch.delete(doc.ref);
+            else batch.update(doc.ref, { tasks: remaining });
+        }
+    });
+
+    // 3. Clean up status in the deployment pool
+    const poolSnapshot = await getCollection('categorizedTasks').get();
+    poolSnapshot.forEach((doc: any) => {
+        const data = doc.data() as CategorizedTask;
+        const taskIdx = data.tasks.findIndex(t => t._id === taskId);
+        if (taskIdx !== -1) {
+            const updated = [...data.tasks];
+            const { status, notOkReason, preparationStatus, ...cleanTask } = updated[taskIdx];
+            updated[taskIdx] = cleanTask as RawTask;
+            batch.update(doc.ref, { tasks: updated });
+        }
+    });
+
+    await batch.commit();
 };
 
 export const getShiftReport = async (date: string, shift: 'day' | 'night'): Promise<ShiftReport | null> => {
