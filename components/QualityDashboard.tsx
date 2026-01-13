@@ -56,48 +56,58 @@ const QualityDashboard: React.FC<{ onResolve: () => void }> = ({ onResolve }) =>
         fetchData();
     }, []);
 
+    // Statistics for the Chart - Total counts per person
+    const statsByAnalyst = useMemo(() => {
+        const stats: Record<string, number> = {};
+        allAssigned.forEach(doc => {
+            const notOkCount = (doc.tasks || []).filter(t => t.status === TaskStatus.NotOK).length;
+            if (notOkCount > 0) {
+                stats[doc.testerName] = (stats[doc.testerName] || 0) + notOkCount;
+            }
+        });
+        return Object.entries(stats).sort((a, b) => b[1] - a[1]);
+    }, [allAssigned]);
+
     const groupedData: GroupedByRequest[] = useMemo(() => {
         const groups: Record<string, GroupedByRequest> = {};
         const searchLower = searchAnalyst.toLowerCase().trim();
         
         allAssigned.forEach(doc => {
-            // Check if the analyst name matches the search
+            // Check if this document belongs to the filtered analyst
             const analystMatch = !searchLower || doc.testerName.toLowerCase().includes(searchLower);
             
-            if (analystMatch) {
-                (doc.tasks || []).forEach((t, idx) => {
-                    if (t.status === TaskStatus.NotOK) {
-                        if (!groups[doc.requestId]) {
-                            groups[doc.requestId] = {
-                                requestId: doc.requestId,
-                                earliestDate: doc.assignedDate,
-                                category: doc.category,
-                                tasksByDescription: {},
-                                allTasks: []
-                            };
-                        }
-                        
-                        const desc = String(t.Description || 'General Task');
-                        if (!groups[doc.requestId].tasksByDescription[desc]) {
-                            groups[doc.requestId].tasksByDescription[desc] = [];
-                        }
-                        
-                        const item: FlattenedNotOkTask = {
-                            docId: doc.id,
-                            originalDoc: doc,
-                            task: t,
-                            taskIndex: idx
+            (doc.tasks || []).forEach((t, idx) => {
+                if (t.status === TaskStatus.NotOK && analystMatch) {
+                    if (!groups[doc.requestId]) {
+                        groups[doc.requestId] = {
+                            requestId: doc.requestId,
+                            earliestDate: doc.assignedDate,
+                            category: doc.category,
+                            tasksByDescription: {},
+                            allTasks: []
                         };
-
-                        groups[doc.requestId].tasksByDescription[desc].push(item);
-                        groups[doc.requestId].allTasks.push(item);
-                        
-                        if (doc.assignedDate < groups[doc.requestId].earliestDate) {
-                            groups[doc.requestId].earliestDate = doc.assignedDate;
-                        }
                     }
-                });
-            }
+                    
+                    const desc = String(t.Description || 'General Task');
+                    if (!groups[doc.requestId].tasksByDescription[desc]) {
+                        groups[doc.requestId].tasksByDescription[desc] = [];
+                    }
+                    
+                    const item: FlattenedNotOkTask = {
+                        docId: doc.id,
+                        originalDoc: doc,
+                        task: t,
+                        taskIndex: idx
+                    };
+
+                    groups[doc.requestId].tasksByDescription[desc].push(item);
+                    groups[doc.requestId].allTasks.push(item);
+                    
+                    if (doc.assignedDate < groups[doc.requestId].earliestDate) {
+                        groups[doc.requestId].earliestDate = doc.assignedDate;
+                    }
+                }
+            });
         });
         
         return Object.values(groups).sort((a, b) => a.earliestDate.localeCompare(b.earliestDate));
@@ -106,7 +116,6 @@ const QualityDashboard: React.FC<{ onResolve: () => void }> = ({ onResolve }) =>
     const handleBatchResolve = async (targets: FlattenedNotOkTask[]) => {
         try {
             const byDocId: Record<string, { originalDoc: AssignedTask, indicesToRemove: number[] }> = {};
-            
             targets.forEach(t => {
                 if (!byDocId[t.docId]) {
                     byDocId[t.docId] = { originalDoc: t.originalDoc, indicesToRemove: [] };
@@ -117,7 +126,6 @@ const QualityDashboard: React.FC<{ onResolve: () => void }> = ({ onResolve }) =>
             for (const docId in byDocId) {
                 const { originalDoc, indicesToRemove } = byDocId[docId];
                 const updatedTasks = originalDoc.tasks.filter((_, idx) => !indicesToRemove.includes(idx));
-                
                 if (updatedTasks.length > 0) {
                     await updateAssignedTask(originalDoc.id, { tasks: updatedTasks });
                 } else {
@@ -125,11 +133,11 @@ const QualityDashboard: React.FC<{ onResolve: () => void }> = ({ onResolve }) =>
                 }
             }
             
-            setNotification({ message: "Incident(s) resolved." });
+            setNotification({ message: "Incident resolved." });
             fetchData();
             onResolve();
         } catch (e) {
-            setNotification({ message: "Sync error.", isError: true });
+            setNotification({ message: "Update failed.", isError: true });
         } finally {
             setConfirmModal({ isOpen: false, targetItems: null, title: '', description: '' });
         }
@@ -137,9 +145,10 @@ const QualityDashboard: React.FC<{ onResolve: () => void }> = ({ onResolve }) =>
 
     const formatDate = (dateStr: string) => {
         if (!dateStr) return 'N/A';
-        const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: '2-digit' };
-        return new Date(dateStr).toLocaleDateString('en-GB', options);
+        return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
     };
+
+    const maxIncidents = Math.max(...statsByAnalyst.map(s => s[1]), 1);
 
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] space-y-4 p-4 animate-slide-in-up relative overflow-hidden bg-base-50/10 dark:bg-transparent font-sans">
@@ -152,175 +161,194 @@ const QualityDashboard: React.FC<{ onResolve: () => void }> = ({ onResolve }) =>
 
             {/* Confirmation Modal */}
             {confirmModal.isOpen && confirmModal.targetItems && (
-                <div className="fixed inset-0 bg-base-900/95 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-fade-in" onClick={() => setConfirmModal({ isOpen: false, targetItems: null, title: '', description: '' })}>
+                <div className="fixed inset-0 bg-base-900/90 backdrop-blur-xl flex items-center justify-center z-[200] p-4 animate-fade-in" onClick={() => setConfirmModal({ isOpen: false, targetItems: null, title: '', description: '' })}>
                     <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-md overflow-hidden p-10 text-center space-y-6 border border-white/20" onClick={e => e.stopPropagation()}>
                         <div className="w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto shadow-inner bg-emerald-50 text-emerald-600">
                             <CheckCircleIcon className="h-10 w-10" />
                         </div>
                         <div>
-                            <h3 className="text-2xl font-black text-base-955 dark:text-white uppercase tracking-tighter leading-none">{confirmModal.title}</h3>
+                            <h3 className="text-2xl font-black text-base-900 dark:text-white uppercase tracking-tighter leading-none">{confirmModal.title}</h3>
                             <p className="text-base-500 mt-4 text-[15px] font-bold leading-relaxed px-2">
-                                ยืนยันการปิดงาน <span className="text-emerald-600 font-black">"{confirmModal.description}"</span><br/>
-                                ตรวจสอบแล้วว่าปัญหาได้รับการแก้ไขจริง?
+                                ยืนยันการปิดงานค้างสำหรับ <span className="text-emerald-600 font-black">"{confirmModal.description}"</span><br/>
+                                รายการนี้จะถูกลบออกจากกระดานงานค้าง
                             </p>
                         </div>
                         <div className="flex flex-col gap-2 pt-4">
-                            <button 
-                                onClick={() => handleBatchResolve(confirmModal.targetItems!)}
-                                className="w-full py-5 bg-emerald-600 border-emerald-800 text-white font-black rounded-2xl shadow-xl uppercase text-[11px] tracking-widest border-b-4 hover:bg-emerald-700 active:scale-95 transition-all"
-                            >
-                                Confirm & Resolve
-                            </button>
-                            <button onClick={() => setConfirmModal({ isOpen: false, targetItems: null, title: '', description: '' })} className="w-full py-3 text-[10px] font-black text-base-400 hover:text-base-800 uppercase tracking-widest">Keep for Investigation</button>
+                            <button onClick={() => handleBatchResolve(confirmModal.targetItems!)} className="w-full py-5 bg-emerald-600 border-emerald-800 text-white font-black rounded-2xl shadow-xl uppercase text-[11px] tracking-widest border-b-4 hover:bg-emerald-700 active:scale-95 transition-all">Confirm & Resolve</button>
+                            <button onClick={() => setConfirmModal({ isOpen: false, targetItems: null, title: '', description: '' })} className="w-full py-3 text-[10px] font-black text-base-400 hover:text-base-800 uppercase tracking-widest">Cancel</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Compact Top Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center px-4 shrink-0 gap-4">
-                <div>
-                    <h2 className="text-3xl font-black text-base-955 dark:text-base-50 tracking-tighter uppercase leading-none">Quality Intelligence</h2>
-                    <p className="text-base-400 font-black uppercase tracking-[0.4em] text-[9px] mt-1.5">Mission Critical Failure Stream</p>
-                </div>
-                
-                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                    {/* Analyst Search Box */}
-                    <div className="relative group flex-grow md:flex-none md:w-64">
-                        <input 
-                            type="text" 
-                            placeholder="Filter by Analyst name..." 
-                            value={searchAnalyst}
-                            onChange={e => setSearchAnalyst(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-base-900 border-2 border-base-100 dark:border-base-800 rounded-2xl outline-none font-black text-xs focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all shadow-sm"
-                        />
-                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base-300 group-focus-within:text-primary-500 transition-colors">
-                            <UserGroupIcon className="h-4 w-4" />
-                        </div>
-                        {searchAnalyst && (
-                            <button onClick={() => setSearchAnalyst('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-base-300 hover:text-red-500">
-                                <XCircleIcon className="h-4 w-4" />
-                            </button>
-                        )}
+            {/* Top Dashboard: Stats & Chart */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 shrink-0">
+                <div className="xl:col-span-4 bg-white dark:bg-base-900 rounded-[2.5rem] p-6 border border-base-200 dark:border-base-800 shadow-xl flex flex-col justify-between">
+                    <div>
+                        <h2 className="text-3xl font-black text-base-900 dark:text-base-50 tracking-tighter uppercase leading-none">Quality Hub</h2>
+                        <p className="text-base-400 font-black uppercase tracking-[0.4em] text-[9px] mt-1.5">Deviation Stream Management</p>
                     </div>
 
-                    <div className="px-5 py-2.5 bg-white dark:bg-base-900 border border-base-100 dark:border-base-800 rounded-2xl shadow-sm flex items-center gap-4">
-                        <div className="flex flex-col items-end">
-                            <span className="text-[8px] font-black text-base-400 uppercase tracking-widest">Found Failures</span>
-                            <span className="text-xl font-black text-red-600 leading-none">
-                                {groupedData.reduce((acc, g) => acc + g.allTasks.length, 0)}
-                            </span>
+                    <div className="mt-6 space-y-4">
+                        <div className="relative group">
+                            <input 
+                                type="text" 
+                                placeholder="Filter by Analyst..." 
+                                value={searchAnalyst}
+                                onChange={e => setSearchAnalyst(e.target.value)}
+                                className="w-full pl-10 pr-10 py-3 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-black text-xs focus:ring-4 focus:ring-primary-500/10 transition-all shadow-inner"
+                            />
+                            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base-300 group-focus-within:text-primary-500 transition-colors"><UserGroupIcon className="h-4 w-4" /></div>
+                            {searchAnalyst && (
+                                <button onClick={() => setSearchAnalyst('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-base-400 hover:text-red-500 transition-colors">
+                                    <XCircleIcon className="h-4 w-4" />
+                                </button>
+                            )}
                         </div>
-                        <div className="p-1.5 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-500"><AlertTriangleIcon className="h-5 w-5" /></div>
+                        <div className="flex items-center justify-between px-2">
+                             <div className="flex items-center gap-2">
+                                <AlertTriangleIcon className="h-5 w-5 text-red-600" />
+                                <span className="text-[10px] font-black text-base-400 uppercase tracking-widest">Active Incidents</span>
+                             </div>
+                             <span className="text-3xl font-black text-red-600 leading-none">{groupedData.reduce((acc, g) => acc + g.allTasks.length, 0)}</span>
+                        </div>
                     </div>
-                    
-                    <button onClick={fetchData} className="p-3.5 bg-white dark:bg-base-800 border border-base-200 dark:border-base-700 rounded-2xl text-base-400 hover:text-primary-600 transition-all shadow-sm">
-                        <RefreshIcon className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
-                    </button>
+                </div>
+
+                <div className="xl:col-span-8 bg-white dark:bg-base-900 rounded-[2.5rem] p-6 border border-base-200 dark:border-base-800 shadow-xl overflow-hidden flex flex-col">
+                    <div className="flex justify-between items-center mb-4 px-2">
+                        <div className="flex items-center gap-3">
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-base-400">Workload Chart (Click to Filter)</h3>
+                            {searchAnalyst && <span className="px-2 py-0.5 bg-primary-100 text-primary-700 text-[8px] font-black rounded-full uppercase tracking-widest animate-pulse">Filtering: {searchAnalyst}</span>}
+                        </div>
+                        <button onClick={fetchData} className="p-2 text-base-300 hover:text-primary-600 transition-colors"><RefreshIcon className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} /></button>
+                    </div>
+                    <div className="flex-grow overflow-x-auto no-scrollbar pb-2">
+                        <div className="flex items-end gap-5 h-full min-w-max px-4">
+                            {statsByAnalyst.slice(0, 15).map(([name, count]) => {
+                                const isCurrentFilter = searchAnalyst && name.toLowerCase().includes(searchAnalyst.toLowerCase());
+                                return (
+                                    <div 
+                                        key={name} 
+                                        onClick={() => setSearchAnalyst(isCurrentFilter ? '' : name)}
+                                        className="flex flex-col items-center group w-20 cursor-pointer"
+                                    >
+                                        <div className="relative w-full flex flex-col items-center">
+                                            {/* Data Label on top of bar */}
+                                            <span className={`text-[12px] font-black mb-1.5 transition-all ${isCurrentFilter ? 'text-primary-600 scale-125' : 'text-red-600 group-hover:scale-110'}`}>
+                                                {count}
+                                            </span>
+                                            <div 
+                                                className={`w-12 rounded-t-2xl transition-all duration-500 shadow-lg ${isCurrentFilter ? 'bg-gradient-to-t from-primary-700 to-primary-500 shadow-primary-500/40' : 'bg-red-500/30 dark:bg-red-900/20 group-hover:bg-red-500/50'}`}
+                                                style={{ height: `${(count / maxIncidents) * 110 + 10}px`, minHeight: '12px' }}
+                                            ></div>
+                                        </div>
+                                        {/* Analyst Name Label */}
+                                        <span className={`mt-3 text-[11px] font-black uppercase tracking-tight truncate w-full text-center py-1 rounded-lg transition-colors ${isCurrentFilter ? 'text-white bg-primary-600 px-2' : 'text-base-500 dark:text-base-400 group-hover:text-base-900 dark:group-hover:text-white'}`}>
+                                            {name.split(' ')[0]}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                            {statsByAnalyst.length === 0 && (
+                                <div className="h-full w-full flex items-center justify-center opacity-10 font-black uppercase tracking-[0.5em] text-base-400">Zero Failures Detected</div>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Content Area */}
-            <div className="flex-grow min-h-0 bg-white dark:bg-base-900 rounded-[3rem] border border-base-200 dark:border-base-800 shadow-xl overflow-hidden flex flex-col backdrop-blur-xl">
+            {/* List Content: Grouped by Request ID */}
+            <div className="flex-grow min-h-0 bg-white dark:bg-base-900 rounded-[3rem] border border-base-200 dark:border-base-800 shadow-2xl overflow-hidden flex flex-col backdrop-blur-xl">
                 {isLoading ? (
                     <div className="flex-grow flex items-center justify-center"><RefreshIcon className="h-12 w-12 animate-spin text-primary-200" /></div>
                 ) : groupedData.length === 0 ? (
                     <div className="flex-grow flex flex-col items-center justify-center opacity-10 text-center py-20">
                         <CheckCircleIcon className="h-32 w-32 mb-6 text-emerald-500" />
-                        <span className="text-2xl font-black uppercase tracking-[0.5em] text-base-400">
-                            {searchAnalyst ? 'No tasks for this Analyst' : 'All Systems Clear'}
-                        </span>
+                        <span className="text-2xl font-black uppercase tracking-[0.5em] text-base-400">Clear System</span>
                     </div>
                 ) : (
-                    <div className="flex-grow overflow-y-auto no-scrollbar p-6 space-y-8">
+                    <div className="flex-grow overflow-y-auto no-scrollbar p-6 space-y-12">
                         {groupedData.map((reqGroup) => (
-                            <div key={reqGroup.requestId} className="bg-base-50/20 dark:bg-base-955/20 border border-base-100 dark:border-base-800 rounded-[2.5rem] shadow-sm overflow-hidden animate-fade-in group">
-                                {/* Request Row Header */}
-                                <div className="px-8 py-5 bg-white dark:bg-base-900 border-b border-base-100 dark:border-base-800 flex justify-between items-center">
-                                    <div className="flex items-center gap-5">
-                                        <div className="w-12 h-12 rounded-[1.2rem] bg-primary-600 flex items-center justify-center text-white shadow-lg">
-                                            <BeakerIcon className="h-6 w-6" />
+                            <div key={reqGroup.requestId} className="space-y-4 animate-fade-in">
+                                {/* Header Section for Request ID - Using high contrast slate-900 */}
+                                <div className="flex items-center gap-4 px-8 py-5 bg-slate-900 text-white rounded-[2.5rem] shadow-2xl border border-slate-800">
+                                    <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center shadow-lg"><BeakerIcon className="h-6 w-6 text-white" /></div>
+                                    <div className="flex-grow">
+                                        <div className="flex items-center gap-4">
+                                            <h3 className="text-2xl font-black uppercase tracking-tighter leading-none">{reqGroup.requestId}</h3>
+                                            <span className="px-3 py-1 bg-red-600 text-white rounded-lg font-black text-[10px] uppercase shadow-lg shadow-red-500/20">{reqGroup.allTasks.length} FAILURES</span>
                                         </div>
-                                        <div>
-                                            <h3 className="text-xl font-black text-base-955 dark:text-white uppercase tracking-tight leading-none">{reqGroup.requestId}</h3>
-                                            <div className="flex items-center gap-3 mt-2">
-                                                <span className="text-[9px] font-black text-base-400 uppercase tracking-widest bg-base-50 dark:bg-base-800 px-2 py-0.5 rounded border border-base-100 dark:border-base-700">CAT: {reqGroup.category}</span>
-                                                <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1.5">
-                                                    <CalendarIcon className="h-3 w-3" /> {formatDate(reqGroup.earliestDate)}
-                                                </span>
-                                            </div>
+                                        <div className="flex items-center gap-4 mt-2">
+                                            <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">CAT: {reqGroup.category}</span>
+                                            <div className="w-1 h-1 rounded-full bg-white/20"></div>
+                                            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] flex items-center gap-2"><CalendarIcon className="h-3 w-3" /> First Incident: {formatDate(reqGroup.earliestDate)}</span>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
-                                        <div className="px-4 py-2 bg-red-50 dark:bg-red-950/30 text-red-600 rounded-xl font-black text-[11px] uppercase border border-red-100 dark:border-red-900/50">
-                                            {reqGroup.allTasks.length} Pending Actions
-                                        </div>
-                                    </div>
+                                    <button 
+                                        onClick={() => setConfirmModal({ isOpen: true, targetItems: reqGroup.allTasks, title: 'Close Entire Request?', description: reqGroup.requestId })}
+                                        className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all border border-white/10"
+                                    >
+                                        Resolve All ({reqGroup.allTasks.length})
+                                    </button>
                                 </div>
 
-                                {/* Test Groups within Request */}
-                                <div className="p-6 space-y-8">
+                                <div className="space-y-10 pl-6">
                                     {Object.entries(reqGroup.tasksByDescription).map(([description, items]) => (
                                         <div key={description} className="space-y-4">
-                                            <div className="flex justify-between items-center px-2">
+                                            <div className="flex justify-between items-center px-4 py-2.5 border-l-4 border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 rounded-r-2xl">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-1.5 h-6 bg-emerald-500 rounded-full"></div>
-                                                    <h4 className="text-base font-black text-base-955 dark:text-base-100 uppercase tracking-tight">{description}</h4>
-                                                    <span className="px-2 py-0.5 bg-base-100 dark:bg-base-800 text-[10px] font-black text-base-400 rounded-lg">{items.length} units</span>
+                                                    <h4 className="text-base font-black text-emerald-900 dark:text-emerald-100 uppercase tracking-tight">{description}</h4>
+                                                    <span className="px-2 py-0.5 bg-white dark:bg-base-800 text-[10px] font-bold text-emerald-600 rounded-lg shadow-sm border border-emerald-100 dark:border-emerald-700">{items.length} units</span>
                                                 </div>
                                                 <button 
-                                                    onClick={() => setConfirmModal({ isOpen: true, targetItems: items, title: 'Resolve Category?', description: description })}
-                                                    className="px-6 py-2 bg-emerald-600 text-white font-black rounded-xl text-[10px] uppercase tracking-[0.1em] hover:brightness-110 shadow-lg shadow-emerald-500/20 border-b-4 border-emerald-800 transition-all active:scale-95"
+                                                    onClick={() => setConfirmModal({ isOpen: true, targetItems: items, title: 'Resolve Test Group?', description })}
+                                                    className="text-[10px] font-black uppercase text-emerald-600 hover:text-emerald-700 tracking-widest px-4 py-1.5 bg-white dark:bg-base-800 rounded-xl shadow-sm border border-emerald-100 dark:border-emerald-700 hover:scale-105 active:scale-95 transition-all"
                                                 >
-                                                    Resolve Category Group
+                                                    Resolve Group
                                                 </button>
                                             </div>
 
-                                            {/* Item Cards Grid */}
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                            <div className="space-y-2 px-2">
                                                 {items.map((it, idx) => (
-                                                    <div key={idx} className="group/item relative bg-white dark:bg-base-900 border-2 border-base-100 dark:border-base-800 rounded-[1.8rem] p-5 flex flex-col gap-4 hover:border-emerald-300 dark:hover:border-emerald-900/50 transition-all shadow-md">
-                                                        <div className="flex justify-between items-start">
-                                                            <div className="min-w-0">
-                                                                <span className="text-[10px] font-black text-base-400 uppercase tracking-widest block mb-1">Sample Name</span>
-                                                                <span className="text-[15px] font-black text-base-955 dark:text-base-50 uppercase truncate block leading-none">{String(it.task['Sample Name'] || 'N/A')}</span>
-                                                            </div>
-                                                            <button 
-                                                                onClick={() => setConfirmModal({ isOpen: true, targetItems: [it], title: 'Resolve Single Unit?', description: String(it.task['Sample Name'] || description) })}
-                                                                className="p-3 bg-base-50 dark:bg-base-800 text-base-300 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950 rounded-2xl transition-all shadow-sm border border-transparent hover:border-emerald-100"
-                                                                title="Clear this unit"
-                                                            >
-                                                                <CheckCircleIcon className="h-5 w-5" />
-                                                            </button>
-                                                        </div>
-
-                                                        {/* Prominent Analyst Display */}
-                                                        <div className="flex items-center gap-3 bg-primary-50 dark:bg-primary-900/20 p-3 rounded-2xl border border-primary-100 dark:border-primary-800/50">
-                                                            <div className="w-9 h-9 rounded-xl bg-primary-600 text-white flex items-center justify-center text-[12px] font-black shadow-lg">
-                                                                {it.originalDoc.testerName.charAt(0)}
+                                                    <div key={idx} className="group/row flex items-center gap-5 bg-white dark:bg-base-800/40 border-2 border-base-100 dark:border-base-700 p-5 rounded-3xl hover:border-red-300 dark:hover:border-red-900 transition-all shadow-md">
+                                                        <div className="flex items-center gap-4 w-64 shrink-0 border-r-2 border-base-100 dark:border-base-700 pr-4">
+                                                            <div className="w-11 h-11 rounded-2xl bg-primary-600 flex items-center justify-center text-white font-black text-[14px] shadow-lg">
+                                                                {it.originalDoc.testerName.charAt(0).toUpperCase()}
                                                             </div>
                                                             <div className="min-w-0">
-                                                                <span className="text-[8px] font-black text-primary-500 uppercase tracking-[0.2em] block">Assigned Analyst</span>
-                                                                <span className="text-[13px] font-black text-primary-955 dark:text-primary-300 uppercase truncate block leading-none mt-0.5">{it.originalDoc.testerName}</span>
+                                                                <span className="text-[9px] font-black text-primary-500 uppercase tracking-[0.2em] block mb-0.5">Analyst</span>
+                                                                <span className="text-[15px] font-black text-base-900 dark:text-primary-300 uppercase truncate block leading-none">{it.originalDoc.testerName}</span>
+                                                                <span className="text-[9px] font-bold text-base-400 uppercase tracking-widest mt-1.5 block">{formatDate(it.originalDoc.assignedDate)} • {it.originalDoc.shift.toUpperCase()}</span>
                                                             </div>
                                                         </div>
 
-                                                        <div className="bg-red-50/50 dark:bg-red-955/10 px-4 py-3 rounded-2xl border border-red-100 dark:border-red-900/30 relative overflow-hidden">
-                                                            <div className="flex items-center gap-2 mb-1.5">
-                                                                <AlertTriangleIcon className="h-3 w-3 text-red-500" />
-                                                                <span className="text-[9px] font-black text-red-600 uppercase tracking-widest">Failure Report</span>
+                                                        <div className="w-72 shrink-0 px-2">
+                                                            <span className="text-[10px] font-black text-base-400 uppercase tracking-widest block mb-1">Sample</span>
+                                                            <span className="text-[17px] font-black text-base-900 dark:text-base-50 uppercase truncate block leading-tight">{String(it.task['Sample Name'] || 'N/A')}</span>
+                                                            <div className="flex gap-2 mt-2">
+                                                                <span className="text-[9px] font-black text-base-500 uppercase tracking-widest bg-base-50 dark:bg-base-900 px-2 py-0.5 rounded-lg border border-base-100 dark:border-base-700">V: {String(it.task.Variant || '-')}</span>
+                                                                <span className="text-[9px] font-black text-base-500 uppercase tracking-widest bg-base-50 dark:bg-base-900 px-2 py-0.5 rounded-lg border border-base-100 dark:border-base-700">Q: {String(it.task.Quantity || '1')}</span>
                                                             </div>
-                                                            <p className="text-[13px] font-bold text-red-955 dark:text-red-100 leading-snug italic line-clamp-2">
-                                                                "{it.task.notOkReason || 'Unknown error.'}"
+                                                        </div>
+
+                                                        <div className="flex-grow bg-red-50 dark:bg-red-900/10 px-6 py-3.5 rounded-3xl border border-red-100 dark:border-red-900/30 relative overflow-hidden group-hover/row:bg-red-100 transition-colors">
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <AlertTriangleIcon className="h-3.5 w-3.5 text-red-500" />
+                                                                <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.3em]">Failure Reason</span>
+                                                            </div>
+                                                            <p className="text-[14px] font-bold text-red-900 dark:text-red-100 leading-snug italic" title={it.task.notOkReason || ''}>
+                                                                "{it.task.notOkReason || 'No specific reason reported.'}"
                                                             </p>
                                                         </div>
 
-                                                        <div className="flex justify-between items-center pt-1 px-1 border-t border-base-50 dark:border-base-800 pt-3 mt-auto">
-                                                            <div className="flex gap-3 text-[9px] font-black text-base-400 uppercase tracking-widest">
-                                                                <span className="text-indigo-500">{String(it.task.Variant || '-')}</span>
-                                                                <span className="text-base-300">QTY: {String(it.task.Quantity || '1')}</span>
-                                                            </div>
-                                                            <span className="text-[8px] font-black text-base-200 uppercase tracking-[0.2em]">{it.task._id?.slice(-6).toUpperCase()}</span>
+                                                        <div className="shrink-0 pl-3">
+                                                            <button 
+                                                                onClick={() => setConfirmModal({ isOpen: true, targetItems: [it], title: 'Resolve Specific Item?', description: String(it.task['Sample Name'] || description) })}
+                                                                className="w-14 h-14 bg-base-50 dark:bg-base-700 text-base-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900 rounded-[1.2rem] transition-all shadow-sm border-2 border-transparent hover:border-emerald-100 flex items-center justify-center group/btn"
+                                                            >
+                                                                <CheckCircleIcon className="h-7 w-7 group-hover/btn:scale-110 transition-transform" />
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 ))}
@@ -333,7 +361,7 @@ const QualityDashboard: React.FC<{ onResolve: () => void }> = ({ onResolve }) =>
                     </div>
                 )}
             </div>
-            <div className="px-6 text-[9px] font-black text-base-300 text-center uppercase tracking-[0.5em] pb-2">Operational Integrity Matrix • Final Quality Clearance Stream</div>
+            <div className="px-8 text-[9px] font-black text-base-300 text-center uppercase tracking-[0.6em] pb-1">Quality Intelligence Network • Operational Integrity Assurance</div>
         </div>
     );
 };
