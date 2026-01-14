@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ImportTab from './components/ImportTab';
 import TasksTab from './components/TasksTab';
 import RosterTab from './components/RosterTab';
@@ -11,7 +11,8 @@ import QualityDashboard from './components/QualityDashboard';
 import { getTesters, getAssignedTasks } from './services/dataService';
 import type { Tester, AssignedTask } from './types';
 import { TaskStatus } from './types';
-import { DatabaseIcon, UploadIcon, ClipboardListIcon, CalendarIcon, CogIcon, BeakerIcon, AlertTriangleIcon } from './components/common/Icons';
+// Import RefreshIcon from common icons to fix the 'Cannot find name' error
+import { DatabaseIcon, UploadIcon, ClipboardListIcon, CalendarIcon, CogIcon, BeakerIcon, AlertTriangleIcon, RefreshIcon } from './components/common/Icons';
 
 const LoadingSpinner = () => (
     <div className="flex flex-col items-center justify-center h-full animate-fade-in">
@@ -54,6 +55,7 @@ const App: React.FC = () => {
     const [testers, setTesters] = useState<Tester[]>([]);
     const [notOkCount, setNotOkCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [isInitialLoad, setIsInitialLoad] = useState(true); // Flag to control full-page loading
     const [error, setError] = useState<React.ReactNode | null>(null);
     const [taskRefreshKey, setTaskRefreshKey] = useState(0);
     
@@ -64,7 +66,8 @@ const App: React.FC = () => {
         setTaskRefreshKey(prevKey => prevKey + 1);
     }, []);
 
-    const fetchCoreData = useCallback(async () => {
+    const fetchCoreData = useCallback(async (isRefresh = false) => {
+        if (!isRefresh) setIsInitialLoad(true);
         setIsLoading(true);
         setError(null);
         try {
@@ -85,12 +88,21 @@ const App: React.FC = () => {
             setError("An unexpected error occurred. Please check your network connection.");
         } finally {
             setIsLoading(false);
+            setIsInitialLoad(false);
         }
     }, []);
 
     useEffect(() => {
+        // Initial load
         fetchCoreData();
-    }, [fetchCoreData, taskRefreshKey]);
+    }, [fetchCoreData]);
+
+    // Handle background refreshes without unmounting the whole tab area
+    useEffect(() => {
+        if (taskRefreshKey > 0) {
+            fetchCoreData(true);
+        }
+    }, [taskRefreshKey, fetchCoreData]);
 
     const renderTabContent = () => {
         if (error) return null;
@@ -179,7 +191,7 @@ const App: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-base-50/50 dark:bg-base-955 font-sans text-base-800 dark:text-base-200 flex flex-col">
-            {error ? <ErrorModal onRetry={fetchCoreData}>{error}</ErrorModal> : null}
+            {error ? <ErrorModal onRetry={() => fetchCoreData()}>{error}</ErrorModal> : null}
             
             <header className="sticky top-0 z-40 bg-white/40 dark:bg-base-900/40 backdrop-blur-xl border-b border-white dark:border-base-800">
                 <div className="w-[98%] mx-auto px-6 h-16 flex items-center justify-between">
@@ -194,6 +206,12 @@ const App: React.FC = () => {
                             <p className="text-[9px] text-base-400 font-black uppercase tracking-[0.3em] mt-1">Lab Intelligence System</p>
                         </div>
                     </div>
+                    {isLoading && !isInitialLoad && (
+                        <div className="flex items-center gap-2 px-4 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-full animate-fade-in">
+                            <RefreshIcon className="h-3.5 w-3.5 animate-spin" />
+                            <span className="text-[9px] font-black uppercase tracking-widest">Syncing...</span>
+                        </div>
+                    )}
                 </div>
             </header>
             
@@ -225,7 +243,7 @@ const App: React.FC = () => {
 
                     <main className="flex-1 min-w-0 min-h-[calc(100vh-8rem)]">
                         <div className="bg-white/60 dark:bg-base-900/60 rounded-[3rem] border border-white dark:border-base-800 p-1 h-full shadow-2xl overflow-hidden relative">
-                           {isLoading ? <LoadingSpinner /> : renderTabContent()}
+                           {isInitialLoad ? <LoadingSpinner /> : renderTabContent()}
                        </div>
                     </main>
                 </div>
