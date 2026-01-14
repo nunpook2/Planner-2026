@@ -402,18 +402,30 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
 
     const handleNoteClick = (type: 'exec' | 'prep', group: any, itemIndex: number) => {
         const currentNote = group.tasks[itemIndex].plannerNote || '';
+        // If not authorized, only allow reading if note exists, don't allow editing.
+        if (!isPlannerAuthorized && !currentNote) {
+            setNotification({ message: "Mission Briefing Locked", isError: true });
+            return;
+        }
+
         setModalConfig({
             isOpen: true, 
-            title: "Planner Mission Briefing", 
-            message: "Edit specific instructions for this Analyst mission:", 
+            title: isPlannerAuthorized ? "Planner Mission Briefing" : "Analyst Briefing Intake", 
+            message: isPlannerAuthorized ? "Edit specific instructions for this mission:" : "Current instructions from Planner:", 
             initialValue: currentNote,
-            showInput: true, 
+            showInput: isPlannerAuthorized, 
             isTextArea: true,
-            inputPlaceholder: "Enter detailed instructions or special remarks for the Analyst here...", 
-            confirmText: "Save Mission", 
+            inputPlaceholder: "Enter detailed instructions or special remarks...", 
+            confirmText: isPlannerAuthorized ? "Save Mission" : "Close", 
             confirmColor: "bg-indigo-600",
             preventOutsideClick: true,
-            onConfirm: (note) => handleUpdateNote(type, group, itemIndex, note || '')
+            onConfirm: (note) => {
+                if (isPlannerAuthorized) {
+                    handleUpdateNote(type, group, itemIndex, note || '');
+                } else {
+                    setModalConfig(p => ({ ...p, isOpen: false }));
+                }
+            }
         });
     };
 
@@ -446,17 +458,19 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     };
 
     const handleResetPrep = async (group: AssignedPrepareTask, itemIndex: number) => {
+        if (!isPlannerAuthorized) {
+            setNotification({ message: "Status Reset Locked", isError: true });
+            return;
+        }
         await resetItemPreparation(group, itemIndex);
         fetchData();
     };
 
     const handleCorrectionReturn = async (group: AssignedTask, itemIndex: number) => {
+        if (!isPlannerAuthorized) return; // Protected action
         const item = group.tasks[itemIndex];
         if (!item._id) return;
-        
-        // Use forceRecallTask which handles proper cleanup in database without creating duplicates
         await forceRecallTask(item._id);
-        
         fetchData(); 
         onTasksUpdated();
         setNotification({ message: "Task Recalled (Quick)", isError: false });
@@ -477,10 +491,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 if (!reason) return;
                 const item = group.tasks[itemIndex];
                 if (!item._id) return;
-
-                // Use enhanced forceRecallTask with reason to update original entry
                 await forceRecallTask(item._id, reason, group.assistantName);
-                
                 fetchData(); 
                 onTasksUpdated(); 
                 setModalConfig(p => ({ ...p, isOpen: false }));
@@ -504,10 +515,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 if (!reason) return;
                 const item = group.tasks[itemIndex];
                 if (!item._id) return;
-
-                // Use enhanced forceRecallTask with reason to update original entry
                 await forceRecallTask(item._id, reason, group.testerName);
-                
                 fetchData(); 
                 onTasksUpdated(); 
                 setModalConfig(p => ({ ...p, isOpen: false }));
@@ -549,7 +557,6 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             });
         });
 
-        // Updated Hierarchy to include priority
         const hierarchy: Record<string, Record<string, Record<string, Record<string, Record<string, Record<string, Record<string, { count: number; remark: string }>>>>>>> = {};
 
         combinedRawAssignments.forEach(({ personnel, requestId, task, taskType, priority }) => {
@@ -634,21 +641,8 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
         rows.push(["Grand Total", "", "", "", "", "", "", "", grandTotal]);
 
         const ws = XLSX.utils.aoa_to_sheet(rows);
-        ws['!cols'] = [
-            { wch: 15 }, // Tester
-            { wch: 12 }, // Date
-            { wch: 20 }, // Request ID
-            { wch: 18 }, // Priority
-            { wch: 25 }, // Task Type
-            { wch: 35 }, // Description
-            { wch: 25 }, // Variant
-            { wch: 45 }, // Remark
-            { wch: 8 }   // Total
-        ];
-
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Mission Summary");
-        XLSX.writeFile(wb, `ShiftMissionSummary_${exportDate}_${selectedShift}.xlsx`);
+        ws['!cols'] = [ { wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 25 }, { wch: 35 }, { wch: 25 }, { wch: 45 }, { wch: 8 } ];
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Mission Summary"); XLSX.writeFile(wb, `ShiftMissionSummary_${exportDate}_${selectedShift}.xlsx`);
     };
 
     return (
@@ -658,74 +652,26 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 .person-avatar.assistant { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); }
                 .active-glow { box-shadow: 0 0 20px -5px rgba(99, 102, 241, 0.4); }
                 .no-scrollbar::-webkit-scrollbar { display: none; }
-                .line-clamp-2 {
-                    display: -webkit-box;
-                    -webkit-line-clamp: 2;
-                    -webkit-box-orient: vertical;  
-                    overflow: hidden;
-                }
-                
-                @keyframes red-ring-pulse {
-                    0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.3); transform: scale(1); }
-                    70% { box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); transform: scale(1.05); }
-                    100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); transform: scale(1); }
-                }
-
-                .luxury-red-pulse {
-                    animation: red-ring-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-                }
+                .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+                @keyframes red-ring-pulse { 0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.3); transform: scale(1); } 70% { box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); transform: scale(1.05); } 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); transform: scale(1); } }
+                .luxury-red-pulse { animation: red-ring-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
             `}</style>
             
-            <LocalModal 
-                isOpen={modalConfig.isOpen} 
-                onClose={() => setModalConfig(p => ({ ...p, isOpen: false }))} 
-                onConfirm={modalConfig.onConfirm} 
-                title={modalConfig.title} 
-                message={modalConfig.message} 
-                initialValue={modalConfig.initialValue}
-                showInput={modalConfig.showInput} 
-                isTextArea={modalConfig.isTextArea} 
-                inputPlaceholder={modalConfig.inputPlaceholder} 
-                confirmText={modalConfig.confirmText} 
-                confirmColor={modalConfig.confirmColor} 
-                icon={modalConfig.icon}
-                preventOutsideClick={modalConfig.preventOutsideClick}
-            />
+            <LocalModal isOpen={modalConfig.isOpen} onClose={() => setModalConfig(p => ({ ...p, isOpen: false }))} onConfirm={modalConfig.onConfirm} title={modalConfig.title} message={modalConfig.message} initialValue={modalConfig.initialValue} showInput={modalConfig.showInput} isTextArea={modalConfig.isTextArea} inputPlaceholder={modalConfig.inputPlaceholder} confirmText={modalConfig.confirmText} confirmColor={modalConfig.confirmColor} icon={modalConfig.icon} preventOutsideClick={modalConfig.preventOutsideClick} />
+            <MissionLookupModal isOpen={isLookupOpen} onClose={() => setIsLookupOpen(false)} />
 
-            <MissionLookupModal 
-                isOpen={isLookupOpen} 
-                onClose={() => setIsLookupOpen(false)} 
-            />
-
-            {notification && (
-                <div className={`fixed bottom-10 right-10 z-[110] px-6 py-4 rounded-2xl shadow-2xl animate-slide-in-up flex items-center gap-3 font-black text-xs uppercase tracking-widest ${notification.isError ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'}`}>
-                    <CheckCircleIcon className="h-5 w-5" />
-                    {notification.message}
-                </div>
-            )}
+            {notification && <div className={`fixed bottom-10 right-10 z-[110] px-6 py-4 rounded-2xl shadow-2xl animate-slide-in-up flex items-center gap-3 font-black text-xs uppercase tracking-widest ${notification.isError ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'}`}><CheckCircleIcon className="h-5 w-5" />{notification.message}</div>}
 
             <div className="flex-grow grid grid-cols-12 gap-4 h-full relative overflow-hidden">
                 <div className="col-span-3 bg-white/40 dark:bg-base-900/40 rounded-[2.5rem] border border-white dark:border-base-800 shadow-sm flex flex-col overflow-hidden backdrop-blur-md h-full">
                     <div className="p-4 border-b border-white dark:border-base-800 bg-white/20 flex justify-between items-center shrink-0">
                         <h3 className="text-[10px] font-black text-base-400 uppercase tracking-[0.4em] ml-1">Duty Roster</h3>
                         <div className="flex gap-1.5">
-                            <button 
-                                onClick={() => setIsLookupOpen(true)}
-                                title="Mission Lookup (Search Request ID)"
-                                className="p-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-all shadow-md active:scale-95"
-                            >
-                                <SearchIcon className="h-4 w-4" />
-                            </button>
-                            <button 
-                                onClick={() => setIsPlannerAuthorized(!isPlannerAuthorized)} 
-                                title={isPlannerAuthorized ? "Planner Tools: Unlocked" : "Planner Tools: Locked"} 
-                                className={`p-2 rounded-xl transition-all shadow-sm border ${isPlannerAuthorized ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-white dark:bg-base-800 border-base-200 dark:border-base-700 text-base-400 hover:text-indigo-600'}`}
-                            >
+                            <button onClick={() => setIsLookupOpen(true)} title="Mission Lookup" className="p-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-all shadow-md active:scale-95"><SearchIcon className="h-4 w-4" /></button>
+                            <button onClick={() => setIsPlannerAuthorized(!isPlannerAuthorized)} title={isPlannerAuthorized ? "Planner Tools: Unlocked" : "Planner Tools: Locked"} className={`p-2 rounded-xl transition-all shadow-sm border ${isPlannerAuthorized ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-white dark:bg-base-800 border-base-200 dark:border-base-700 text-base-400 hover:text-indigo-600'}`}>
                                 {isPlannerAuthorized ? <UnlockIcon className="h-4 w-4" /> : <LockIcon className="h-4 w-4" />}
                             </button>
-                            <button onClick={handleExport} title="Export Summary" className="p-2 bg-white dark:bg-base-800 border border-base-200 dark:border-base-700 rounded-xl hover:bg-base-50 transition-colors shadow-sm">
-                                <DownloadIcon className="h-4 w-4 text-base-500" />
-                            </button>
+                            <button onClick={handleExport} title="Export Summary" className="p-2 bg-white dark:bg-base-800 border border-base-200 dark:border-base-700 rounded-xl hover:bg-base-50 transition-colors shadow-sm"><DownloadIcon className="h-4 w-4 text-base-500" /></button>
                         </div>
                     </div>
                     <div className="flex-grow overflow-y-auto no-scrollbar p-2.5 space-y-1.5">
@@ -749,21 +695,14 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                         <div className="flex items-center gap-5">
                             {activePerson ? (
                                 <>
-                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-base font-black text-white shadow-xl ${activePerson.team === 'assistants_4_2' ? 'person-avatar assistant' : 'person-avatar'}`}>
-                                        {activePerson.name.substring(0, 2).toUpperCase()}
-                                    </div>
+                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-base font-black text-white shadow-xl ${activePerson.team === 'assistants_4_2' ? 'person-avatar assistant' : 'person-avatar'}`}>{activePerson.name.substring(0, 2).toUpperCase()}</div>
                                     <div>
                                         <h2 className="text-2xl font-black text-base-900 dark:text-base-100 tracking-tighter leading-none">{activePerson.name}</h2>
-                                        <p className="text-[10px] text-base-400 font-bold uppercase tracking-[0.3em] mt-1.5 flex items-center gap-2">
-                                            Operational Tasks Control
-                                            {isPlannerAuthorized && <span className="px-2 py-0.5 bg-indigo-600 text-white rounded text-[8px] font-black tracking-widest">PLANNER MODE</span>}
-                                        </p>
+                                        <p className="text-[10px] text-base-400 font-bold uppercase tracking-[0.3em] mt-1.5 flex items-center gap-2">Operational Tasks Control{isPlannerAuthorized && <span className="px-2 py-0.5 bg-indigo-600 text-white rounded text-[8px] font-black tracking-widest">PLANNER MODE</span>}</p>
                                     </div>
                                 </>
                             ) : (
-                                <div className="flex items-center gap-3 text-base-300 italic font-bold text-sm tracking-widest uppercase">
-                                    <UserGroupIcon className="h-5 w-5" /> Select Personnel
-                                </div>
+                                <div className="flex items-center gap-3 text-base-300 italic font-bold text-sm tracking-widest uppercase"><UserGroupIcon className="h-5 w-5" /> Select Personnel</div>
                             )}
                         </div>
                         <div className="flex gap-2.5 bg-white/60 dark:bg-base-800/60 p-2 rounded-2xl border border-white dark:border-base-700 shadow-inner relative"><input type="date" value={selectedDate} onChange={e => onDateChange(e.target.value)} className="bg-transparent border-none text-[12px] font-black focus:ring-0 cursor-pointer p-1 min-w-[140px] dark:text-white" /><select value={selectedShift} onChange={e => onShiftChange(e.target.value as any)} className="bg-transparent border-none text-[10px] font-black focus:ring-0 cursor-pointer p-1 uppercase dark:text-white tracking-widest"><option value="day">Day Shift</option><option value="night">Night Shift</option></select></div>
@@ -780,10 +719,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                         {groupedPrepTasks.map(group => (
                                             <div key={group.requestId} className="bg-amber-50/20 dark:bg-amber-900/10 rounded-[1.8rem] border-2 border-amber-100 dark:border-amber-900/30 overflow-hidden shadow-sm">
                                                 <div className="px-6 py-4 bg-amber-900/90 text-white border-b border-amber-800 flex justify-between items-center backdrop-blur-sm">
-                                                    <div className="flex items-center">
-                                                        <span className="text-[20px] font-black uppercase tracking-tighter leading-none">{group.requestId}</span>
-                                                        <PriorityBadge category={group.category} tasks={group.items.map(i => i.task)} />
-                                                    </div>
+                                                    <div className="flex items-center"><span className="text-[20px] font-black uppercase tracking-tighter leading-none">{group.requestId}</span><PriorityBadge category={group.category} tasks={group.items.map(i => i.task)} /></div>
                                                 </div>
                                                 <div className="p-3 space-y-2">
                                                     {group.items.map((item, idx) => {
@@ -792,22 +728,13 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                         const desc = String(getTaskValue(item.task, 'Description') || 'General Task').trim();
                                                         const qty = String(getTaskValue(item.task, 'Quantity') || '1').trim();
                                                         const sampleName = String(getTaskValue(item.task, 'Sample Name') || '').trim();
-
                                                         return (
                                                             <div key={idx} className={`flex items-center justify-between p-4 rounded-[1.2rem] border transition-all ${isPrepared ? 'bg-emerald-50/20 border-emerald-100' : 'bg-white dark:bg-base-800/80 border-amber-100 dark:border-amber-900/20 shadow-sm'}`}>
                                                                 <div className="flex items-center gap-4">
-                                                                    <button 
-                                                                        onClick={() => handleNoteClick('prep', item.sourceGroup, item.index)}
-                                                                        className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-lg border-2 ${hasPlannerNote ? 'bg-red-600 border-red-400 text-white luxury-red-pulse' : 'bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`}
-                                                                        title={hasPlannerNote ? "Read Mission Instruction" : "Add Mission Briefing"}
-                                                                    >
-                                                                        <ChatBubbleLeftEllipsisIcon className="h-5 w-5" />
-                                                                    </button>
+                                                                    <button onClick={() => handleNoteClick('prep', item.sourceGroup, item.index)} className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-lg border-2 ${hasPlannerNote ? 'bg-red-600 border-red-400 text-white luxury-red-pulse' : 'bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`} title={hasPlannerNote ? "Read Mission Instruction" : "Add Mission Briefing"}><ChatBubbleLeftEllipsisIcon className="h-5 w-5" /></button>
                                                                 </div>
                                                                 <div className="flex-grow min-w-0 flex flex-row items-center gap-5 ml-2">
-                                                                    <div className={`flex-grow font-black uppercase leading-tight line-clamp-2 ${isPrepared ? 'text-emerald-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>
-                                                                        {desc}
-                                                                    </div>
+                                                                    <div className={`flex-grow font-black uppercase leading-tight line-clamp-2 ${isPrepared ? 'text-emerald-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>{desc}</div>
                                                                     <div className="flex flex-shrink-0 items-center gap-3">
                                                                         <div className="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/50 rounded-xl text-[12px] font-black text-amber-800 border border-amber-200">x{qty}</div>
                                                                         {sampleName && sampleName !== 'N/A' && <div className="px-3 py-1 bg-base-100 dark:bg-base-700/50 rounded-xl text-[12px] font-black text-base-800 dark:text-base-200 border border-base-200 dark:border-base-600 uppercase truncate max-w-[200px]">S: {sampleName}</div>}
@@ -815,19 +742,11 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                 </div>
                                                                 <div className="flex-row items-center gap-2 flex-shrink-0 ml-5 flex">
                                                                     {isPrepared ? (
-                                                                        <button onClick={() => handleResetPrep(item.sourceGroup, item.index)} className="px-4 py-2 bg-base-100 dark:bg-base-800 text-[10px] font-black uppercase text-base-700 dark:text-base-300 rounded-xl transition-all flex items-center gap-2 border-2 border-base-200 shadow-sm hover:bg-white">
-                                                                            <RefreshIcon className="h-4 w-4" /> Reset
-                                                                        </button>
+                                                                        <button onClick={() => handleResetPrep(item.sourceGroup, item.index)} className={`px-4 py-2 text-[10px] font-black uppercase rounded-xl transition-all flex items-center gap-2 border-2 shadow-sm ${isPlannerAuthorized ? 'bg-base-100 dark:bg-base-800 text-base-700 dark:text-base-300 border-base-200 hover:bg-white' : 'bg-base-50 text-base-300 border-base-100 cursor-not-allowed opacity-50'}`}><RefreshIcon className="h-4 w-4" /> Reset</button>
                                                                     ) : (
                                                                         <button onClick={() => handleMarkPrepared(item.sourceGroup, item.index)} className="px-6 py-2.5 bg-amber-500 text-white font-black rounded-[1.2rem] shadow-xl uppercase text-[10px] tracking-widest hover:bg-amber-600 hover:scale-105 transition-all active:scale-95 border-b-4 border-amber-700">Mark Ready</button>
                                                                     )}
-                                                                    <button 
-                                                                        onClick={() => handlePrepReturn(item.sourceGroup, item.index)} 
-                                                                        className="p-2.5 bg-white dark:bg-base-800 text-orange-600 dark:text-orange-400 border-2 border-orange-100 dark:border-orange-900/50 rounded-xl shadow-sm hover:bg-orange-50 transition-all"
-                                                                        title="Abort Preparation Item (Return to Pool)"
-                                                                    >
-                                                                        <ArrowUturnLeftIcon className="h-5 w-5" />
-                                                                    </button>
+                                                                    <button onClick={() => handlePrepReturn(item.sourceGroup, item.index)} className="p-2.5 bg-white dark:bg-base-800 text-orange-600 dark:text-orange-400 border-2 border-orange-100 dark:border-orange-900/50 rounded-xl shadow-sm hover:bg-orange-50 transition-all" title="Abort Preparation Item (Return to Pool)"><ArrowUturnLeftIcon className="h-5 w-5" /></button>
                                                                 </div>
                                                             </div>
                                                         );
@@ -844,10 +763,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                         {groupedPersonTasks.map(group => (
                                             <div key={group.requestId} className="bg-white/60 dark:bg-base-955/40 rounded-[2rem] border-2 border-base-200 dark:border-base-800 overflow-hidden shadow-lg">
                                                 <div className="px-6 py-4 bg-base-900 text-white border-b border-indigo-900/50 flex justify-between items-center">
-                                                    <div className="flex items-center">
-                                                        <span className="text-[22px] font-black uppercase tracking-tighter leading-none">{group.requestId}</span>
-                                                        <PriorityBadge category={group.category} tasks={group.items.map(i => i.task)} />
-                                                    </div>
+                                                    <div className="flex items-center"><span className="text-[22px] font-black uppercase tracking-tighter leading-none">{group.requestId}</span><PriorityBadge category={group.category} tasks={group.items.map(i => i.task)} /></div>
                                                 </div>
                                                 <div className="p-3 space-y-2.5">
                                                     {group.items.map((item, idx) => {
@@ -855,26 +771,16 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                         const isNotOk = item.task.status === TaskStatus.NotOK;
                                                         const isActioned = isDone || isNotOk;
                                                         const hasPlannerNote = !!item.task.plannerNote;
-                                                        
                                                         const desc = String(getTaskValue(item.task, 'Description') || 'General Task').trim();
                                                         const qty = String(getTaskValue(item.task, 'Quantity') || '1').trim();
                                                         const sampleName = String(getTaskValue(item.task, 'Sample Name') || '').trim();
-
                                                         return (
                                                             <div key={idx} className={`p-4 rounded-[1.3rem] border-2 transition-all duration-500 flex items-center justify-between gap-4 ${isDone ? 'bg-emerald-50/40 border-emerald-100 shadow-sm' : isNotOk ? 'bg-red-50/40 border-red-100 shadow-sm' : 'bg-white dark:bg-base-900 border-base-100 dark:border-base-700 shadow-md hover:border-primary-300'}`}>
                                                                 <div className="flex items-center gap-4">
-                                                                    <button 
-                                                                        onClick={() => handleNoteClick('exec', item.sourceGroup, item.index)}
-                                                                        className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-lg border-2 ${hasPlannerNote ? 'bg-red-600 border-red-400 text-white luxury-red-pulse' : 'bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`}
-                                                                        title={hasPlannerNote ? "Read Mission Instruction" : "Add Mission Briefing"}
-                                                                    >
-                                                                        <ChatBubbleLeftEllipsisIcon className="h-5 w-5" />
-                                                                    </button>
+                                                                    <button onClick={() => handleNoteClick('exec', item.sourceGroup, item.index)} className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-lg border-2 ${hasPlannerNote ? 'bg-red-600 border-red-400 text-white luxury-red-pulse' : 'bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`} title={hasPlannerNote ? "Read Mission Instruction" : "Add Mission Briefing"}><ChatBubbleLeftEllipsisIcon className="h-5 w-5" /></button>
                                                                 </div>
                                                                 <div className="flex-grow min-w-0 flex flex-row items-center gap-5 ml-2">
-                                                                    <div className={`flex-grow font-black uppercase leading-tight line-clamp-2 ${isDone ? 'text-emerald-800 opacity-60' : isNotOk ? 'text-red-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>
-                                                                        {desc}
-                                                                    </div>
+                                                                    <div className={`flex-grow font-black uppercase leading-tight line-clamp-2 ${isDone ? 'text-emerald-800 opacity-60' : isNotOk ? 'text-red-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>{desc}</div>
                                                                     <div className="flex flex-shrink-0 items-center gap-3">
                                                                         <div className={`px-2.5 py-1 rounded-xl text-[12px] font-black border flex-shrink-0 ${isDone ? 'bg-emerald-100 border-emerald-200 text-emerald-700' : isNotOk ? 'bg-red-100 border-red-200 text-red-700' : 'bg-indigo-50 border-indigo-100 text-indigo-700'}`}>x{qty}</div>
                                                                         {sampleName && sampleName !== 'N/A' && <div className={`px-3 py-1 rounded-xl text-[12px] font-black border uppercase truncate max-w-[220px] flex-shrink-0 ${isDone ? 'bg-emerald-50/50 border-emerald-200 text-emerald-700/50' : isNotOk ? 'bg-red-50/50 border-red-200 text-red-700/50' : 'bg-indigo-100/30 border-indigo-100 text-indigo-955 dark:text-indigo-200'}`}>S: {sampleName}</div>}
@@ -888,38 +794,13 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                         </div>
                                                                     ) : (
                                                                         <div className="flex items-center gap-2">
-                                                                            <button onClick={() => handleUpdateStatus(item.sourceGroup, item.index, TaskStatus.Pending)} className="px-4 py-2 bg-base-100 dark:bg-base-800 text-[10px] font-black uppercase text-base-700 dark:text-base-300 rounded-xl transition-all flex items-center gap-2.5 border-2 border-base-200 dark:border-base-700 shadow-sm hover:bg-white dark:hover:bg-base-700">
-                                                                                <RefreshIcon className="h-4 w-4" /> Reset Status
-                                                                            </button>
-                                                                            {isNotOk && item.task.notOkReason && (
-                                                                                <button 
-                                                                                    onClick={() => handleViewQualityIssue(item.task.notOkReason!)}
-                                                                                    className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center luxury-red-pulse shadow-lg border border-red-400"
-                                                                                    title="Click to view Quality Issue Detail"
-                                                                                >
-                                                                                    <AlertTriangleIcon className="h-5 w-5" />
-                                                                                </button>
-                                                                            )}
+                                                                            <button onClick={() => isPlannerAuthorized && handleUpdateStatus(item.sourceGroup, item.index, TaskStatus.Pending)} disabled={!isPlannerAuthorized} className={`px-4 py-2 text-[10px] font-black uppercase rounded-xl transition-all flex items-center gap-2.5 border-2 shadow-sm ${isPlannerAuthorized ? 'bg-base-100 dark:bg-base-800 text-base-700 dark:text-base-300 border-base-200 hover:bg-white' : 'bg-base-50 text-base-300 border-base-100 cursor-not-allowed opacity-50'}`}><RefreshIcon className="h-4 w-4" /> Reset Status</button>
+                                                                            {isNotOk && item.task.notOkReason && (<button onClick={() => handleViewQualityIssue(item.task.notOkReason!)} className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center luxury-red-pulse shadow-lg border border-red-400" title="Click to view Quality Issue Detail"><AlertTriangleIcon className="h-5 w-5" /></button>)}
                                                                         </div>
                                                                     )}
-                                                                    
                                                                     <div className="flex gap-2">
-                                                                        {(isPlannerAuthorized || true) && ( // Planner Recall button
-                                                                            <button 
-                                                                                onClick={() => handleCorrectionReturn(item.sourceGroup, item.index)} 
-                                                                                className="p-2.5 bg-white dark:bg-base-800 text-indigo-600 dark:text-indigo-400 border-2 border-indigo-100 dark:border-indigo-900/50 rounded-xl shadow-sm hover:bg-indigo-50 transition-all flex items-center justify-center shadow-indigo-100 animate-fade-in"
-                                                                                title="Planner Quick Recall (No Reason/No Dashboard)"
-                                                                            >
-                                                                                <ArrowUturnLeftIcon className="h-5 w-5" />
-                                                                            </button>
-                                                                        )}
-                                                                        <button 
-                                                                            onClick={() => handleTesterReturn(item.sourceGroup, item.index)} 
-                                                                            className="p-2.5 bg-white dark:bg-base-800 text-orange-600 dark:text-orange-400 border-2 border-orange-100 dark:border-orange-900/50 rounded-xl shadow-sm hover:bg-orange-50 transition-all flex items-center justify-center shadow-orange-100"
-                                                                            title="Tester Mission Abort (Required Reason)"
-                                                                        >
-                                                                            <AlertTriangleIcon className="h-5 w-5" />
-                                                                        </button>
+                                                                        {isPlannerAuthorized && (<button onClick={() => handleCorrectionReturn(item.sourceGroup, item.index)} className="p-2.5 bg-white dark:bg-base-800 text-indigo-600 dark:text-indigo-400 border-2 border-indigo-100 dark:border-indigo-900/50 rounded-xl shadow-sm hover:bg-indigo-50 transition-all flex items-center justify-center shadow-indigo-100 animate-fade-in" title="Planner Quick Recall"><ArrowUturnLeftIcon className="h-5 w-5" /></button>)}
+                                                                        <button onClick={() => handleTesterReturn(item.sourceGroup, item.index)} className="p-2.5 bg-white dark:bg-base-800 text-orange-600 dark:text-orange-400 border-2 border-orange-100 dark:border-orange-900/50 rounded-xl shadow-sm hover:bg-orange-50 transition-all flex items-center justify-center shadow-orange-100" title="Tester Mission Abort"><AlertTriangleIcon className="h-5 w-5" /></button>
                                                                     </div>
                                                                 </div>
                                                             </div>

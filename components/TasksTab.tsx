@@ -20,16 +20,16 @@ import { CheckCircleIcon, ChevronDownIcon, TrashIcon, AlertTriangleIcon, Refresh
 declare const XLSX: any;
 
 // --- CONSTANTS ---
-const COL_DUE_WIDTH = 45;
-const COL_RID_WIDTH = 160;
+const COL_DUE_WIDTH = 42;
+const COL_RID_WIDTH = 150;
 
 const HEADER_THEMES = [
-    { name: 'Indigo', headerBg: 'bg-indigo-600/10', headerText: 'text-indigo-900', borderColor: 'border-indigo-200', subHeaderBg: 'bg-indigo-600', subHeaderText: 'text-white' },
-    { name: 'Emerald', headerBg: 'bg-emerald-600/10', headerText: 'text-emerald-900', borderColor: 'border-emerald-200', subHeaderBg: 'bg-emerald-600', subHeaderText: 'text-white' },
-    { name: 'Amber', headerBg: 'bg-amber-600/10', headerText: 'text-amber-900', borderColor: 'border-amber-200', subHeaderBg: 'bg-amber-500', subHeaderText: 'text-white' },
-    { name: 'Rose', headerBg: 'bg-rose-600/10', headerText: 'text-rose-900', borderColor: 'border-rose-200', subHeaderBg: 'bg-rose-600', subHeaderText: 'text-white' },
-    { name: 'Cyan', headerBg: 'bg-cyan-600/10', headerText: 'text-cyan-900', borderColor: 'border-cyan-200', subHeaderBg: 'bg-cyan-600', subHeaderText: 'text-white' },
-    { name: 'Violet', headerBg: 'bg-violet-600/10', headerText: 'text-violet-900', borderColor: 'border-violet-200', subHeaderBg: 'bg-violet-600', subHeaderText: 'text-white' },
+    { name: 'Indigo', headerBg: 'bg-indigo-50', headerText: 'text-indigo-900', borderColor: 'border-indigo-100', subHeaderBg: 'bg-indigo-600', subHeaderText: 'text-white' },
+    { name: 'Emerald', headerBg: 'bg-emerald-50', headerText: 'text-emerald-900', borderColor: 'border-emerald-100', subHeaderBg: 'bg-emerald-600', subHeaderText: 'text-white' },
+    { name: 'Amber', headerBg: 'bg-amber-50', headerText: 'text-amber-900', borderColor: 'border-amber-100', subHeaderBg: 'bg-amber-500', subHeaderText: 'text-white' },
+    { name: 'Rose', headerBg: 'bg-rose-50', headerText: 'text-rose-900', borderColor: 'border-rose-100', subHeaderBg: 'bg-rose-600', subHeaderText: 'text-white' },
+    { name: 'Cyan', headerBg: 'bg-cyan-50', headerText: 'text-cyan-900', borderColor: 'border-cyan-100', subHeaderBg: 'bg-cyan-600', subHeaderText: 'text-white' },
+    { name: 'Violet', headerBg: 'bg-violet-50', headerText: 'text-violet-900', borderColor: 'border-violet-100', subHeaderBg: 'bg-violet-600', subHeaderText: 'text-white' },
 ];
 
 const CATEGORY_STYLES: Record<string, { active: string, inactive: string, badge: string, dot: string }> = {
@@ -250,7 +250,7 @@ const ExpandableCell: React.FC<{
     onInitiateDelete: (docId: string, index: number, label: string) => void;
     onInitiateEdit?: (docId: string, index: number, task: RawTask) => void;
 }> = ({ headerKey, items, isGroupEnd, expandedCell, setExpandedCell, selectedItems, handleSelectItem, setSelectedItems, isAssigningToPrepare, setNoteEditor, onInitiateDelete, onInitiateEdit }) => {
-    if (items.length === 0) return <td className={`p-0 align-top border border-base-200 dark:border-base-700 ${isGroupEnd ? 'border-r-2 border-r-base-300 dark:border-r-base-600' : ''}`}></td>;
+    if (items.length === 0) return <td className={`p-0 align-top border border-base-200 dark:border-base-700 ${isGroupEnd ? 'border-r-2 border-r-slate-200 dark:border-r-base-600' : ''}`}></td>;
     
     const anchorDocId = items[0].sourceDocId;
     const isExpanded = expandedCell?.headerKey === headerKey && expandedCell?.docId === anchorDocId;
@@ -282,13 +282,13 @@ const ExpandableCell: React.FC<{
     else if (hasPrepared) cellTextColor = 'text-emerald-700 dark:text-emerald-500 font-black';
 
     return (
-        <td className={`p-0 align-top transition-all relative border border-base-200 dark:border-base-700 ${isGroupEnd ? 'border-r-2 border-r-base-300 dark:border-r-base-600' : ''} ${isExpanded ? 'bg-white dark:bg-base-800 ring-2 ring-indigo-500 z-[80]' : 'hover:bg-indigo-50/30 dark:hover:bg-base-700/50'}`}>
-            <div className={`p-0.5 text-center cursor-pointer h-full flex flex-col justify-center min-h-[42px] relative`} onClick={() => setExpandedCell(isExpanded ? null : { docId: anchorDocId, headerKey })}>
+        <td className={`p-0 align-top transition-all relative border border-base-200 dark:border-base-700 ${isGroupEnd ? 'border-r-2 border-r-slate-200 dark:border-r-base-600' : ''} ${isExpanded ? 'bg-white dark:bg-base-800 ring-2 ring-indigo-500 z-[80]' : 'hover:bg-indigo-50/20'}`}>
+            <div className={`p-0.5 text-center cursor-pointer h-full flex flex-col justify-center min-h-[38px] relative`} onClick={() => setExpandedCell(isExpanded ? null : { docId: anchorDocId, headerKey })}>
                 <div className="flex flex-col items-center">
-                    <span className={`font-black text-[20px] tracking-tighter leading-none ${numSelected > 0 ? 'text-white bg-indigo-600 rounded-md px-1.5 py-0.5' : cellTextColor}`}>
+                    <span className={`font-black text-[18px] tracking-tighter leading-none ${numSelected > 0 ? 'text-white bg-indigo-600 rounded-md px-1.5 py-0.5' : cellTextColor}`}>
                         {numSelected > 0 ? `${numSelected}/${itemCount}` : itemCount}
                     </span>
-                    <div className="flex justify-center gap-1 mt-1">
+                    <div className="flex justify-center gap-1 mt-0.5">
                         {hasReturned && <div className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></div>}
                         {hasInPrep && <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>}
                         {hasPrepared && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
@@ -740,24 +740,24 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                             <table className="min-w-full text-xs text-left border-separate border-spacing-0 table-fixed relative">
                                 <thead className="sticky top-0 z-[60]">
                                     <tr className="bg-slate-50 text-slate-900">
-                                        <th rowSpan={2} style={{ width: `${COL_DUE_WIDTH}px` }} className="p-1 font-black uppercase border-r border-base-200 sticky left-0 z-[70] bg-slate-50 text-center text-[9px]">Due</th>
-                                        <th rowSpan={2} style={{ width: `${COL_RID_WIDTH}px` }} className="p-1 font-black uppercase border-r-2 border-indigo-500 sticky left-[45px] z-[70] bg-slate-50 text-center text-[10px] tracking-tight shadow-sm">Request ID</th>
+                                        <th rowSpan={2} style={{ width: `${COL_DUE_WIDTH}px` }} className="p-1 font-black uppercase border-r border-base-100 sticky left-0 z-[70] bg-slate-50 text-center text-[9px]">Due</th>
+                                        <th rowSpan={2} style={{ width: `${COL_RID_WIDTH}px` }} className="p-1 font-black uppercase border-r-2 border-indigo-400 sticky left-[42px] z-[70] bg-slate-50 text-center text-[9px] tracking-tight shadow-sm">Request ID</th>
                                         {gridHeaders.map(([group, subKeys], i) => {
                                             const visibleInGroup = subKeys.filter(k => activeColumnKeys.includes(k));
-                                            return visibleInGroup.length > 0 ? ( <th key={group} colSpan={visibleInGroup.length} className={`px-1 py-1.5 font-black text-center border-b border-r border-base-200 uppercase tracking-[0.2em] text-[10px] ${HEADER_THEMES[i % HEADER_THEMES.length].headerBg} ${HEADER_THEMES[i % HEADER_THEMES.length].headerText}`}>{group}</th> ) : null;
+                                            return visibleInGroup.length > 0 ? ( <th key={group} colSpan={visibleInGroup.length} className={`px-1 py-1 font-black text-center border-b border-r border-base-100 uppercase tracking-[0.2em] text-[9px] ${HEADER_THEMES[i % HEADER_THEMES.length].headerBg} ${HEADER_THEMES[i % HEADER_THEMES.length].headerText}`}>{group}</th> ) : null;
                                         })}
-                                        <th rowSpan={2} className="px-1 py-1.5 font-black uppercase bg-slate-100 text-slate-500 w-24 text-center border-l border-base-200 text-[9px] tracking-widest shadow-inner">Unmapped</th>
+                                        <th rowSpan={2} className="px-1 py-1 font-black uppercase bg-slate-100 text-slate-500 w-24 text-center border-l border-base-200 text-[8px] tracking-widest shadow-inner">Unmapped</th>
                                     </tr>
-                                    <tr className="bg-slate-50">{gridHeaders.flatMap(([group, subKeys], i) => subKeys.filter(k => activeColumnKeys.includes(k)).map(key => ( <th key={key} className={`p-1 font-black text-[12px] text-center border-b border-r border-base-200 uppercase w-16 shadow-inner ${HEADER_THEMES[i % HEADER_THEMES.length].subHeaderBg} text-white`}>{key.split('|')[1]}</th> )) )}</tr>
+                                    <tr className="bg-slate-50">{gridHeaders.flatMap(([group, subKeys], i) => subKeys.filter(k => activeColumnKeys.includes(k)).map(key => ( <th key={key} className={`p-1 font-black text-[11px] text-center border-b border-r border-base-100 uppercase w-14 shadow-inner ${HEADER_THEMES[i % HEADER_THEMES.length].subHeaderBg} text-white`}>{key.split('|')[1]}</th> )) )}</tr>
                                 </thead>
                                 <tbody className="divide-y divide-base-100 dark:divide-base-800">
                                     {gridData.map(row => (
                                         <tr key={row.requestId} className="hover:bg-indigo-50/20 group transition-colors">
-                                            <td className="p-1 border-r border-base-200 dark:border-base-800 bg-white dark:bg-base-955 sticky left-0 z-40 text-center font-black text-slate-800 dark:text-white text-[10px] leading-tight">{`${(new Date(row.minDueDate)).getDate()}/${(new Date(row.minDueDate)).getMonth()+1}`}</td>
-                                            <td className="px-3 py-3 border-r-2 border-indigo-500 bg-white dark:bg-base-900 sticky left-[45px] z-40 shadow-lg">
-                                                <div className="flex flex-col gap-1">
-                                                    <div className="flex items-center justify-between"><span className="text-[15px] font-black uppercase text-base-955 dark:text-base-50 leading-none tracking-tighter">{row.requestId.replace(/^RS1-/, '')}</span><span className="text-[9px] font-black text-slate-400">#{row.availableItems}/{row.itemCount}</span></div>
-                                                    <div className="flex gap-1">{row.isPoCat && <span className="px-1.5 py-0.5 bg-orange-600 text-white text-[7px] rounded font-black">PO</span>}{row.isUrgent && <span className="px-1.5 py-0.5 bg-red-600 text-white text-[7px] rounded font-black">URG</span>}</div>
+                                            <td className="p-0.5 border-r border-base-200 bg-white dark:bg-base-955 sticky left-0 z-40 text-center font-black text-slate-800 text-[9px] leading-tight">{`${(new Date(row.minDueDate)).getDate()}/${(new Date(row.minDueDate)).getMonth()+1}`}</td>
+                                            <td className="px-2 py-2 border-r-2 border-indigo-400 bg-white dark:bg-base-900 sticky left-[42px] z-40 shadow-sm">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <div className="flex items-center justify-between"><span className="text-[13px] font-black uppercase text-base-955 dark:text-base-50 leading-none tracking-tighter truncate">{row.requestId.replace(/^RS1-/, '')}</span><span className="text-[8px] font-black text-slate-400">#{row.availableItems}/{row.itemCount}</span></div>
+                                                    <div className="flex gap-1">{row.isPoCat && <span className="px-1 py-0.5 bg-orange-600 text-white text-[6px] rounded-sm font-black">PO</span>}{row.isUrgent && <span className="px-1 py-0.5 bg-red-600 text-white text-[6px] rounded-sm font-black">URG</span>}</div>
                                                 </div>
                                             </td>
                                             {activeColumnKeys.map(header => <ExpandableCell key={header} headerKey={header} items={row.cells[header] || []} isGroupEnd={lastKeysOfGroups.has(header)} expandedCell={expandedCell} setExpandedCell={setExpandedCell} selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems} isAssigningToPrepare={isAssigningToPrepare} setNoteEditor={setNoteEditor} onInitiateDelete={(d, i, l) => setDeleteConfirm({ docId: d, index: i, label: l })} />)}
