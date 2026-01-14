@@ -298,6 +298,15 @@ const getTaskValue = (task: RawTask, header: string): any => {
     return matchedKey ? task[matchedKey] : '';
 };
 
+const getPriorityLabel = (category: string, tasks: RawTask[]): string => {
+    const allContent = tasks.map(t => Object.values(t).map(v => String(v).toLowerCase()).join(' ')).join(' ');
+    if (category.toLowerCase() === 'pocat' || allContent.includes('po cat')) return 'Po cat';
+    if (allContent.includes('lsp')) return 'LSP';
+    if (allContent.includes('sprint')) return 'Sprint';
+    if (category.toLowerCase() === 'urgent' || allContent.includes('urgent')) return 'Urgent';
+    return 'Normal';
+};
+
 const PriorityBadge: React.FC<{ category: string, tasks: RawTask[] }> = ({ category, tasks }) => {
     const allContent = tasks.map(t => Object.values(t).map(v => String(v).toLowerCase()).join(' ')).join(' ');
     const isPoCat = category.toLowerCase() === 'pocat' || allContent.includes('po cat');
@@ -512,33 +521,38 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
         const [y, m, d] = exportDate.split('-');
         const dateDisplay = `${d}-${m}-${y.substring(2)}`;
         
-        const combinedRawAssignments: { personnel: string; requestId: string; task: RawTask; taskType: string }[] = [];
+        const combinedRawAssignments: { personnel: string; requestId: string; task: RawTask; taskType: string; priority: string }[] = [];
         
         assignedTasks.forEach(group => {
+            const priority = getPriorityLabel(group.category, group.tasks);
             group.tasks.forEach(task => {
                 combinedRawAssignments.push({ 
                     personnel: group.testerName, 
                     requestId: group.requestId, 
                     task, 
-                    taskType: 'งานทดสอบ (Testing)' 
+                    taskType: 'งานทดสอบ (Testing)',
+                    priority
                 });
             });
         });
 
         prepareTasks.forEach(group => {
+            const priority = getPriorityLabel(group.category, group.tasks);
             group.tasks.forEach(task => {
                 combinedRawAssignments.push({ 
                     personnel: group.assistantName, 
                     requestId: group.requestId, 
                     task, 
-                    taskType: 'งานเตรียมตัวอย่าง (Preparation)' 
+                    taskType: 'งานเตรียมตัวอย่าง (Preparation)',
+                    priority
                 });
             });
         });
 
-        const hierarchy: Record<string, Record<string, Record<string, Record<string, Record<string, Record<string, { count: number; remark: string }>>>>>> = {};
+        // Updated Hierarchy to include priority
+        const hierarchy: Record<string, Record<string, Record<string, Record<string, Record<string, Record<string, Record<string, { count: number; remark: string }>>>>>>> = {};
 
-        combinedRawAssignments.forEach(({ personnel, requestId, task, taskType }) => {
+        combinedRawAssignments.forEach(({ personnel, requestId, task, taskType, priority }) => {
             const desc = String(getTaskValue(task, 'Description') || 'General Task').trim();
             const variant = String(getTaskValue(task, 'Variant') || '-').trim();
             const remark = task.plannerNote || '';
@@ -546,16 +560,17 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             if (!hierarchy[personnel]) hierarchy[personnel] = {};
             if (!hierarchy[personnel][exportDate]) hierarchy[personnel][exportDate] = {};
             if (!hierarchy[personnel][exportDate][requestId]) hierarchy[personnel][exportDate][requestId] = {};
-            if (!hierarchy[personnel][exportDate][requestId][taskType]) hierarchy[personnel][exportDate][requestId][taskType] = {};
-            if (!hierarchy[personnel][exportDate][requestId][taskType][desc]) hierarchy[personnel][exportDate][requestId][taskType][desc] = {};
+            if (!hierarchy[personnel][exportDate][requestId][priority]) hierarchy[personnel][exportDate][requestId][priority] = {};
+            if (!hierarchy[personnel][exportDate][requestId][priority][taskType]) hierarchy[personnel][exportDate][requestId][priority][taskType] = {};
+            if (!hierarchy[personnel][exportDate][requestId][priority][taskType][desc]) hierarchy[personnel][exportDate][requestId][priority][taskType][desc] = {};
             
-            if (!hierarchy[personnel][exportDate][requestId][taskType][desc][variant]) {
-                hierarchy[personnel][exportDate][requestId][taskType][desc][variant] = { count: 0, remark: remark };
+            if (!hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant]) {
+                hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant] = { count: 0, remark: remark };
             }
             
-            hierarchy[personnel][exportDate][requestId][taskType][desc][variant].count += 1;
+            hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant].count += 1;
             
-            const currentObj = hierarchy[personnel][exportDate][requestId][taskType][desc][variant];
+            const currentObj = hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant];
             if (remark && !currentObj.remark) {
                 currentObj.remark = remark;
             } else if (remark && currentObj.remark && !currentObj.remark.includes(remark)) {
@@ -564,7 +579,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
         });
 
         const rows: any[][] = [];
-        rows.push(["Tester", "Plantodate", "Request ID", "ประเภทงาน", "รายการทดสอบ", "Variant", "Remark", "Total"]);
+        rows.push(["Tester", "Plantodate", "Request ID", "ลำดับความสำคัญ", "ประเภทงาน", "รายการทดสอบ", "Variant", "Remark", "Total"]);
 
         let grandTotal = 0;
         const sortedTesters = Object.keys(hierarchy).sort();
@@ -576,32 +591,38 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 const sortedReqIds = Object.keys(reqIds).sort();
                 
                 sortedReqIds.forEach((reqId, rIdx) => {
-                    const taskTypes = reqIds[reqId];
-                    const sortedTaskTypes = Object.keys(taskTypes).sort();
+                    const priorities = reqIds[reqId];
+                    const sortedPriorities = Object.keys(priorities).sort();
 
-                    sortedTaskTypes.forEach((taskType, tyIdx) => {
-                        const descs = taskTypes[taskType];
-                        const sortedDescs = Object.keys(descs).sort();
-                        
-                        sortedDescs.forEach((desc, dsIdx) => {
-                            const variants = descs[desc];
-                            const sortedVariants = Object.keys(variants).sort();
+                    sortedPriorities.forEach((priority, pIdx) => {
+                        const taskTypes = priorities[priority];
+                        const sortedTaskTypes = Object.keys(taskTypes).sort();
 
-                            sortedVariants.forEach((variant, vIdx) => {
-                                const { count, remark } = variants[variant];
-                                grandTotal += count;
+                        sortedTaskTypes.forEach((taskType, tyIdx) => {
+                            const descs = taskTypes[taskType];
+                            const sortedDescs = Object.keys(descs).sort();
+                            
+                            sortedDescs.forEach((desc, dsIdx) => {
+                                const variants = descs[desc];
+                                const sortedVariants = Object.keys(variants).sort();
 
-                                const row: any[] = [];
-                                row[0] = (rIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? tester : "";
-                                row[1] = (rIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? dateDisplay : "";
-                                row[2] = (tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? reqId : "";
-                                row[3] = (dsIdx === 0 && vIdx === 0) ? taskType : "";
-                                row[4] = (vIdx === 0) ? desc : "";
-                                row[5] = variant;
-                                row[6] = remark;
-                                row[7] = count;
+                                sortedVariants.forEach((variant, vIdx) => {
+                                    const { count, remark } = variants[variant];
+                                    grandTotal += count;
 
-                                rows.push(row);
+                                    const row: any[] = [];
+                                    row[0] = (rIdx === 0 && pIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? tester : "";
+                                    row[1] = (rIdx === 0 && pIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? dateDisplay : "";
+                                    row[2] = (pIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? reqId : "";
+                                    row[3] = (tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? priority : "";
+                                    row[4] = (dsIdx === 0 && vIdx === 0) ? taskType : "";
+                                    row[5] = (vIdx === 0) ? desc : "";
+                                    row[6] = variant;
+                                    row[7] = remark;
+                                    row[8] = count;
+
+                                    rows.push(row);
+                                });
                             });
                         });
                     });
@@ -610,13 +631,14 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             rows.push([]);
         });
 
-        rows.push(["Grand Total", "", "", "", "", "", "", grandTotal]);
+        rows.push(["Grand Total", "", "", "", "", "", "", "", grandTotal]);
 
         const ws = XLSX.utils.aoa_to_sheet(rows);
         ws['!cols'] = [
             { wch: 15 }, // Tester
             { wch: 12 }, // Date
             { wch: 20 }, // Request ID
+            { wch: 18 }, // Priority
             { wch: 25 }, // Task Type
             { wch: 35 }, // Description
             { wch: 25 }, // Variant
