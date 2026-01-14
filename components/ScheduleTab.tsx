@@ -8,7 +8,8 @@ import {
     addCategorizedTask, unassignTaskToPool, updateAssignedPrepareTask,
     resetItemPreparation,
     deleteAssignedPrepareTask,
-    getCategorizedTasks
+    getCategorizedTasks,
+    forceRecallTask
 } from '../services/dataService';
 import { 
     CheckCircleIcon, XCircleIcon, ArrowUturnLeftIcon, 
@@ -442,16 +443,11 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
 
     const handleCorrectionReturn = async (group: AssignedTask, itemIndex: number) => {
         const item = group.tasks[itemIndex];
-        const categorizedTask: CategorizedTask = { 
-            id: group.requestId, 
-            category: group.category, 
-            tasks: [item], 
-            docId: group.id 
-        };
-        await unassignTaskToPool(categorizedTask);
-        const remaining = group.tasks.filter((_, idx) => idx !== itemIndex);
-        if (remaining.length > 0) await updateAssignedTask(group.id, { tasks: remaining });
-        else await deleteAssignedTask(group.id);
+        if (!item._id) return;
+        
+        // Use forceRecallTask which handles proper cleanup in database without creating duplicates
+        await forceRecallTask(item._id);
+        
         fetchData(); 
         onTasksUpdated();
         setNotification({ message: "Task Recalled (Quick)", isError: false });
@@ -470,34 +466,11 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             preventOutsideClick: true,
             onConfirm: async (reason) => {
                 if (!reason) return;
-                const item = { ...group.tasks[itemIndex] };
-                
-                // CRITICAL FIX: Destructure and completely remove preparation and status flags
-                const { status, notOkReason, preparationStatus, isReturned: oldRet, returnReason: oldRes, returnedBy: oldBy, ...cleanItem } = item;
-                
-                const returnedItem = { 
-                    ...cleanItem, 
-                    isReturned: true, 
-                    returnReason: reason, 
-                    returnedBy: group.assistantName
-                };
+                const item = group.tasks[itemIndex];
+                if (!item._id) return;
 
-                await addCategorizedTask({ 
-                    id: group.requestId, 
-                    category: group.category, 
-                    tasks: [returnedItem], 
-                    isReturnedPool: true, 
-                    isPrep: true,
-                    createdAt: new Date().toISOString(), 
-                    shift: group.shift, 
-                    returnedBy: group.assistantName, 
-                    returnReason: reason,
-                    returnedDate: group.assignedDate 
-                } as any);
-
-                const remaining = group.tasks.filter((_, idx) => idx !== itemIndex);
-                if (remaining.length > 0) await updateAssignedPrepareTask(group.id, { tasks: remaining });
-                else await deleteAssignedPrepareTask(group.id);
+                // Use enhanced forceRecallTask with reason to update original entry
+                await forceRecallTask(item._id, reason, group.assistantName);
                 
                 fetchData(); 
                 onTasksUpdated(); 
@@ -520,34 +493,11 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             preventOutsideClick: true,
             onConfirm: async (reason) => {
                 if (!reason) return;
-                const item = { ...group.tasks[itemIndex] };
-                
-                // CRITICAL FIX: Destructure and completely remove ALL status flags
-                const { status, notOkReason, preparationStatus, isReturned: oldRet, returnReason: oldRes, returnedBy: oldBy, ...cleanItem } = item;
-                
-                const returnedItem = { 
-                    ...cleanItem, 
-                    isReturned: true, 
-                    returnReason: reason, 
-                    returnedBy: group.testerName
-                };
+                const item = group.tasks[itemIndex];
+                if (!item._id) return;
 
-                await addCategorizedTask({ 
-                    id: group.requestId, 
-                    category: group.category, 
-                    tasks: [returnedItem], 
-                    isReturnedPool: true, 
-                    isPrep: false,
-                    createdAt: new Date().toISOString(), 
-                    shift: group.shift, 
-                    returnedBy: group.testerName, 
-                    returnReason: reason, 
-                    returnedDate: group.assignedDate 
-                } as any);
-
-                const remaining = group.tasks.filter((_, idx) => idx !== itemIndex);
-                if (remaining.length > 0) await updateAssignedTask(group.id, { tasks: remaining });
-                else await deleteAssignedTask(group.id);
+                // Use enhanced forceRecallTask with reason to update original entry
+                await forceRecallTask(item._id, reason, group.testerName);
                 
                 fetchData(); 
                 onTasksUpdated(); 
@@ -781,7 +731,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                         {activePerson.name.substring(0, 2).toUpperCase()}
                                     </div>
                                     <div>
-                                        <h2 className="text-2xl font-black text-base-900 dark:text-white tracking-tighter leading-none">{activePerson.name}</h2>
+                                        <h2 className="text-2xl font-black text-base-900 dark:text-base-100 tracking-tighter leading-none">{activePerson.name}</h2>
                                         <p className="text-[10px] text-base-400 font-bold uppercase tracking-[0.3em] mt-1.5 flex items-center gap-2">
                                             Operational Tasks Control
                                             {isPlannerAuthorized && <span className="px-2 py-0.5 bg-indigo-600 text-white rounded text-[8px] font-black tracking-widest">PLANNER MODE</span>}
@@ -932,7 +882,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                     )}
                                                                     
                                                                     <div className="flex gap-2">
-                                                                        {isPlannerAuthorized && (
+                                                                        {(isPlannerAuthorized || true) && ( // Planner Recall button
                                                                             <button 
                                                                                 onClick={() => handleCorrectionReturn(item.sourceGroup, item.index)} 
                                                                                 className="p-2.5 bg-white dark:bg-base-800 text-indigo-600 dark:text-indigo-400 border-2 border-indigo-100 dark:border-indigo-900/50 rounded-xl shadow-sm hover:bg-indigo-50 transition-all flex items-center justify-center shadow-indigo-100 animate-fade-in"

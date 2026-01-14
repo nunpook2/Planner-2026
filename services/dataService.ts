@@ -285,18 +285,31 @@ export const resetItemPreparation = async (prepTask: AssignedPrepareTask, itemIn
     }
 };
 
+// Deprecated in favor of direct updates or forceRecallTask, but updated here for safety
 export const unassignTaskToPool = async (categorizedTask: CategorizedTask): Promise<void> => {
     const { docId, ...cleanBase } = categorizedTask;
     const cleanTasks = cleanBase.tasks.map(t => {
         const { status, notOkReason, returnReason, returnedBy, isReturned, preparationStatus, ...rest } = t;
         return rest as RawTask;
     });
-    const payload = { ...cleanBase, tasks: cleanTasks, returnReason: null, returnedBy: null, isReturnedPool: false };
-    await getCollection('categorizedTasks').add(payload);
+    
+    if (docId) {
+        // If it exists, update it to clean state instead of creating a duplicate
+        await getCollection('categorizedTasks').doc(docId).update({ 
+            tasks: cleanTasks, 
+            returnReason: null, 
+            returnedBy: null, 
+            isReturnedPool: false 
+        });
+    } else {
+        const payload = { ...cleanBase, tasks: cleanTasks, returnReason: null, returnedBy: null, isReturnedPool: false };
+        await getCollection('categorizedTasks').add(payload);
+    }
 };
 
 // FORCE RECALL: Pulls a task back from an assignment and makes it available in the pool
-export const forceRecallTask = async (taskId: string) => {
+// Enhanced to support return reason to prevent duplication in the database
+export const forceRecallTask = async (taskId: string, reason?: string, returnedBy?: string) => {
     const batch = firestore.batch();
     
     // 1. Find and remove from Assigned Tasks (Analyst)
@@ -330,8 +343,19 @@ export const forceRecallTask = async (taskId: string) => {
         const taskIdx = data.tasks.findIndex(t => t._id === taskId);
         if (taskIdx !== -1) {
             const updated = [...data.tasks];
-            const { status, notOkReason, preparationStatus, ...cleanTask } = updated[taskIdx];
-            updated[taskIdx] = cleanTask as RawTask;
+            const { status, notOkReason, preparationStatus, isReturned, returnReason, returnedBy: oldBy, ...cleanTask } = updated[taskIdx];
+            
+            // If reason is provided, update with return metadata, otherwise reset to clean state
+            const finalTask = {
+                ...cleanTask,
+                isReturned: reason ? true : false,
+                returnReason: reason || null,
+                returnedBy: returnedBy || null,
+                preparationStatus: null,
+                status: null
+            };
+            
+            updated[taskIdx] = finalTask as RawTask;
             batch.update(doc.ref, { tasks: updated });
         }
     });

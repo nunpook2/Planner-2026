@@ -53,14 +53,14 @@ const CATEGORY_STYLES: Record<string, { active: string, inactive: string, badge:
     },
     normal: { 
         active: 'bg-gradient-to-br from-blue-500 to-blue-700 text-white border-blue-400 shadow-[0_10px_20px_-5px_rgba(37,99,235,0.3)]', 
-        inactive: 'bg-blue-50/40 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400 border-blue-200/50 dark:border-blue-800/30 hover:border-blue-400', 
-        badge: 'bg-blue-100 dark:bg-blue-955 text-blue-700',
+        inactive: 'bg-blue-50/40 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400 border-blue-200/50 dark:border-blue-800/30 hover:border-orange-400', 
+        badge: 'bg-blue-100 dark:bg-base-955 text-blue-700',
         dot: 'bg-blue-600'
     },
     manual: { 
         active: 'bg-gradient-to-br from-indigo-500 to-indigo-700 text-white border-indigo-400 shadow-[0_10px_20px_-5px_rgba(79,70,229,0.3)]', 
-        inactive: 'bg-indigo-50/40 dark:bg-indigo-900/10 text-indigo-600 dark:text-indigo-400 border-indigo-200/50 dark:border-indigo-800/30 hover:border-indigo-400', 
-        badge: 'bg-indigo-100 dark:bg-indigo-955 text-indigo-700',
+        inactive: 'bg-indigo-50/40 dark:bg-indigo-900/10 text-indigo-600 dark:text-indigo-400 border-indigo-200/50 dark:border-indigo-800/30 hover:border-orange-400', 
+        badge: 'bg-indigo-100 dark:bg-base-955 text-indigo-700',
         dot: 'bg-indigo-600'
     }
 };
@@ -401,8 +401,13 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         let totalDBItems = 0;
         let visibleInGrid = 0;
         let assignedToStaff = 0;
+        const seenIds = new Set<string>(); // Prevent duplicate accounting
+        
         categorizedTasks.forEach(doc => {
             doc.tasks.forEach(task => {
+                if (task._id && seenIds.has(task._id)) return;
+                if (task._id) seenIds.add(task._id);
+
                 totalDBItems++;
                 const isAssigned = task._id && assignedStateGlobal.ids.has(task._id);
                 if (isAssigned && doc.category !== TaskCategory.Manual) assignedToStaff++;
@@ -415,9 +420,14 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     const categoryTotals = useMemo(() => {
         const counts: Record<string, number> = { all: 0, pocat: 0, urgent: 0, normal: 0, manual: 0 };
         const localAssignedIds = assignedStateGlobal.ids;
+        const seenIds = new Set<string>(); // Prevent duplicate accounting in totals
+        
         categorizedTasks.forEach(doc => {
             const cat = doc.category.toLowerCase();
             doc.tasks.forEach(task => {
+                if (task._id && seenIds.has(task._id)) return;
+                if (task._id) seenIds.add(task._id);
+
                 const isAssigned = task._id && localAssignedIds.has(task._id);
                 if (isAssigned && cat !== 'manual') return;
                 counts.all++;
@@ -514,11 +524,16 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
             if (search && !group.rid.toLowerCase().includes(search)) return;
 
             const row = { requestId: group.rid, cells: {} as any, unmappedItems: [] as any, minDueDate: Infinity, itemCount: 0, availableItems: 0, isPoCat: false, isUrgent: false, isManual: false };
+            const seenTaskIdsInRow = new Set<string>(); // CRITICAL FIX: Ensure uniqueness within the grid row
+
             filteredDocs.forEach((doc: any) => {
                 if (doc.category === 'pocat') row.isPoCat = true;
                 if (doc.category === 'urgent') row.isUrgent = true;
                 
                 doc.tasks.forEach((task: any, index: number) => {
+                    if (task._id && seenTaskIdsInRow.has(task._id)) return;
+                    if (task._id) seenTaskIdsInRow.add(task._id);
+
                     const isFullyAssigned = task._id && assignedStateGlobal.ids.has(task._id);
                     if (isFullyAssigned) return;
 
@@ -610,7 +625,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     </div>
                     <div className="flex gap-3 pr-4">
                         {activeCategory === 'manual' && (
-                            <button onClick={() => setIsAddManualModalOpen(true)} className="px-8 py-4 bg-gradient-to-br from-indigo-500 to-indigo-700 text-white text-[12px] font-black rounded-2xl hover:brightness-110 transition-all uppercase tracking-widest flex items-center gap-2 shadow-xl border-b-4 border-indigo-900 active:scale-95"><PlusIcon className="h-5 w-5" /> Create Template</button>
+                            <button onClick={() => setIsAddManualModalOpen(true)} className="px-8 py-4 bg-gradient-to-br from-indigo-50 to-indigo-700 text-white text-[12px] font-black rounded-2xl hover:brightness-110 transition-all uppercase tracking-widest flex items-center gap-2 shadow-xl border-b-4 border-indigo-900 active:scale-95"><PlusIcon className="h-5 w-5" /> Create Template</button>
                         )}
                         <button onClick={() => setHideEmptyColumns(!hideEmptyColumns)} className={`px-8 py-4 rounded-2xl text-[12px] font-black uppercase tracking-widest transition-all shadow-xl ${hideEmptyColumns ? 'bg-primary-600 text-white border-b-4 border-primary-800' : 'bg-slate-800 text-slate-400 border border-white/5'}`}>{hideEmptyColumns ? 'Standard View' : 'Compact Mode'}</button>
                         <button onClick={fetchData} className="p-4 bg-slate-800 rounded-2xl text-primary-400 hover:text-white transition-all shadow-lg active:scale-90"><RefreshIcon className={`h-6 w-6 ${isLoading ? 'animate-spin' : ''}`} /></button>
@@ -649,7 +664,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                         
                         {selectedItemCount > 0 && (
                             <div className="flex gap-2 animate-fade-in shrink-0">
-                                <button onClick={() => { setIsAssigningToPrepare(true); setIsModalOpen(true); }} className="px-7 py-3.5 bg-amber-400 text-amber-950 text-[11px] font-black rounded-2xl hover:brightness-110 uppercase shadow-lg transition-all active:scale-95 border-b-4 border-amber-600">Assign Prep</button>
+                                <button onClick={() => { setIsAssigningToPrepare(true); setIsModalOpen(true); }} className="px-7 py-3.5 bg-amber-400 text-amber-955 text-[11px] font-black rounded-2xl hover:brightness-110 uppercase shadow-lg transition-all active:scale-95 border-b-4 border-amber-600">Assign Prep</button>
                                 <button onClick={() => { setIsAssigningToPrepare(false); setIsModalOpen(true); }} className="px-7 py-3.5 bg-primary-600 text-white text-[11px] font-black rounded-2xl hover:brightness-110 uppercase shadow-lg transition-all active:scale-95 border-b-4 border-primary-800">Assign Test</button>
                                 <button onClick={() => setSelectedItems({})} className="p-3.5 text-base-300 hover:text-red-500 transition-all hover:rotate-90"><XCircleIcon className="h-7 w-7"/></button>
                             </div>
@@ -687,7 +702,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                         <div className="p-8">
                             <div className="overflow-hidden rounded-[2.5rem] border-2 border-indigo-100 dark:border-indigo-900/30 shadow-2xl">
                                 <table className="w-full text-left border-collapse">
-                                    <thead className="bg-gradient-to-r from-indigo-900 to-indigo-950 text-white">
+                                    <thead className="bg-gradient-to-r from-indigo-900 to-indigo-955 text-white">
                                         <tr>
                                             <th className="p-6 w-20 text-center border-r border-white/10"><input type="checkbox" className="h-7 w-7 rounded" onChange={e => {
                                                 const checked = e.target.checked;
