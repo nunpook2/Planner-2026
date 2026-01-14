@@ -58,7 +58,7 @@ export interface EquipmentHistory {
 export interface Equipment {
     id: string;
     name: string;
-    group: string; // Grouping field (e.g., DSC, ICP, HPLC)
+    group: string; 
     status: 'ready' | 'issue' | 'maintenance';
     actionStatus: 'none' | 'notified' | 'ordered' | 'repairing';
     details: string;
@@ -125,4 +125,17 @@ export interface AssignedPrepareTask {
     shift: 'day' | 'night';
     originalDocId: string;
     originalIndices: number[];
+}
+
+// --- Distillation Tracking ---
+export interface DistillationLog {
+    id?: string;
+    chemicalName: string;
+    inputAmount: number;
+    outputAmount: number;
+    yieldPercent: number;
+    date: string;
+    recorderName: string;
+    notes?: string;
+    createdAt: string;
 }

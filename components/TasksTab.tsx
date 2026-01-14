@@ -20,48 +20,48 @@ import { CheckCircleIcon, ChevronDownIcon, TrashIcon, AlertTriangleIcon, Refresh
 declare const XLSX: any;
 
 // --- CONSTANTS ---
-const COL_DUE_WIDTH = 60;
-const COL_RID_WIDTH = 200;
+const COL_DUE_WIDTH = 45;
+const COL_RID_WIDTH = 160;
 
 const HEADER_THEMES = [
-    { name: 'Indigo', headerBg: 'bg-indigo-900', headerText: 'text-white', borderColor: 'border-indigo-800', subHeaderBg: 'bg-indigo-700', subHeaderText: 'text-white' },
-    { name: 'Emerald', headerBg: 'bg-emerald-900', headerText: 'text-white', borderColor: 'border-emerald-800', subHeaderBg: 'bg-emerald-700', subHeaderText: 'text-white' },
-    { name: 'Amber', headerBg: 'bg-amber-800', headerText: 'text-white', borderColor: 'border-amber-700', subHeaderBg: 'bg-amber-600', subHeaderText: 'text-white' },
-    { name: 'Rose', headerBg: 'bg-rose-900', headerText: 'text-white', borderColor: 'border-rose-800', subHeaderBg: 'bg-rose-700', subHeaderText: 'text-white' },
-    { name: 'Cyan', headerBg: 'bg-cyan-900', headerText: 'text-white', borderColor: 'border-cyan-800', subHeaderBg: 'bg-cyan-700', subHeaderText: 'text-white' },
-    { name: 'Violet', headerBg: 'bg-violet-900', headerText: 'text-white', borderColor: 'border-violet-800', subHeaderBg: 'bg-violet-700', subHeaderText: 'text-white' },
+    { name: 'Indigo', headerBg: 'bg-indigo-600/10', headerText: 'text-indigo-900', borderColor: 'border-indigo-200', subHeaderBg: 'bg-indigo-600', subHeaderText: 'text-white' },
+    { name: 'Emerald', headerBg: 'bg-emerald-600/10', headerText: 'text-emerald-900', borderColor: 'border-emerald-200', subHeaderBg: 'bg-emerald-600', subHeaderText: 'text-white' },
+    { name: 'Amber', headerBg: 'bg-amber-600/10', headerText: 'text-amber-900', borderColor: 'border-amber-200', subHeaderBg: 'bg-amber-500', subHeaderText: 'text-white' },
+    { name: 'Rose', headerBg: 'bg-rose-600/10', headerText: 'text-rose-900', borderColor: 'border-rose-200', subHeaderBg: 'bg-rose-600', subHeaderText: 'text-white' },
+    { name: 'Cyan', headerBg: 'bg-cyan-600/10', headerText: 'text-cyan-900', borderColor: 'border-cyan-200', subHeaderBg: 'bg-cyan-600', subHeaderText: 'text-white' },
+    { name: 'Violet', headerBg: 'bg-violet-600/10', headerText: 'text-violet-900', borderColor: 'border-violet-200', subHeaderBg: 'bg-violet-600', subHeaderText: 'text-white' },
 ];
 
 const CATEGORY_STYLES: Record<string, { active: string, inactive: string, badge: string, dot: string }> = {
     all: { 
-        active: 'bg-slate-900 text-white border-slate-700 shadow-xl', 
-        inactive: 'bg-white/60 dark:bg-base-800/40 text-slate-500 border-base-200 dark:border-white/5 hover:border-slate-400', 
-        badge: 'bg-slate-100 dark:bg-base-955 text-slate-700',
+        active: 'bg-indigo-600 text-white border-indigo-400 shadow-md', 
+        inactive: 'bg-white dark:bg-base-800 text-slate-500 border-slate-200 dark:border-white/5 hover:border-indigo-400', 
+        badge: 'bg-indigo-50 dark:bg-base-955 text-indigo-700',
         dot: 'bg-slate-400'
     },
     pocat: { 
-        active: 'bg-gradient-to-br from-orange-400 to-orange-600 text-white border-orange-300 shadow-[0_10px_20px_-5px_rgba(249,115,22,0.3)]', 
-        inactive: 'bg-orange-50/40 dark:bg-orange-900/10 text-orange-600 dark:text-orange-400 border-orange-200/50 dark:border-orange-800/30 hover:border-orange-400', 
+        active: 'bg-orange-500 text-white border-orange-300 shadow-md', 
+        inactive: 'bg-orange-50/50 dark:bg-orange-900/10 text-orange-600 dark:text-orange-400 border-orange-200 hover:border-orange-400', 
         badge: 'bg-orange-100 dark:bg-orange-955 text-orange-700',
         dot: 'bg-orange-500'
     },
     urgent: { 
-        active: 'bg-gradient-to-br from-red-500 to-red-700 text-white border-red-400 shadow-[0_10px_20px_-5px_rgba(220,38,38,0.3)]', 
-        inactive: 'bg-red-50/40 dark:bg-red-900/10 text-red-600 dark:text-red-400 border-red-200/50 dark:border-red-800/30 hover:border-red-400', 
+        active: 'bg-red-600 text-white border-red-400 shadow-md', 
+        inactive: 'bg-red-50/50 dark:bg-red-900/10 text-red-600 dark:text-red-400 border-red-200 hover:border-red-400', 
         badge: 'bg-red-100 dark:bg-red-955 text-red-700',
         dot: 'bg-red-600'
     },
     normal: { 
-        active: 'bg-gradient-to-br from-blue-500 to-blue-700 text-white border-blue-400 shadow-[0_10px_20px_-5px_rgba(37,99,235,0.3)]', 
-        inactive: 'bg-blue-50/40 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400 border-blue-200/50 dark:border-blue-800/30 hover:border-orange-400', 
+        active: 'bg-blue-600 text-white border-blue-400 shadow-md', 
+        inactive: 'bg-blue-50/50 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400 border-blue-200 hover:border-blue-400', 
         badge: 'bg-blue-100 dark:bg-base-955 text-blue-700',
         dot: 'bg-blue-600'
     },
     manual: { 
-        active: 'bg-gradient-to-br from-indigo-500 to-indigo-700 text-white border-indigo-400 shadow-[0_10px_20px_-5px_rgba(79,70,229,0.3)]', 
-        inactive: 'bg-indigo-50/40 dark:bg-indigo-900/10 text-indigo-600 dark:text-indigo-400 border-indigo-200/50 dark:border-indigo-800/30 hover:border-orange-400', 
-        badge: 'bg-indigo-100 dark:bg-base-955 text-indigo-700',
-        dot: 'bg-indigo-600'
+        active: 'bg-purple-600 text-white border-purple-400 shadow-md', 
+        inactive: 'bg-purple-50/50 dark:bg-purple-900/10 text-purple-600 dark:text-purple-400 border-purple-200 hover:border-purple-400', 
+        badge: 'bg-purple-100 dark:bg-base-955 text-purple-700',
+        dot: 'bg-purple-600'
     }
 };
 
@@ -250,7 +250,7 @@ const ExpandableCell: React.FC<{
     onInitiateDelete: (docId: string, index: number, label: string) => void;
     onInitiateEdit?: (docId: string, index: number, task: RawTask) => void;
 }> = ({ headerKey, items, isGroupEnd, expandedCell, setExpandedCell, selectedItems, handleSelectItem, setSelectedItems, isAssigningToPrepare, setNoteEditor, onInitiateDelete, onInitiateEdit }) => {
-    if (items.length === 0) return <td className={`p-0 align-top border border-base-300 dark:border-base-700 ${isGroupEnd ? 'border-r-2 border-r-base-400 dark:border-r-base-600' : ''}`}></td>;
+    if (items.length === 0) return <td className={`p-0 align-top border border-base-200 dark:border-base-700 ${isGroupEnd ? 'border-r-2 border-r-base-300 dark:border-r-base-600' : ''}`}></td>;
     
     const anchorDocId = items[0].sourceDocId;
     const isExpanded = expandedCell?.headerKey === headerKey && expandedCell?.docId === anchorDocId;
@@ -277,29 +277,29 @@ const ExpandableCell: React.FC<{
     };
 
     let cellTextColor = 'text-primary-955 dark:text-primary-300 font-black';
-    if (hasReturned) cellTextColor = 'text-purple-800 dark:text-purple-400 font-black';
-    else if (hasInPrep) cellTextColor = 'text-amber-700 dark:text-amber-500 font-black';
-    else if (hasPrepared) cellTextColor = 'text-emerald-800 dark:text-emerald-500 font-black';
+    if (hasReturned) cellTextColor = 'text-purple-700 dark:text-purple-400 font-black';
+    else if (hasInPrep) cellTextColor = 'text-amber-600 dark:text-amber-500 font-black';
+    else if (hasPrepared) cellTextColor = 'text-emerald-700 dark:text-emerald-500 font-black';
 
     return (
-        <td className={`p-0 align-top transition-all relative border border-base-300 dark:border-base-700 ${isGroupEnd ? 'border-r-2 border-r-base-400 dark:border-r-base-600' : ''} ${isExpanded ? 'bg-white dark:bg-base-800 ring-2 ring-primary-500 z-[80]' : 'hover:bg-base-100/50 dark:hover:bg-base-700/50'}`}>
-            <div className={`p-1 text-center cursor-pointer h-full flex flex-col justify-center min-h-[46px] relative`} onClick={() => setExpandedCell(isExpanded ? null : { docId: anchorDocId, headerKey })}>
+        <td className={`p-0 align-top transition-all relative border border-base-200 dark:border-base-700 ${isGroupEnd ? 'border-r-2 border-r-base-300 dark:border-r-base-600' : ''} ${isExpanded ? 'bg-white dark:bg-base-800 ring-2 ring-indigo-500 z-[80]' : 'hover:bg-indigo-50/30 dark:hover:bg-base-700/50'}`}>
+            <div className={`p-0.5 text-center cursor-pointer h-full flex flex-col justify-center min-h-[42px] relative`} onClick={() => setExpandedCell(isExpanded ? null : { docId: anchorDocId, headerKey })}>
                 <div className="flex flex-col items-center">
-                    <span className={`font-black text-[22px] tracking-tighter leading-none ${numSelected > 0 ? 'text-white bg-primary-600 rounded-md px-2 py-0.5' : cellTextColor}`}>
+                    <span className={`font-black text-[20px] tracking-tighter leading-none ${numSelected > 0 ? 'text-white bg-indigo-600 rounded-md px-1.5 py-0.5' : cellTextColor}`}>
                         {numSelected > 0 ? `${numSelected}/${itemCount}` : itemCount}
                     </span>
-                    <div className="flex justify-center gap-1 mt-1.5">
-                        {hasReturned && <div className="w-2 h-2 rounded-full bg-purple-600 animate-pulse"></div>}
-                        {hasInPrep && <div className="w-2 h-2 rounded-full bg-amber-500"></div>}
-                        {hasPrepared && <div className="w-2 h-2 rounded-full bg-emerald-500"></div>}
+                    <div className="flex justify-center gap-1 mt-1">
+                        {hasReturned && <div className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></div>}
+                        {hasInPrep && <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>}
+                        {hasPrepared && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
                     </div>
                 </div>
             </div>
             {isExpanded && (
-                <div className="absolute top-full left-0 min-w-[440px] bg-white dark:bg-base-900 border-2 border-primary-500 shadow-2xl rounded-b-[2rem] overflow-hidden z-[90] animate-fade-in origin-top-left">
-                    <div className="p-4 bg-base-100 dark:bg-base-800 border-b-2 dark:border-base-700 flex justify-between items-center shrink-0">
-                        <span className="text-[12px] font-black text-primary-800 dark:text-primary-300 uppercase tracking-widest">{headerKey.split('|')[1] || headerKey}</span>
-                        <label className="flex items-center gap-2 text-[10px] font-black uppercase cursor-pointer text-primary-800 dark:text-primary-200"><input type="checkbox" className="h-4 w-4 rounded" checked={areAllSelected} onChange={e => toggleAll(e.target.checked)}/> Select All</label>
+                <div className="absolute top-full left-0 min-w-[440px] bg-white dark:bg-base-900 border-2 border-indigo-500 shadow-2xl rounded-b-[2rem] overflow-hidden z-[90] animate-fade-in origin-top-left">
+                    <div className="p-4 bg-indigo-50 dark:bg-base-800 border-b-2 border-indigo-100 dark:border-base-700 flex justify-between items-center shrink-0">
+                        <span className="text-[11px] font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-widest">{headerKey.split('|')[1] || headerKey}</span>
+                        <label className="flex items-center gap-2 text-[10px] font-black uppercase cursor-pointer text-indigo-800 dark:text-primary-200"><input type="checkbox" className="h-4 w-4 rounded" checked={areAllSelected} onChange={e => toggleAll(e.target.checked)}/> Select All</label>
                     </div>
                     <div className="max-h-96 overflow-y-auto custom-scrollbar bg-white dark:bg-base-955">
                         <table className="w-full border-collapse">
@@ -310,23 +310,23 @@ const ExpandableCell: React.FC<{
                                     const isLockedForTesting = !isAssigningToPrepare && isInPrep;
                                     const sampleLabel = String(getTaskValue(task, 'Sample Name'));
                                     return (
-                                        <tr key={task._id} className={`bg-white dark:bg-base-900 hover:bg-primary-50/20 ${isLockedForTesting ? 'opacity-50' : ''}`}>
-                                            <td className="p-4 w-12 text-center"><input type="checkbox" disabled={isLockedForTesting} className="h-5 w-5 rounded cursor-pointer border-2 border-base-300 dark:border-base-600 text-primary-600" checked={selectedItems[sourceDocId]?.has(task._id!) || false} onChange={e => handleSelectItem(sourceDocId, task._id!, e.target.checked)}/></td>
+                                        <tr key={task._id} className={`bg-white dark:bg-base-900 hover:bg-indigo-50/40 ${isLockedForTesting ? 'opacity-50' : ''}`}>
+                                            <td className="p-4 w-12 text-center"><input type="checkbox" disabled={isLockedForTesting} className="h-5 w-5 rounded cursor-pointer border-2 border-base-300 dark:border-base-600 text-indigo-600" checked={selectedItems[sourceDocId]?.has(task._id!) || false} onChange={e => handleSelectItem(sourceDocId, task._id!, e.target.checked)}/></td>
                                             <td className="p-4">
                                                 <div className="flex justify-between items-start mb-1 gap-4">
                                                     <div className="flex flex-col gap-1 min-w-0">
                                                         <div className="flex items-center gap-2">
-                                                            <span className="font-black text-[16px] uppercase truncate text-base-955 dark:text-white leading-tight tracking-tight">{sampleLabel}</span>
-                                                            {isReady && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded uppercase tracking-widest border border-emerald-300">Ready</span>}
-                                                            {isInPrep && <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded uppercase tracking-widest border border-amber-300">In Prep</span>}
+                                                            <span className="font-black text-[15px] uppercase truncate text-base-955 dark:text-white leading-tight tracking-tight">{sampleLabel}</span>
+                                                            {isReady && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[8px] font-black rounded uppercase tracking-widest border border-emerald-300">Ready</span>}
+                                                            {isInPrep && <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-black rounded uppercase tracking-widest border border-amber-300">In Prep</span>}
                                                         </div>
-                                                        <p className="text-[12px] font-bold text-indigo-700 dark:text-indigo-300">{String(getTaskValue(task, 'Variant'))}</p>
+                                                        <p className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300">{String(getTaskValue(task, 'Variant'))}</p>
                                                     </div>
                                                     <div className="flex items-center gap-2 shrink-0">
-                                                        {onInitiateEdit && <button onClick={() => onInitiateEdit(sourceDocId, originalIndex, task)} className="p-2.5 bg-base-50 dark:bg-base-955 border-base-200 rounded-xl text-base-400 hover:text-indigo-600 transition-all shadow-sm"><PencilIcon className="h-5 w-5"/></button>}
-                                                        <button onClick={() => setNoteEditor({ docId: sourceDocId, index: originalIndex, text: task.plannerNote || '' })} className={`p-2.5 rounded-xl border-2 ${task.plannerNote ? 'bg-indigo-700 border-indigo-500 text-white shadow-lg' : 'bg-base-50 dark:bg-base-955 border-base-200 text-base-400'}`}><ChatBubbleLeftEllipsisIcon className="h-5 w-5" /></button>
-                                                        <button onClick={() => onInitiateDelete(sourceDocId, originalIndex, sampleLabel)} className="p-2.5 bg-base-50 dark:bg-base-955 border-base-200 rounded-xl text-base-400 hover:text-red-600 transition-all shadow-sm active:scale-90"><TrashIcon className="h-5 w-5"/></button>
-                                                        <div className="px-3 py-1.5 bg-primary-100 dark:bg-primary-900/40 text-primary-900 dark:text-primary-100 rounded-xl text-[12px] font-black border border-primary-200 shadow-inner">x{String(getTaskValue(task, 'Quantity'))}</div>
+                                                        {onInitiateEdit && <button onClick={() => onInitiateEdit(sourceDocId, originalIndex, task)} className="p-2 bg-base-50 dark:bg-base-955 border-base-200 rounded-lg text-base-400 hover:text-indigo-600 transition-all"><PencilIcon className="h-4.5 w-4.5"/></button>}
+                                                        <button onClick={() => setNoteEditor({ docId: sourceDocId, index: originalIndex, text: task.plannerNote || '' })} className={`p-2 rounded-lg border ${task.plannerNote ? 'bg-indigo-600 border-indigo-400 text-white shadow-md' : 'bg-base-50 dark:bg-base-955 border-base-200 text-base-400'}`}><ChatBubbleLeftEllipsisIcon className="h-4.5 w-4.5" /></button>
+                                                        <button onClick={() => onInitiateDelete(sourceDocId, originalIndex, sampleLabel)} className="p-2 bg-base-50 dark:bg-base-955 border-base-200 rounded-lg text-base-400 hover:text-red-600 transition-all"><TrashIcon className="h-4.5 w-4.5"/></button>
+                                                        <div className="px-2 py-1 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-900 dark:text-indigo-100 rounded-lg text-[11px] font-black border border-indigo-100">x{String(getTaskValue(task, 'Quantity'))}</div>
                                                     </div>
                                                 </div>
                                             </td>
@@ -401,7 +401,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         let totalDBItems = 0;
         let visibleInGrid = 0;
         let assignedToStaff = 0;
-        const seenIds = new Set<string>(); // Prevent duplicate accounting
+        const seenIds = new Set<string>();
         
         categorizedTasks.forEach(doc => {
             doc.tasks.forEach(task => {
@@ -420,7 +420,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     const categoryTotals = useMemo(() => {
         const counts: Record<string, number> = { all: 0, pocat: 0, urgent: 0, normal: 0, manual: 0 };
         const localAssignedIds = assignedStateGlobal.ids;
-        const seenIds = new Set<string>(); // Prevent duplicate accounting in totals
+        const seenIds = new Set<string>();
         
         categorizedTasks.forEach(doc => {
             const cat = doc.category.toLowerCase();
@@ -524,7 +524,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
             if (search && !group.rid.toLowerCase().includes(search)) return;
 
             const row = { requestId: group.rid, cells: {} as any, unmappedItems: [] as any, minDueDate: Infinity, itemCount: 0, availableItems: 0, isPoCat: false, isUrgent: false, isManual: false };
-            const seenTaskIdsInRow = new Set<string>(); // CRITICAL FIX: Ensure uniqueness within the grid row
+            const seenTaskIdsInRow = new Set<string>();
 
             filteredDocs.forEach((doc: any) => {
                 if (doc.category === 'pocat') row.isPoCat = true;
@@ -606,35 +606,35 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-120px)] space-y-3 animate-slide-in-up relative overflow-hidden">
+        <div className="flex flex-col h-[calc(100vh-120px)] space-y-2 animate-slide-in-up relative overflow-hidden bg-white/50 dark:bg-base-955">
             {notification && <Toast message={notification.message} isError={notification.isError} onDismiss={() => setNotification(null)} />}
             <AssignmentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAssign={handleConfirmAssignment} personnel={{ testers: testers.filter(t => t.team !== 'assistants_4_2'), assistants: testers.filter(t => t.team === 'assistants_4_2') }} schedule={schedule} shift={selectedShift} isPreparation={isAssigningToPrepare} selectedItemCount={selectedItemCount} isProcessing={isAssigning}/>
             <DeleteConfirmationModal isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} onConfirm={handleDeleteConfirm} label={deleteConfirm?.label || ''} isProcessing={isAssigning} />
             <EditManualTaskModal isOpen={!!editTask} onClose={() => setEditTask(null)} onSave={handleSaveTaskEdit} task={editTask?.task || null} isProcessing={isAssigning} />
             <AddManualTaskModal isOpen={isAddManualModalOpen} onClose={() => setIsAddManualModalOpen(false)} onSave={handleAddManualMission} isProcessing={isAssigning} />
 
-            {/* EXPANDED TOP SUMMARY SECTION */}
-            <div className="px-6 space-y-4 shrink-0 mt-6">
-                <div className="flex items-center justify-between p-5 bg-[#0a0f1e] rounded-[2.5rem] border border-white/5 shadow-2xl">
-                    <div className="flex items-center gap-12 ml-6">
-                        <div className="flex flex-col"><span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1">Global Database</span><span className="text-3xl font-black text-white leading-none tracking-tighter">{inventoryAudit.totalDBItems} <span className="text-xs text-slate-600 ml-1">REQS</span></span></div>
-                        <div className="w-px h-14 bg-white/10"></div>
-                        <div className="flex flex-col"><span className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.3em] mb-1">Mission Pool</span><span className="text-3xl font-black text-white leading-none tracking-tighter">{inventoryAudit.visibleInGrid}</span></div>
-                        <div className="w-px h-14 bg-white/10"></div>
-                        <div className="flex flex-col"><span className="text-[11px] font-black text-primary-400 uppercase tracking-[0.3em] mb-1">Active Staff</span><span className="text-3xl font-black text-white leading-none tracking-tighter">{inventoryAudit.assignedToStaff}</span></div>
+            {/* REFINED LIGHT SUMMARY SECTION */}
+            <div className="px-6 space-y-2 shrink-0 mt-4">
+                <div className="flex items-center justify-between p-4 bg-white dark:bg-base-900 rounded-2xl border border-indigo-100 dark:border-white/5 shadow-md">
+                    <div className="flex items-center gap-10 ml-4">
+                        <div className="flex flex-col"><span className="text-[9px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-1">Global Storage</span><span className="text-xl font-black text-slate-900 dark:text-white leading-none tracking-tighter">{inventoryAudit.totalDBItems} <span className="text-[10px] text-slate-400 ml-1 font-bold">REQS</span></span></div>
+                        <div className="w-px h-8 bg-indigo-50 dark:bg-white/10"></div>
+                        <div className="flex flex-col"><span className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-1">Available Missions</span><span className="text-xl font-black text-slate-900 dark:text-white leading-none tracking-tighter">{inventoryAudit.visibleInGrid}</span></div>
+                        <div className="w-px h-8 bg-indigo-50 dark:bg-white/10"></div>
+                        <div className="flex flex-col"><span className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.2em] mb-1">Deployed Assets</span><span className="text-xl font-black text-slate-900 dark:text-white leading-none tracking-tighter">{inventoryAudit.assignedToStaff}</span></div>
                     </div>
-                    <div className="flex gap-3 pr-4">
+                    <div className="flex gap-2 pr-2">
                         {activeCategory === 'manual' && (
-                            <button onClick={() => setIsAddManualModalOpen(true)} className="px-8 py-4 bg-gradient-to-br from-indigo-50 to-indigo-700 text-white text-[12px] font-black rounded-2xl hover:brightness-110 transition-all uppercase tracking-widest flex items-center gap-2 shadow-xl border-b-4 border-indigo-900 active:scale-95"><PlusIcon className="h-5 w-5" /> Create Template</button>
+                            <button onClick={() => setIsAddManualModalOpen(true)} className="px-5 py-2.5 bg-indigo-600 text-white text-[10px] font-black rounded-xl hover:bg-indigo-700 transition-all uppercase tracking-widest flex items-center gap-2 shadow-sm active:scale-95"><PlusIcon className="h-4 w-4" /> New Template</button>
                         )}
-                        <button onClick={() => setHideEmptyColumns(!hideEmptyColumns)} className={`px-8 py-4 rounded-2xl text-[12px] font-black uppercase tracking-widest transition-all shadow-xl ${hideEmptyColumns ? 'bg-primary-600 text-white border-b-4 border-primary-800' : 'bg-slate-800 text-slate-400 border border-white/5'}`}>{hideEmptyColumns ? 'Standard View' : 'Compact Mode'}</button>
-                        <button onClick={fetchData} className="p-4 bg-slate-800 rounded-2xl text-primary-400 hover:text-white transition-all shadow-lg active:scale-90"><RefreshIcon className={`h-6 w-6 ${isLoading ? 'animate-spin' : ''}`} /></button>
+                        <button onClick={() => setHideEmptyColumns(!hideEmptyColumns)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${hideEmptyColumns ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-white dark:bg-base-800 text-slate-400 border border-slate-200 dark:border-white/5 shadow-sm'}`}>{hideEmptyColumns ? 'Standard View' : 'Compact View'}</button>
+                        <button onClick={fetchData} className="p-2.5 bg-white dark:bg-base-800 border border-slate-200 dark:border-white/5 rounded-xl text-indigo-500 hover:text-indigo-700 transition-all shadow-sm active:scale-90"><RefreshIcon className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} /></button>
                     </div>
                 </div>
 
-                {/* PREMIUM CATEGORY & SELECTION HUB - Frosted Glass Version */}
-                <div className="p-2.5 bg-white/70 dark:bg-base-900/40 backdrop-blur-2xl rounded-[3rem] border border-white/40 dark:border-white/10 shadow-2xl flex items-center gap-4">
-                    <div className="flex items-center gap-1 p-1 bg-base-100/50 dark:bg-black/20 rounded-[2.5rem] border border-white/10 flex-grow overflow-x-auto no-scrollbar">
+                {/* CATEGORY & HUB - Clean Glass */}
+                <div className="p-2 bg-white/70 dark:bg-base-900/40 backdrop-blur-xl rounded-2xl border border-white dark:border-white/10 shadow-sm flex items-center gap-3">
+                    <div className="flex items-center gap-1 p-1 bg-indigo-50/50 dark:bg-black/20 rounded-xl flex-grow overflow-x-auto no-scrollbar">
                         {['all', 'pocat', 'urgent', 'normal', 'manual'].map(c => {
                             const isActive = activeCategory === c;
                             const style = CATEGORY_STYLES[c];
@@ -642,69 +642,67 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                 <button 
                                     key={c} 
                                     onClick={() => setActiveCategory(c)} 
-                                    className={`relative flex items-center gap-3 px-6 py-3 rounded-[2rem] border-2 transition-all duration-500 min-w-[125px] shrink-0 font-black uppercase tracking-widest text-[12px] ${isActive ? style.active : style.inactive} active:scale-95`}
+                                    className={`relative flex items-center gap-2 px-5 py-2 rounded-lg border-2 transition-all duration-300 min-w-[105px] shrink-0 font-black uppercase tracking-widest text-[10px] ${isActive ? style.active : style.inactive} active:scale-95`}
                                 >
-                                    <div className={`w-1.5 h-1.5 rounded-full ${style.dot} ${isActive ? 'animate-pulse ring-4 ring-white/30' : 'opacity-40'}`}></div>
+                                    <div className={`w-1 h-1 rounded-full ${style.dot} ${isActive ? 'animate-pulse ring-2 ring-white/50' : 'opacity-40'}`}></div>
                                     {c}
-                                    <div className={`ml-auto px-2 py-0.5 rounded-lg text-[9px] font-black shadow-inner transition-all ${isActive ? 'bg-black/10' : style.badge}`}>{categoryTotals[c] || 0}</div>
-                                    {isActive && <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-8 h-1 bg-white rounded-full blur-[2px] shadow-white"></div>}
+                                    <div className={`ml-auto px-1.5 py-0.5 rounded-md text-[8px] font-black shadow-inner transition-all ${isActive ? 'bg-black/20' : style.badge}`}>{categoryTotals[c] || 0}</div>
                                 </button>
                             );
                         })}
                     </div>
 
-                    <div className="h-10 w-px bg-base-200 dark:bg-white/10 mx-1"></div>
+                    <div className="h-8 w-px bg-slate-200 dark:bg-white/10 mx-1"></div>
 
-                    {/* SELECTION INTERFACE - Smart & Minimalist */}
-                    <div className={`flex items-center gap-4 transition-all duration-700 shrink-0 ${selectedItemCount > 0 ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
-                        <div className="flex flex-col items-center justify-center px-7 py-2.5 bg-gradient-to-br from-primary-50 to-indigo-50 dark:from-primary-900/10 dark:to-indigo-900/10 rounded-[1.8rem] border border-primary-200 dark:border-primary-800/50 shadow-inner min-w-[110px]">
-                            <span className="text-[8px] font-black text-primary-500 dark:text-primary-400 uppercase tracking-[0.25em] leading-none mb-1">Selected</span>
-                            <span className="text-3xl font-black text-primary-800 dark:text-white leading-none">{selectedItemCount}</span>
+                    {/* SELECTION INTERFACE */}
+                    <div className={`flex items-center gap-3 transition-all duration-500 shrink-0 ${selectedItemCount > 0 ? 'opacity-100' : 'opacity-20 pointer-events-none'}`}>
+                        <div className="flex flex-col items-center justify-center px-4 py-1.5 bg-indigo-50 dark:bg-indigo-900/10 rounded-lg border border-indigo-200 dark:border-indigo-800 shadow-inner min-w-[70px]">
+                            <span className="text-[7px] font-black text-indigo-500 uppercase tracking-widest leading-none mb-0.5">Focus</span>
+                            <span className="text-xl font-black text-indigo-900 dark:text-white leading-none">{selectedItemCount}</span>
                         </div>
                         
                         {selectedItemCount > 0 && (
-                            <div className="flex gap-2 animate-fade-in shrink-0">
-                                <button onClick={() => { setIsAssigningToPrepare(true); setIsModalOpen(true); }} className="px-7 py-3.5 bg-amber-400 text-amber-955 text-[11px] font-black rounded-2xl hover:brightness-110 uppercase shadow-lg transition-all active:scale-95 border-b-4 border-amber-600">Assign Prep</button>
-                                <button onClick={() => { setIsAssigningToPrepare(false); setIsModalOpen(true); }} className="px-7 py-3.5 bg-primary-600 text-white text-[11px] font-black rounded-2xl hover:brightness-110 uppercase shadow-lg transition-all active:scale-95 border-b-4 border-primary-800">Assign Test</button>
-                                <button onClick={() => setSelectedItems({})} className="p-3.5 text-base-300 hover:text-red-500 transition-all hover:rotate-90"><XCircleIcon className="h-7 w-7"/></button>
+                            <div className="flex gap-1 animate-fade-in shrink-0">
+                                <button onClick={() => { setIsAssigningToPrepare(true); setIsModalOpen(true); }} className="px-4 py-2.5 bg-amber-500 text-white text-[9px] font-black rounded-lg hover:bg-amber-600 uppercase shadow-sm transition-all border-b-2 border-amber-700">Assign Prep</button>
+                                <button onClick={() => { setIsAssigningToPrepare(false); setIsModalOpen(true); }} className="px-4 py-2.5 bg-indigo-600 text-white text-[9px] font-black rounded-lg hover:bg-indigo-700 uppercase shadow-sm transition-all border-b-2 border-indigo-800">Assign Test</button>
+                                <button onClick={() => setSelectedItems({})} className="p-2 text-slate-300 hover:text-red-500 transition-all"><XCircleIcon className="h-5 w-5"/></button>
                             </div>
                         )}
                     </div>
 
-                    <div className="h-10 w-px bg-base-200 dark:bg-white/10 mx-1"></div>
+                    <div className="h-8 w-px bg-slate-200 dark:bg-white/10 mx-1"></div>
 
-                    {/* Logistics - Unified on the glass bar */}
-                    <div className="flex items-center gap-3 shrink-0">
-                        <div className="relative group w-52">
+                    <div className="flex items-center gap-2 shrink-0 pr-1">
+                        <div className="relative group w-40">
                             <input 
                                 type="text" 
-                                placeholder="Trace Mission ID..." 
+                                placeholder="Search ID..." 
                                 value={filterRequestId} 
                                 onChange={e => setFilterRequestId(e.target.value)} 
-                                className="w-full pl-11 pr-3 py-3.5 bg-base-50/50 dark:bg-white/5 border border-base-200 dark:border-white/10 rounded-[1.8rem] text-[12px] font-bold dark:text-white outline-none focus:border-primary-500 transition-all shadow-inner"
+                                className="w-full pl-8 pr-2 py-2 bg-indigo-50/50 dark:bg-white/5 border border-indigo-100 dark:border-white/10 rounded-lg text-[10px] font-bold dark:text-white outline-none focus:border-indigo-500 transition-all shadow-inner"
                             />
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-base-400 dark:text-white/20 group-focus-within:text-primary-500 transition-colors"><SearchIcon className="h-4 w-4" /></div>
+                            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-indigo-300 group-focus-within:text-indigo-500"><SearchIcon className="h-3 w-3" /></div>
                         </div>
                         
-                        <div className="flex bg-base-50/50 dark:bg-white/5 border border-base-200 dark:border-white/10 rounded-[1.8rem] overflow-hidden shadow-inner shrink-0">
-                            <input type="date" value={selectedDate} onChange={e => onDateChange(e.target.value)} className="px-5 py-3 bg-transparent border-none text-[12px] font-black dark:text-white outline-none cursor-pointer" />
-                            <div className="w-px bg-base-200 dark:bg-white/10 my-2"></div>
-                            <select value={selectedShift} onChange={e => onShiftChange(e.target.value as any)} className="px-5 py-3 bg-transparent border-none text-[11px] font-black uppercase dark:text-white outline-none cursor-pointer tracking-widest"><option value="day" className="bg-white dark:bg-base-900">Day</option><option value="night" className="bg-white dark:bg-base-900">Night</option></select>
+                        <div className="flex bg-indigo-50/50 dark:bg-white/5 border border-indigo-100 dark:border-white/10 rounded-lg overflow-hidden shadow-inner shrink-0">
+                            <input type="date" value={selectedDate} onChange={e => onDateChange(e.target.value)} className="px-3 py-2 bg-transparent border-none text-[10px] font-black dark:text-white outline-none cursor-pointer" />
+                            <div className="w-px bg-indigo-100 dark:bg-white/10 my-1"></div>
+                            <select value={selectedShift} onChange={e => onShiftChange(e.target.value as any)} className="px-3 py-2 bg-transparent border-none text-[9px] font-black uppercase dark:text-white outline-none cursor-pointer tracking-widest"><option value="day" className="bg-white dark:bg-base-900">Day</option><option value="night" className="bg-white dark:bg-base-900">Night</option></select>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* TABLE SECTION */}
-            <div className="flex-1 min-h-0 mx-6 mb-6 bg-white dark:bg-base-900 rounded-[3.5rem] border-2 border-base-200 dark:border-base-800 shadow-2xl overflow-hidden flex flex-col relative">
+            {/* GRID TABLE SECTION */}
+            <div className="flex-1 min-h-0 mx-6 mb-6 bg-white dark:bg-base-900 rounded-[2rem] border border-slate-200 dark:border-base-800 shadow-xl overflow-hidden flex flex-col relative">
                 <div className="flex-1 overflow-auto custom-scrollbar bg-white dark:bg-base-955">
                     {activeCategory === 'manual' ? (
                         <div className="p-8">
-                            <div className="overflow-hidden rounded-[2.5rem] border-2 border-indigo-100 dark:border-indigo-900/30 shadow-2xl">
+                            <div className="overflow-hidden rounded-2xl border border-indigo-100 dark:border-indigo-900/30 shadow-md">
                                 <table className="w-full text-left border-collapse">
-                                    <thead className="bg-gradient-to-r from-indigo-900 to-indigo-955 text-white">
+                                    <thead className="bg-indigo-600 text-white">
                                         <tr>
-                                            <th className="p-6 w-20 text-center border-r border-white/10"><input type="checkbox" className="h-7 w-7 rounded" onChange={e => {
+                                            <th className="p-4 w-16 text-center border-r border-white/10"><input type="checkbox" className="h-5 w-5 rounded" onChange={e => {
                                                 const checked = e.target.checked;
                                                 setSelectedItems(prev => {
                                                     const next = { ...prev };
@@ -717,52 +715,49 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                                     return next;
                                                 });
                                             }} /></th>
-                                            <th className="p-8 font-black uppercase text-[14px] tracking-[0.2em] border-r border-white/10 w-80">Mission Identifier</th>
-                                            <th className="p-8 font-black uppercase text-[14px] tracking-[0.2em]">Operational Parameters</th>
-                                            <th className="p-8 font-black uppercase text-[14px] tracking-[0.2em] w-32 text-center border-l border-white/10">Units</th>
-                                            <th className="p-8 font-black uppercase text-[14px] tracking-[0.2em] w-48 text-center border-l border-white/10">Control</th>
+                                            <th className="p-5 font-black uppercase text-[12px] tracking-[0.2em] border-r border-white/10 w-64">Request ID</th>
+                                            <th className="p-5 font-black uppercase text-[12px] tracking-[0.2em]">Description</th>
+                                            <th className="p-5 font-black uppercase text-[12px] tracking-[0.2em] w-24 text-center border-l border-white/10">Units</th>
+                                            <th className="p-5 font-black uppercase text-[12px] tracking-[0.2em] w-32 text-center border-l border-white/10">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-base-100 dark:divide-base-800 bg-white dark:bg-base-900">
                                         {manualTasksFlattened.map(({ docId, id, task, index }) => (
-                                            <tr key={`${docId}_${task._id}`} className="hover:bg-indigo-50/40 transition-colors duration-300">
-                                                <td className="p-6 text-center border-r border-base-100 dark:border-base-800"><input type="checkbox" className="h-8 w-8 rounded border-2 border-indigo-200 text-indigo-600 cursor-pointer" checked={selectedItems[docId]?.has(task._id!) || false} onChange={e => handleSelectItem(docId, task._id!, e.target.checked)}/></td>
-                                                <td className="p-8 font-black text-indigo-900 dark:text-indigo-400 text-2xl tracking-tighter uppercase border-r border-base-100 dark:border-base-800">{id}</td>
-                                                <td className="p-8"><div className="flex flex-col"><span className="font-black text-2xl text-base-955 dark:text-base-50 uppercase leading-none tracking-tight">{task.Description}</span><span className="text-[12px] font-black text-base-400 mt-3 uppercase tracking-[0.3em] italic opacity-60">{task.Variant}</span></div></td>
-                                                <td className="p-8 text-center border-l border-base-100 dark:border-base-800"><span className="inline-block px-6 py-2.5 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-black rounded-2xl text-2xl shadow-inner border border-indigo-100">x{task.Quantity}</span></td>
-                                                <td className="p-8 text-center border-l border-base-100 dark:border-base-800"><div className="flex justify-center gap-4"><button onClick={() => setEditTask({ docId, index, task })} className="p-5 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-3xl text-base-400 hover:text-indigo-600 transition-all shadow-md active:scale-90"><PencilIcon className="h-7 w-7" /></button><button onClick={() => setDeleteConfirm({ docId, index, label: task.Description! })} className="p-5 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-3xl text-base-400 hover:text-red-600 transition-all shadow-md active:scale-90"><TrashIcon className="h-7 w-7" /></button></div></td>
+                                            <tr key={`${docId}_${task._id}`} className="hover:bg-indigo-50/20 transition-colors">
+                                                <td className="p-4 text-center border-r border-base-100 dark:border-base-800"><input type="checkbox" className="h-5 w-5 rounded border-2 border-indigo-200 text-indigo-600" checked={selectedItems[docId]?.has(task._id!) || false} onChange={e => handleSelectItem(docId, task._id!, e.target.checked)}/></td>
+                                                <td className="p-5 font-black text-indigo-700 dark:text-indigo-400 text-xl tracking-tighter uppercase border-r border-base-100 dark:border-base-800">{id}</td>
+                                                <td className="p-5"><div className="flex flex-col"><span className="font-black text-lg text-base-955 dark:text-base-50 uppercase leading-none tracking-tight">{task.Description}</span><span className="text-[10px] font-bold text-base-400 mt-2 uppercase italic">{task.Variant}</span></div></td>
+                                                <td className="p-5 text-center border-l border-base-100 dark:border-base-800"><span className="inline-block px-4 py-1.5 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-black rounded-lg text-lg shadow-inner">x{task.Quantity}</span></td>
+                                                <td className="p-5 text-center border-l border-base-100 dark:border-base-800"><div className="flex justify-center gap-2"><button onClick={() => setEditTask({ docId, index, task })} className="p-2.5 bg-base-50 dark:bg-base-800 border rounded-xl text-base-400 hover:text-indigo-600"><PencilIcon className="h-5 w-5" /></button><button onClick={() => setDeleteConfirm({ docId, index, label: task.Description! })} className="p-2.5 bg-base-50 dark:bg-base-800 border rounded-xl text-base-400 hover:text-red-600"><TrashIcon className="h-5 w-5" /></button></div></td>
                                             </tr>
                                         ))}
-                                        {manualTasksFlattened.length === 0 && (
-                                            <tr><td colSpan={5} className="py-32 text-center opacity-20"><BeakerIcon className="h-24 w-24 mx-auto mb-8" /><span className="text-3xl font-black uppercase tracking-[0.6em]">Standby - Empty Pool</span></td></tr>
-                                        )}
                                     </tbody>
                                 </table>
                             </div>
                         </div>
                     ) : (
                         gridData.length > 0 ? (
-                            <table className="min-w-full text-xs text-left border-collapse table-fixed relative">
-                                <thead className="bg-[#0a0f1e] text-white sticky top-0 z-[60]">
-                                    <tr>
-                                        <th rowSpan={2} style={{ width: `${COL_DUE_WIDTH}px` }} className="p-5 font-black uppercase border-r border-white/5 sticky left-0 z-[70] bg-[#0a0f1e] text-center text-[10px]">Due</th>
-                                        <th rowSpan={2} style={{ width: `${COL_RID_WIDTH}px` }} className="p-5 font-black uppercase border-r-4 border-primary-500 sticky left-[60px] z-[70] bg-[#0a0f1e] text-center shadow-2xl">Request ID</th>
+                            <table className="min-w-full text-xs text-left border-separate border-spacing-0 table-fixed relative">
+                                <thead className="sticky top-0 z-[60]">
+                                    <tr className="bg-slate-50 text-slate-900">
+                                        <th rowSpan={2} style={{ width: `${COL_DUE_WIDTH}px` }} className="p-1 font-black uppercase border-r border-base-200 sticky left-0 z-[70] bg-slate-50 text-center text-[9px]">Due</th>
+                                        <th rowSpan={2} style={{ width: `${COL_RID_WIDTH}px` }} className="p-1 font-black uppercase border-r-2 border-indigo-500 sticky left-[45px] z-[70] bg-slate-50 text-center text-[10px] tracking-tight shadow-sm">Request ID</th>
                                         {gridHeaders.map(([group, subKeys], i) => {
                                             const visibleInGroup = subKeys.filter(k => activeColumnKeys.includes(k));
-                                            return visibleInGroup.length > 0 ? ( <th key={group} colSpan={visibleInGroup.length} className={`px-4 py-6 font-black text-center border-b border-r border-white/10 uppercase tracking-[0.2em] text-[14px] ${HEADER_THEMES[i % HEADER_THEMES.length].headerBg}`}>{group}</th> ) : null;
+                                            return visibleInGroup.length > 0 ? ( <th key={group} colSpan={visibleInGroup.length} className={`px-1 py-1.5 font-black text-center border-b border-r border-base-200 uppercase tracking-[0.2em] text-[10px] ${HEADER_THEMES[i % HEADER_THEMES.length].headerBg} ${HEADER_THEMES[i % HEADER_THEMES.length].headerText}`}>{group}</th> ) : null;
                                         })}
-                                        <th rowSpan={2} className="px-6 py-6 font-black uppercase bg-slate-900 w-48 text-center border-l border-white/10">Unmapped</th>
+                                        <th rowSpan={2} className="px-1 py-1.5 font-black uppercase bg-slate-100 text-slate-500 w-24 text-center border-l border-base-200 text-[9px] tracking-widest shadow-inner">Unmapped</th>
                                     </tr>
-                                    <tr>{gridHeaders.flatMap(([group, subKeys], i) => subKeys.filter(k => activeColumnKeys.includes(k)).map(key => ( <th key={key} className={`p-4 font-black text-[17px] text-center border-b border-r border-white/10 uppercase w-24 shadow-inner ${HEADER_THEMES[i % HEADER_THEMES.length].subHeaderBg} ${HEADER_THEMES[i % HEADER_THEMES.length].subHeaderText}`}>{key.split('|')[1]}</th> )) )}</tr>
+                                    <tr className="bg-slate-50">{gridHeaders.flatMap(([group, subKeys], i) => subKeys.filter(k => activeColumnKeys.includes(k)).map(key => ( <th key={key} className={`p-1 font-black text-[12px] text-center border-b border-r border-base-200 uppercase w-16 shadow-inner ${HEADER_THEMES[i % HEADER_THEMES.length].subHeaderBg} text-white`}>{key.split('|')[1]}</th> )) )}</tr>
                                 </thead>
-                                <tbody className="divide-y-2 divide-base-100 dark:divide-base-800">
+                                <tbody className="divide-y divide-base-100 dark:divide-base-800">
                                     {gridData.map(row => (
-                                        <tr key={row.requestId} className="hover:bg-primary-50/20 group transition-colors duration-300">
-                                            <td className="p-1 border-r border-base-200 dark:border-base-800 bg-white dark:bg-[#1e293b]/20 sticky left-0 z-40 text-center font-black text-base-955 dark:text-white">{`${(new Date(row.minDueDate)).getDate()}/${(new Date(row.minDueDate)).getMonth()+1}`}</td>
-                                            <td className="px-6 py-6 border-r-4 border-primary-500 bg-white dark:bg-[#111827] sticky left-[60px] z-40 shadow-xl">
-                                                <div className="flex flex-col gap-2">
-                                                    <div className="flex items-center justify-between"><span className="text-[20px] font-black uppercase text-base-955 dark:text-base-50 leading-none tracking-tighter">{row.requestId.replace(/^RS1-/, '')}</span><span className="text-[11px] font-black text-base-400 bg-base-50 dark:bg-base-800 px-2 py-1 rounded-lg">#{row.availableItems}/{row.itemCount}</span></div>
-                                                    <div className="flex gap-2">{row.isPoCat && <span className="px-3 py-1 bg-orange-600 text-white text-[10px] rounded-lg uppercase font-black shadow-md">PoCat</span>}{row.isUrgent && <span className="px-3 py-1 bg-red-600 text-white text-[10px] rounded-lg uppercase font-black shadow-md">Urgent</span>}</div>
+                                        <tr key={row.requestId} className="hover:bg-indigo-50/20 group transition-colors">
+                                            <td className="p-1 border-r border-base-200 dark:border-base-800 bg-white dark:bg-base-955 sticky left-0 z-40 text-center font-black text-slate-800 dark:text-white text-[10px] leading-tight">{`${(new Date(row.minDueDate)).getDate()}/${(new Date(row.minDueDate)).getMonth()+1}`}</td>
+                                            <td className="px-3 py-3 border-r-2 border-indigo-500 bg-white dark:bg-base-900 sticky left-[45px] z-40 shadow-lg">
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="flex items-center justify-between"><span className="text-[15px] font-black uppercase text-base-955 dark:text-base-50 leading-none tracking-tighter">{row.requestId.replace(/^RS1-/, '')}</span><span className="text-[9px] font-black text-slate-400">#{row.availableItems}/{row.itemCount}</span></div>
+                                                    <div className="flex gap-1">{row.isPoCat && <span className="px-1.5 py-0.5 bg-orange-600 text-white text-[7px] rounded font-black">PO</span>}{row.isUrgent && <span className="px-1.5 py-0.5 bg-red-600 text-white text-[7px] rounded font-black">URG</span>}</div>
                                                 </div>
                                             </td>
                                             {activeColumnKeys.map(header => <ExpandableCell key={header} headerKey={header} items={row.cells[header] || []} isGroupEnd={lastKeysOfGroups.has(header)} expandedCell={expandedCell} setExpandedCell={setExpandedCell} selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems} isAssigningToPrepare={isAssigningToPrepare} setNoteEditor={setNoteEditor} onInitiateDelete={(d, i, l) => setDeleteConfirm({ docId: d, index: i, label: l })} />)}
@@ -772,12 +767,12 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                 </tbody>
                             </table>
                         ) : (
-                            <div className="py-48 text-center opacity-10 flex flex-col items-center"><BeakerIcon className="h-32 w-32 mb-8" /><span className="text-3xl font-black uppercase tracking-[0.6em]">Fleet Standby - No Missions</span></div>
+                            <div className="py-40 text-center opacity-10 flex flex-col items-center"><BeakerIcon className="h-24 w-24 mb-6" /><span className="text-2xl font-black uppercase tracking-[0.5em]">Fleet Standby - No Missions</span></div>
                         )
                     )}
                 </div>
             </div>
-            <div className="px-8 text-[10px] font-black text-base-300 text-center uppercase tracking-[0.8em] pb-3">Operational Intelligence Grid • System V2.9.4 Core</div>
+            <div className="px-8 text-[9px] font-black text-base-300 text-center uppercase tracking-[0.8em] pb-3 shrink-0">Operational Intelligence Grid • System V2.9.4 Core</div>
         </div>
     );
 };

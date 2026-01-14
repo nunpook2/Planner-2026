@@ -108,7 +108,7 @@ const App: React.FC = () => {
         if (error) return null;
 
         switch (activeTab) {
-            case 'quality': return <QualityDashboard onResolve={triggerTaskRefresh} />;
+            case 'quality': return <QualityDashboard onResolve={triggerTaskRefresh} testers={testers} />;
             case 'import': return <ImportTab onTasksUpdated={triggerTaskRefresh} />;
             case 'tasks': return (
                 <TasksTab 

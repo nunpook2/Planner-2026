@@ -1,6 +1,6 @@
 
 import { firestore } from './firebase';
-import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment } from '../types';
+import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog } from '../types';
 import { TaskCategory } from '../types';
 
 // Export firestore for use in components
@@ -400,4 +400,26 @@ export const clearAllTaskData = async () => {
         snapshot.forEach((doc: any) => batch.delete(doc.ref));
         await batch.commit();
     }
+};
+
+// --- Distillation Logic ---
+export const getDistillationLogs = async (): Promise<DistillationLog[]> => {
+    if (!firestore) return [];
+    const snapshot = await safeGet(getCollection('distillationLogs').orderBy('createdAt', 'desc'));
+    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as DistillationLog));
+};
+
+export const addDistillationLog = async (log: Omit<DistillationLog, 'id' | 'createdAt'>): Promise<void> => {
+    await getCollection('distillationLogs').add({
+        ...log,
+        createdAt: new Date().toISOString()
+    });
+};
+
+export const updateDistillationLog = async (id: string, updates: Partial<DistillationLog>): Promise<void> => {
+    await getCollection('distillationLogs').doc(id).update(updates);
+};
+
+export const deleteDistillationLog = async (id: string): Promise<void> => {
+    await getCollection('distillationLogs').doc(id).delete();
 };
