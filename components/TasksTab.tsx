@@ -15,7 +15,7 @@ import {
     getAssignedPrepareTasks,
     firestore
 } from '../services/dataService';
-import { CheckCircleIcon, ChevronDownIcon, TrashIcon, AlertTriangleIcon, RefreshIcon, PlusIcon, DownloadIcon, ChatBubbleLeftEllipsisIcon, BeakerIcon, XCircleIcon, SearchIcon, PencilIcon } from './common/Icons';
+import { CheckCircleIcon, ChevronDownIcon, TrashIcon, AlertTriangleIcon, RefreshIcon, PlusIcon, DownloadIcon, ChatBubbleLeftEllipsisIcon, BeakerIcon, XCircleIcon, SearchIcon, PencilIcon, ClipboardListIcon } from './common/Icons';
 
 declare const XLSX: any;
 
@@ -94,6 +94,10 @@ const getTaskValue = (task: RawTask, headerType: string): any => {
         if (target === 'variant') matchedKey = keys.find(k => ['variant', 'var', 'method', 'condition'].includes(k.toLowerCase().trim()));
         if (target === 'sample name') matchedKey = keys.find(k => ['sample name', 'sample', 'samplename', 'sample_name'].includes(k.toLowerCase().trim()));
         if (target === 'quantity') matchedKey = keys.find(k => ['quantity', 'qty', 'amount'].includes(k.toLowerCase().trim()));
+        if (target === 'remark (requester)') matchedKey = keys.find(k => ['remark (requester)', 'remark', 'customer remark'].includes(k.toLowerCase().trim()));
+        if (target === 'note to planer') matchedKey = keys.find(k => ['note to planer', 'note to planner', 'planner note'].includes(k.toLowerCase().trim()));
+        if (target === 'additional information') matchedKey = keys.find(k => ['additional information', 'additional info', 'extra info'].includes(k.toLowerCase().trim()));
+        if (target === 'testing condition') matchedKey = keys.find(k => ['testing condition', 'condition'].includes(k.toLowerCase().trim()));
     }
     return matchedKey ? task[matchedKey] : '';
 };
@@ -126,6 +130,44 @@ const Toast: React.FC<{ message: string; isError?: boolean; onDismiss: () => voi
         <div className={`fixed top-24 right-8 py-4 px-8 rounded-2xl shadow-2xl flex items-center gap-4 animate-fade-in z-[120] border-2 backdrop-blur-xl ${isError ? 'bg-red-50/90 border-red-200 text-red-700' : 'bg-emerald-50/90 border-emerald-200 text-emerald-700'}`}>
             {isError ? <AlertTriangleIcon className="h-6 w-6" /> : <CheckCircleIcon className="h-6 w-6" />}
             <span className="font-black text-sm uppercase tracking-wider">{message}</span>
+        </div>
+    );
+};
+
+const CustomerRemarkModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    requestId: string;
+    remarks: { source: string, text: string }[];
+}> = ({ isOpen, onClose, requestId, remarks }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-base-900/70 backdrop-blur-md flex items-center justify-center z-[150] p-4 animate-fade-in" onClick={onClose}>
+            <div className="bg-white dark:bg-base-900 rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden border border-white/20 flex flex-col animate-slide-in-up" onClick={e => e.stopPropagation()}>
+                <div className="p-6 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-800 flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-amber-500 rounded-xl text-white shadow-lg"><ClipboardListIcon className="h-5 w-5"/></div>
+                        <div>
+                            <h3 className="text-xl font-black text-base-955 dark:text-white uppercase tracking-tighter leading-none">{requestId}</h3>
+                            <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mt-1">Customer Requirements</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-amber-100 rounded-xl transition-all"><XCircleIcon className="h-6 w-6 text-amber-400"/></button>
+                </div>
+                <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                    {remarks.length > 0 ? remarks.map((r, i) => (
+                        <div key={i} className="p-4 bg-base-50 dark:bg-base-800 rounded-2xl border-l-4 border-amber-500 shadow-sm">
+                            <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1 block">{r.source}</span>
+                            <p className="text-sm font-bold text-base-800 dark:text-base-200 leading-relaxed italic">"{r.text}"</p>
+                        </div>
+                    )) : (
+                        <div className="py-10 text-center opacity-20"><ClipboardListIcon className="h-12 w-12 mx-auto mb-2"/><p className="text-xs font-black uppercase">No specific remarks found</p></div>
+                    )}
+                </div>
+                <div className="p-4 bg-base-50 dark:bg-base-800/50 border-t border-base-100 dark:border-base-700 flex justify-center">
+                    <button onClick={onClose} className="px-8 py-3 bg-white dark:bg-base-700 text-base-500 dark:text-base-300 font-black rounded-xl text-[10px] uppercase tracking-widest shadow-sm hover:bg-base-100">Dismiss</button>
+                </div>
+            </div>
         </div>
     );
 };
@@ -229,7 +271,7 @@ const DeleteConfirmationModal: React.FC<{ isOpen: boolean; onClose: () => void; 
         <div className="fixed inset-0 bg-base-900/90 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-fade-in" onClick={onClose}>
             <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-md overflow-hidden p-10 text-center space-y-6 border border-white/20" onClick={e => e.stopPropagation()}>
                 <div className="w-20 h-20 bg-red-50 dark:bg-red-900/20 rounded-[2rem] flex items-center justify-center mx-auto text-red-600 shadow-inner"><TrashIcon className="h-10 w-10" /></div>
-                <div><h3 className="text-2xl font-black text-base-955 dark:text-white uppercase tracking-tighter leading-none">Confirm Deletion</h3><p className="text-base-500 mt-4 text-[15px] font-bold leading-relaxed px-2">Are you sure you want to remove <span className="text-red-600">"{label}"</span>? This action will permanently erase the item.</p></div>
+                <div><h3 className="text-2xl font-black text-base-955 dark:text-white uppercase tracking-tighter territory-leading-none">Confirm Deletion</h3><p className="text-base-500 mt-4 text-[15px] font-bold leading-relaxed px-2">Are you sure you want to remove <span className="text-red-600">"{label}"</span>? This action will permanently erase the item.</p></div>
                 <div className="flex flex-col gap-2 pt-4"><button onClick={onConfirm} disabled={isProcessing} className="w-full py-5 bg-red-600 border-red-800 text-white font-black rounded-2xl shadow-xl uppercase text-[11px] tracking-widest border-b-4 hover:bg-red-700 transition-all disabled:opacity-50">{isProcessing ? 'Processing...' : 'Delete Permanently'}</button><button onClick={onClose} disabled={isProcessing} className="w-full py-3 text-[10px] font-black text-base-400 hover:text-base-800 uppercase tracking-widest">Cancel</button></div>
             </div>
         </div>
@@ -309,18 +351,32 @@ const ExpandableCell: React.FC<{
                                     const isInPrep = task.preparationStatus === 'Awaiting Preparation';
                                     const isLockedForTesting = !isAssigningToPrepare && isInPrep;
                                     const sampleLabel = String(getTaskValue(task, 'Sample Name'));
+                                    const isReturned = task.isReturned;
+                                    
                                     return (
                                         <tr key={task._id} className={`bg-white dark:bg-base-900 hover:bg-indigo-50/40 ${isLockedForTesting ? 'opacity-50' : ''}`}>
                                             <td className="p-4 w-12 text-center"><input type="checkbox" disabled={isLockedForTesting} className="h-5 w-5 rounded cursor-pointer border-2 border-base-300 dark:border-base-600 text-indigo-600" checked={selectedItems[sourceDocId]?.has(task._id!) || false} onChange={e => handleSelectItem(sourceDocId, task._id!, e.target.checked)}/></td>
                                             <td className="p-4">
                                                 <div className="flex justify-between items-start mb-1 gap-4">
-                                                    <div className="flex flex-col gap-1 min-w-0">
+                                                    <div className="flex flex-col gap-1 min-w-0 flex-grow">
                                                         <div className="flex items-center gap-2">
                                                             <span className="font-black text-[15px] uppercase truncate text-base-955 dark:text-white leading-tight tracking-tight">{sampleLabel}</span>
                                                             {isReady && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[8px] font-black rounded uppercase tracking-widest border border-emerald-300">Ready</span>}
                                                             {isInPrep && <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-black rounded uppercase tracking-widest border border-amber-300">In Prep</span>}
+                                                            {isReturned && <span className="px-2 py-0.5 bg-rose-600 text-white text-[8px] font-black rounded uppercase tracking-widest animate-pulse shadow-sm">Returned</span>}
                                                         </div>
                                                         <p className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300">{String(getTaskValue(task, 'Variant'))}</p>
+                                                        
+                                                        {/* RETURN ALERT BOX FOR PLANNER */}
+                                                        {isReturned && (
+                                                            <div className="mt-2 p-2 bg-rose-50 border border-rose-100 rounded-xl flex gap-2 items-start shadow-sm animate-fade-in">
+                                                                <AlertTriangleIcon className="h-3.5 w-3.5 text-rose-600 shrink-0 mt-0.5" />
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-[9px] font-black text-rose-800 uppercase tracking-widest mb-0.5">Rejected by {task.returnedBy || 'Staff'}</span>
+                                                                    <p className="text-[10px] font-bold text-rose-600 leading-tight italic">"{task.returnReason || 'No reason provided'}"</p>
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div className="flex items-center gap-2 shrink-0">
                                                         {onInitiateEdit && <button onClick={() => onInitiateEdit(sourceDocId, originalIndex, task)} className="p-2 bg-base-50 dark:bg-base-955 border-base-200 rounded-lg text-base-400 hover:text-indigo-600 transition-all"><PencilIcon className="h-4.5 w-4.5"/></button>}
@@ -361,6 +417,9 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     const [hideEmptyColumns, setHideEmptyColumns] = useState(true);
     const [isAssigning, setIsAssigning] = useState(false);
     const [noteEditor, setNoteEditor] = useState<{ docId: string, index: number, text: string } | null>(null);
+    
+    // NEW: Customer Remarks State
+    const [activeRemarks, setActiveRemarks] = useState<{ id: string, list: {source: string, text: string}[] } | null>(null);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -523,8 +582,21 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
             if (filteredDocs.length === 0) return;
             if (search && !group.rid.toLowerCase().includes(search)) return;
 
-            const row = { requestId: group.rid, cells: {} as any, unmappedItems: [] as any, minDueDate: Infinity, itemCount: 0, availableItems: 0, isPoCat: false, isUrgent: false, isManual: false };
+            const row = { 
+                requestId: group.rid, 
+                cells: {} as any, 
+                unmappedItems: [] as any, 
+                minDueDate: Infinity, 
+                itemCount: 0, 
+                availableItems: 0, 
+                isPoCat: false, 
+                isUrgent: false, 
+                isManual: false,
+                customerRemarks: [] as {source: string, text: string}[]
+            };
+            
             const seenTaskIdsInRow = new Set<string>();
+            const uniqueRemarkTexts = new Set<string>();
 
             filteredDocs.forEach((doc: any) => {
                 if (doc.category === 'pocat') row.isPoCat = true;
@@ -542,6 +614,22 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     row.itemCount++;
                     if (task.preparationStatus !== 'Awaiting Preparation') row.availableItems++;
                     
+                    // Capture Customer Remarks from file
+                    const fields = [
+                        { key: 'Remark (Requester)', label: 'Request Remark' },
+                        { key: 'Note to planer', label: 'Planer Note (Cust)' },
+                        { key: 'Additional Information', label: 'Extra Info' },
+                        { key: 'Testing Condition', label: 'Cust Condition' }
+                    ];
+
+                    fields.forEach(f => {
+                        const val = String(getTaskValue(task, f.key) || '').trim();
+                        if (val && val !== '-' && val.toLowerCase() !== 'n/a' && !uniqueRemarkTexts.has(val)) {
+                            uniqueRemarkTexts.add(val);
+                            row.customerRemarks.push({ source: f.label, text: val });
+                        }
+                    });
+
                     const item = { task, originalIndex: index, sourceDocId: doc.docId! };
                     const colKey = getTaskGridColumnKey(task, testMappings);
                     if (colKey) { 
@@ -612,6 +700,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
             <DeleteConfirmationModal isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} onConfirm={handleDeleteConfirm} label={deleteConfirm?.label || ''} isProcessing={isAssigning} />
             <EditManualTaskModal isOpen={!!editTask} onClose={() => setEditTask(null)} onSave={handleSaveTaskEdit} task={editTask?.task || null} isProcessing={isAssigning} />
             <AddManualTaskModal isOpen={isAddManualModalOpen} onClose={() => setIsAddManualModalOpen(false)} onSave={handleAddManualMission} isProcessing={isAssigning} />
+            <CustomerRemarkModal isOpen={!!activeRemarks} onClose={() => setActiveRemarks(null)} requestId={activeRemarks?.id || ''} remarks={activeRemarks?.list || []} />
 
             {/* REFINED LIGHT SUMMARY SECTION */}
             <div className="px-6 space-y-2 shrink-0 mt-4">
@@ -756,7 +845,21 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                             <td className="p-0.5 border-r border-base-200 bg-white dark:bg-base-955 sticky left-0 z-40 text-center font-black text-slate-800 text-[9px] leading-tight">{`${(new Date(row.minDueDate)).getDate()}/${(new Date(row.minDueDate)).getMonth()+1}`}</td>
                                             <td className="px-2 py-2 border-r-2 border-indigo-400 bg-white dark:bg-base-900 sticky left-[42px] z-40 shadow-sm">
                                                 <div className="flex flex-col gap-0.5">
-                                                    <div className="flex items-center justify-between"><span className="text-[13px] font-black uppercase text-base-955 dark:text-base-50 leading-none tracking-tighter truncate">{row.requestId.replace(/^RS1-/, '')}</span><span className="text-[8px] font-black text-slate-400">#{row.availableItems}/{row.itemCount}</span></div>
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-1 min-w-0">
+                                                            <span className="text-[13px] font-black uppercase text-base-955 dark:text-base-50 leading-none tracking-tighter truncate">{row.requestId.replace(/^RS1-/, '')}</span>
+                                                            {row.customerRemarks.length > 0 && (
+                                                                <button 
+                                                                    onClick={() => setActiveRemarks({ id: row.requestId, list: row.customerRemarks })}
+                                                                    className="shrink-0 p-1 bg-amber-100 text-amber-600 rounded-md hover:bg-amber-600 hover:text-white transition-all animate-pulse-subtle"
+                                                                    title="View Customer Remarks"
+                                                                >
+                                                                    <ClipboardListIcon className="h-3 w-3" />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-[8px] font-black text-slate-400 shrink-0">#{row.availableItems}/{row.itemCount}</span>
+                                                    </div>
                                                     <div className="flex gap-1">{row.isPoCat && <span className="px-1 py-0.5 bg-orange-600 text-white text-[6px] rounded-sm font-black">PO</span>}{row.isUrgent && <span className="px-1 py-0.5 bg-red-600 text-white text-[6px] rounded-sm font-black">URG</span>}</div>
                                                 </div>
                                             </td>

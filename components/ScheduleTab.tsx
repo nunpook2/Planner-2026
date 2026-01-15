@@ -220,10 +220,12 @@ const LocalModal: React.FC<{
     confirmColor?: string;
     icon?: React.ReactNode;
     preventOutsideClick?: boolean;
+    isReadOnly?: boolean;
 }> = ({ 
     isOpen, onClose, onConfirm, title, message, initialValue = '', showInput, 
     isTextArea, inputPlaceholder, confirmText = "Confirm", 
-    confirmColor = "bg-primary-600", icon, preventOutsideClick = false
+    confirmColor = "bg-primary-600", icon, preventOutsideClick = false,
+    isReadOnly = false
 }) => {
     const [val, setVal] = useState('');
     
@@ -254,22 +256,24 @@ const LocalModal: React.FC<{
                     <div className="relative group">
                         {isTextArea ? (
                             <textarea 
-                                autoFocus 
+                                autoFocus={!isReadOnly}
+                                readOnly={isReadOnly}
                                 value={val} 
                                 onChange={e => setVal(e.target.value)} 
                                 placeholder={inputPlaceholder} 
                                 rows={5}
-                                className="w-full p-5 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-3xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none dark:text-white font-bold text-[15px] resize-none transition-all"
+                                className={`w-full p-5 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-3xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none dark:text-white font-bold text-[15px] resize-none transition-all ${isReadOnly ? 'cursor-default border-transparent ring-0' : ''}`}
                             />
                         ) : (
                             <input 
-                                autoFocus 
+                                autoFocus={!isReadOnly}
+                                readOnly={isReadOnly}
                                 type="text" 
                                 value={val} 
                                 onChange={e => setVal(e.target.value)} 
                                 placeholder={inputPlaceholder} 
-                                className="w-full p-4 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-2xl focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none dark:text-white font-bold text-sm transition-all" 
-                                onKeyDown={e => { if (e.key === 'Enter' && val.trim()) onConfirm(val); }} 
+                                className={`w-full p-4 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-2xl focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none dark:text-white font-bold text-sm transition-all ${isReadOnly ? 'cursor-default border-transparent ring-0' : ''}`} 
+                                onKeyDown={e => { if (e.key === 'Enter' && val.trim() && !isReadOnly) onConfirm(val); }} 
                             />
                         )}
                     </div>
@@ -277,7 +281,7 @@ const LocalModal: React.FC<{
 
                 <div className="flex justify-end gap-4 pt-2">
                     <button onClick={onClose} className="px-6 py-3 text-[11px] font-black text-base-400 hover:text-base-800 dark:hover:text-white uppercase tracking-widest transition-colors">Close</button>
-                    {(showInput || confirmText) && (
+                    {(showInput || confirmText) && !isReadOnly && (
                         <button 
                             onClick={() => onConfirm(val)} 
                             className={`px-8 py-3.5 text-[11px] font-black text-white rounded-2xl shadow-xl uppercase tracking-widest ${confirmColor} hover:brightness-110`}
@@ -294,6 +298,11 @@ const LocalModal: React.FC<{
 const getTaskValue = (task: RawTask, header: string): any => {
     const keys = Object.keys(task);
     const target = header.toLowerCase().trim();
+    // Special mapping for common variations
+    if (target === 'quantity' || target === 'qty') {
+        const qtyKey = keys.find(k => ['quantity', 'qty', 'amount', 'units'].includes(k.toLowerCase().trim()));
+        if (qtyKey) return task[qtyKey];
+    }
     const matchedKey = keys.find(k => k.toLowerCase().trim() === target);
     return matchedKey ? task[matchedKey] : '';
 };
@@ -340,7 +349,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     const [isLookupOpen, setIsLookupOpen] = useState(false);
 
     const [modalConfig, setModalConfig] = useState<{
-        isOpen: boolean; title: string; message: string; initialValue?: string; showInput?: boolean; isTextArea?: boolean; inputPlaceholder?: string; confirmText?: string; confirmColor?: string; icon?: React.ReactNode; onConfirm: (val?: string) => void; preventOutsideClick?: boolean;
+        isOpen: boolean; title: string; message: string; initialValue?: string; showInput?: boolean; isTextArea?: boolean; inputPlaceholder?: string; confirmText?: string; confirmColor?: string; icon?: React.ReactNode; onConfirm: (val?: string) => void; preventOutsideClick?: boolean; isReadOnly?: boolean;
     }>({ isOpen: false, title: '', message: '', onConfirm: () => { } });
 
     const fetchData = async () => {
@@ -402,25 +411,28 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
 
     const handleNoteClick = (type: 'exec' | 'prep', group: any, itemIndex: number) => {
         const currentNote = group.tasks[itemIndex].plannerNote || '';
-        // If not authorized, only allow reading if note exists, don't allow editing.
-        if (!isPlannerAuthorized && !currentNote) {
-            setNotification({ message: "Mission Briefing Locked", isError: true });
+        const isAuthorized = isPlannerAuthorized;
+
+        // Allow personnel to see the note if it exists, even if locked
+        if (!isAuthorized && !currentNote) {
+            setNotification({ message: "Mission Briefing is empty.", isError: false });
             return;
         }
 
         setModalConfig({
             isOpen: true, 
-            title: isPlannerAuthorized ? "Planner Mission Briefing" : "Analyst Briefing Intake", 
-            message: isPlannerAuthorized ? "Edit specific instructions for this mission:" : "Current instructions from Planner:", 
+            title: isAuthorized ? "Planner Mission Briefing" : "Mission Briefing", 
+            message: isAuthorized ? "Edit specific instructions for this mission:" : "Special instructions provided by Planner:", 
             initialValue: currentNote,
-            showInput: isPlannerAuthorized, 
+            showInput: true, 
             isTextArea: true,
-            inputPlaceholder: "Enter detailed instructions or special remarks...", 
-            confirmText: isPlannerAuthorized ? "Save Mission" : "Close", 
+            isReadOnly: !isAuthorized,
+            inputPlaceholder: "Enter detailed instructions...", 
+            confirmText: isAuthorized ? "Save Mission" : "Close", 
             confirmColor: "bg-indigo-600",
             preventOutsideClick: true,
             onConfirm: (note) => {
-                if (isPlannerAuthorized) {
+                if (isAuthorized) {
                     handleUpdateNote(type, group, itemIndex, note || '');
                 } else {
                     setModalConfig(p => ({ ...p, isOpen: false }));
@@ -563,6 +575,9 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             const desc = String(getTaskValue(task, 'Description') || 'General Task').trim();
             const variant = String(getTaskValue(task, 'Variant') || '-').trim();
             const remark = task.plannerNote || '';
+            const qVal = getTaskValue(task, 'Quantity');
+            // Correctly parse quantity from task data (numeric or string)
+            const taskQty = typeof qVal === 'number' ? qVal : (parseInt(String(qVal)) || 1);
             
             if (!hierarchy[personnel]) hierarchy[personnel] = {};
             if (!hierarchy[personnel][exportDate]) hierarchy[personnel][exportDate] = {};
@@ -575,7 +590,8 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant] = { count: 0, remark: remark };
             }
             
-            hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant].count += 1;
+            // Increment by actual quantity value instead of always adding 1
+            hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant].count += taskQty;
             
             const currentObj = hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant];
             if (remark && !currentObj.remark) {
@@ -657,7 +673,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 .luxury-red-pulse { animation: red-ring-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
             `}</style>
             
-            <LocalModal isOpen={modalConfig.isOpen} onClose={() => setModalConfig(p => ({ ...p, isOpen: false }))} onConfirm={modalConfig.onConfirm} title={modalConfig.title} message={modalConfig.message} initialValue={modalConfig.initialValue} showInput={modalConfig.showInput} isTextArea={modalConfig.isTextArea} inputPlaceholder={modalConfig.inputPlaceholder} confirmText={modalConfig.confirmText} confirmColor={modalConfig.confirmColor} icon={modalConfig.icon} preventOutsideClick={modalConfig.preventOutsideClick} />
+            <LocalModal isOpen={modalConfig.isOpen} onClose={() => setModalConfig(p => ({ ...p, isOpen: false }))} onConfirm={modalConfig.onConfirm} title={modalConfig.title} message={modalConfig.message} initialValue={modalConfig.initialValue} showInput={modalConfig.showInput} isTextArea={modalConfig.isTextArea} isReadOnly={modalConfig.isReadOnly} inputPlaceholder={modalConfig.inputPlaceholder} confirmText={modalConfig.confirmText} confirmColor={modalConfig.confirmColor} icon={modalConfig.icon} preventOutsideClick={modalConfig.preventOutsideClick} />
             <MissionLookupModal isOpen={isLookupOpen} onClose={() => setIsLookupOpen(false)} />
 
             {notification && <div className={`fixed bottom-10 right-10 z-[110] px-6 py-4 rounded-2xl shadow-2xl animate-slide-in-up flex items-center gap-3 font-black text-xs uppercase tracking-widest ${notification.isError ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'}`}><CheckCircleIcon className="h-5 w-5" />{notification.message}</div>}
@@ -726,6 +742,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                         const isPrepared = item.task.preparationStatus === 'Prepared' || item.task.preparationStatus === 'Ready for Testing';
                                                         const hasPlannerNote = !!item.task.plannerNote;
                                                         const desc = String(getTaskValue(item.task, 'Description') || 'General Task').trim();
+                                                        const variant = String(getTaskValue(item.task, 'Variant') || '').trim();
                                                         const qty = String(getTaskValue(item.task, 'Quantity') || '1').trim();
                                                         const sampleName = String(getTaskValue(item.task, 'Sample Name') || '').trim();
                                                         return (
@@ -734,10 +751,13 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                     <button onClick={() => handleNoteClick('prep', item.sourceGroup, item.index)} className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-lg border-2 ${hasPlannerNote ? 'bg-red-600 border-red-400 text-white luxury-red-pulse' : 'bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`} title={hasPlannerNote ? "Read Mission Instruction" : "Add Mission Briefing"}><ChatBubbleLeftEllipsisIcon className="h-5 w-5" /></button>
                                                                 </div>
                                                                 <div className="flex-grow min-w-0 flex flex-row items-center gap-5 ml-2">
-                                                                    <div className={`flex-grow font-black uppercase leading-tight line-clamp-2 ${isPrepared ? 'text-emerald-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>{desc}</div>
+                                                                    <div className="flex flex-col flex-grow">
+                                                                        <div className={`font-black uppercase leading-tight line-clamp-2 ${isPrepared ? 'text-emerald-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>{desc}</div>
+                                                                        {variant && variant !== 'Manual Mission' && <div className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase mt-0.5 tracking-wider italic">{variant}</div>}
+                                                                    </div>
                                                                     <div className="flex flex-shrink-0 items-center gap-3">
                                                                         <div className="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/50 rounded-xl text-[12px] font-black text-amber-800 border border-amber-200">x{qty}</div>
-                                                                        {sampleName && sampleName !== 'N/A' && <div className="px-3 py-1 bg-base-100 dark:bg-base-700/50 rounded-xl text-[12px] font-black text-base-800 dark:text-base-200 border border-base-200 dark:border-base-600 uppercase truncate max-w-[200px]">S: {sampleName}</div>}
+                                                                        {sampleName && sampleName !== 'N/A' && <div className="px-3 py-1 bg-base-100 dark:bg-base-700/50 rounded-xl text-[12px] font-black text-base-800 dark:text-base-200 border border-base-200 dark:border-base-600 uppercase truncate max-w-[150px]">S: {sampleName}</div>}
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex-row items-center gap-2 flex-shrink-0 ml-5 flex">
@@ -772,6 +792,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                         const isActioned = isDone || isNotOk;
                                                         const hasPlannerNote = !!item.task.plannerNote;
                                                         const desc = String(getTaskValue(item.task, 'Description') || 'General Task').trim();
+                                                        const variant = String(getTaskValue(item.task, 'Variant') || '').trim();
                                                         const qty = String(getTaskValue(item.task, 'Quantity') || '1').trim();
                                                         const sampleName = String(getTaskValue(item.task, 'Sample Name') || '').trim();
                                                         return (
@@ -780,10 +801,13 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                     <button onClick={() => handleNoteClick('exec', item.sourceGroup, item.index)} className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-lg border-2 ${hasPlannerNote ? 'bg-red-600 border-red-400 text-white luxury-red-pulse' : 'bg-base-50 dark:bg-base-955 border-base-100 dark:border-base-800 text-base-300 hover:text-base-600 hover:border-indigo-300'}`} title={hasPlannerNote ? "Read Mission Instruction" : "Add Mission Briefing"}><ChatBubbleLeftEllipsisIcon className="h-5 w-5" /></button>
                                                                 </div>
                                                                 <div className="flex-grow min-w-0 flex flex-row items-center gap-5 ml-2">
-                                                                    <div className={`flex-grow font-black uppercase leading-tight line-clamp-2 ${isDone ? 'text-emerald-800 opacity-60' : isNotOk ? 'text-red-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>{desc}</div>
+                                                                    <div className="flex flex-col flex-grow">
+                                                                        <div className={`font-black uppercase leading-tight line-clamp-2 ${isDone ? 'text-emerald-800 opacity-60' : isNotOk ? 'text-red-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>{desc}</div>
+                                                                        {variant && variant !== 'Manual Mission' && <div className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase mt-0.5 tracking-wider italic">{variant}</div>}
+                                                                    </div>
                                                                     <div className="flex flex-shrink-0 items-center gap-3">
                                                                         <div className={`px-2.5 py-1 rounded-xl text-[12px] font-black border flex-shrink-0 ${isDone ? 'bg-emerald-100 border-emerald-200 text-emerald-700' : isNotOk ? 'bg-red-100 border-red-200 text-red-700' : 'bg-indigo-50 border-indigo-100 text-indigo-700'}`}>x{qty}</div>
-                                                                        {sampleName && sampleName !== 'N/A' && <div className={`px-3 py-1 rounded-xl text-[12px] font-black border uppercase truncate max-w-[220px] flex-shrink-0 ${isDone ? 'bg-emerald-50/50 border-emerald-200 text-emerald-700/50' : isNotOk ? 'bg-red-50/50 border-red-200 text-red-700/50' : 'bg-indigo-100/30 border-indigo-100 text-indigo-955 dark:text-indigo-200'}`}>S: {sampleName}</div>}
+                                                                        {sampleName && sampleName !== 'N/A' && <div className={`px-3 py-1 rounded-xl text-[12px] font-black border uppercase truncate max-w-[180px] flex-shrink-0 ${isDone ? 'bg-emerald-50/50 border-emerald-200 text-emerald-700/50' : isNotOk ? 'bg-red-50/50 border-red-200 text-red-700/50' : 'bg-indigo-100/30 border-indigo-100 text-indigo-955 dark:text-indigo-200'}`}>S: {sampleName}</div>}
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex flex-row items-center gap-2 flex-shrink-0 ml-5">

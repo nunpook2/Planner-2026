@@ -346,6 +346,7 @@ export const forceRecallTask = async (taskId: string, reason?: string, returnedB
             const { status, notOkReason, preparationStatus, isReturned, returnReason, returnedBy: oldBy, ...cleanTask } = updated[taskIdx];
             
             // If reason is provided, update with return metadata, otherwise reset to clean state
+            // IMPORTANT: Setting preparationStatus to null ensures it is unlocked for testing assign in the grid
             const finalTask = {
                 ...cleanTask,
                 isReturned: reason ? true : false,
