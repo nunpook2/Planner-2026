@@ -118,17 +118,21 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
 
             if (!isValidTask(baseTask)) return;
 
-            const desc = String(getTaskValue(baseTask, 'Description') || '').trim();
-            const SPECIAL_KEYWORD = "การสกัด EbP,hPP ใน ICP";
+            // Robust Thai character normalization for splitting logic
+            const desc = String(getTaskValue(baseTask, 'Description') || '').normalize('NFC').trim();
+            const SPECIAL_KEYWORD = "การสกัด EbP,hPP ใน ICP".normalize('NFC');
 
             if (desc === SPECIAL_KEYWORD) {
-                const task1 = { ...baseTask, _id: generateId() };
                 const variantKey = Object.keys(baseTask).find(k => k.toLowerCase() === 'variant') || 'Variant';
-                task1[variantKey] = "ICP-PER";
+                
+                // Task 1: PER-ICP
+                const task1 = { ...baseTask, _id: generateId() };
+                task1[variantKey] = "PER-ICP";
                 processedTasks.push(task1);
 
+                // Task 2: HppEbp-ICP
                 const task2 = { ...baseTask, _id: generateId() };
-                task2[variantKey] = "ICP-HppEbp";
+                task2[variantKey] = "HppEbp-ICP";
                 processedTasks.push(task2);
             } else {
                 processedTasks.push({ ...baseTask, _id: generateId() });
@@ -228,7 +232,7 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
         <div className="space-y-8 animate-slide-in-up p-4">
             <div className="flex justify-between items-start">
                 <div>
-                    <h2 className="text-3xl font-black text-base-950 dark:text-base-50 tracking-tighter">Mission Intake</h2>
+                    <h2 className="text-3xl font-black text-base-955 dark:text-base-50 tracking-tighter">Mission Intake</h2>
                     <p className="text-base-500 mt-1 font-medium">Import new laboratory requests and triage them into deployment categories.</p>
                 </div>
                 <div className="flex gap-3">
@@ -297,7 +301,7 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                 <div className="space-y-6 animate-fade-in">
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                         <div className="space-y-1">
-                            <h2 className="text-2xl font-black text-base-950 dark:text-base-50 tracking-tighter">Queue Triage</h2>
+                            <h2 className="text-2xl font-black text-base-955 dark:text-base-50 tracking-tighter">Queue Triage</h2>
                             <p className="text-base-400 font-bold uppercase tracking-widest text-[10px]">Triage requests into priority deployment boxes.</p>
                         </div>
                         <div className="relative w-full md:w-80 group">
@@ -340,7 +344,7 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                                         </div>
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-3">
-                                                <span className="text-[17px] font-black text-base-950 dark:text-base-50 tracking-tighter leading-none">{groupedTask.id}</span>
+                                                <span className="text-[17px] font-black text-base-955 dark:text-base-50 tracking-tighter leading-none">{groupedTask.id}</span>
                                                 <span className="text-[10px] font-black text-base-400 uppercase tracking-widest">({groupedTask.tasks.length} items)</span>
                                             </div>
                                             <div className="flex flex-wrap gap-2 mt-2">

@@ -116,9 +116,15 @@ const getDueDateTimestamp = (tasks: RawTask[]): number => {
 };
 
 const getTaskGridColumnKey = (task: RawTask, mappings: TestMapping[]): string | null => {
-    const taskDesc = String(getTaskValue(task, 'Description')).toLowerCase().normalize('NFC').replace(/\s+/g, '');
-    const taskVar = String(getTaskValue(task, 'Variant')).toLowerCase().normalize('NFC').replace(/\s+/g, '');
-    const specificMatch = mappings.find(m => m.description.toLowerCase().normalize('NFC').replace(/\s+/g, '') === taskDesc && m.variant.toLowerCase().normalize('NFC').replace(/\s+/g, '') === taskVar);
+    // Aggressive Thai normalization and space stripping for better matching
+    const taskDesc = String(getTaskValue(task, 'Description')).normalize('NFC').toLowerCase().replace(/\s+/g, '');
+    const taskVar = String(getTaskValue(task, 'Variant')).normalize('NFC').toLowerCase().replace(/\s+/g, '');
+    
+    const specificMatch = mappings.find(m => 
+        m.description.normalize('NFC').toLowerCase().replace(/\s+/g, '') === taskDesc && 
+        m.variant.normalize('NFC').toLowerCase().replace(/\s+/g, '') === taskVar
+    );
+    
     if (specificMatch) return `${specificMatch.headerGroup}|${specificMatch.headerSub}`;
     return null;
 };
