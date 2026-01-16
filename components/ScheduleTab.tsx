@@ -349,7 +349,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     const [isLookupOpen, setIsLookupOpen] = useState(false);
 
     const [modalConfig, setModalConfig] = useState<{
-        isOpen: boolean; title: string; message: string; initialValue?: string; showInput?: boolean; isTextArea?: boolean; inputPlaceholder?: string; confirmText?: string; confirmColor?: string; icon?: React.ReactNode; onConfirm: (val?: string) => void; preventOutsideClick?: boolean; isReadOnly?: boolean;
+        isOpen: boolean; title: string; message: string; initialValue?: string; showInput?: boolean; iTextArea?: boolean; inputPlaceholder?: string; confirmText?: string; confirmColor?: string; icon?: React.ReactNode; onConfirm: (val?: string) => void; preventOutsideClick?: boolean; isReadOnly?: boolean;
     }>({ isOpen: false, title: '', message: '', onConfirm: () => { } });
 
     const fetchData = async () => {
@@ -482,7 +482,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
         if (!isPlannerAuthorized) return; // Protected action
         const item = group.tasks[itemIndex];
         if (!item._id) return;
-        await forceRecallTask(item._id);
+        await forceRecallTask(item._id, undefined, undefined, selectedDate, selectedShift);
         fetchData(); 
         onTasksUpdated();
         setNotification({ message: "Task Recalled (Quick)", isError: false });
@@ -503,7 +503,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 if (!reason) return;
                 const item = group.tasks[itemIndex];
                 if (!item._id) return;
-                await forceRecallTask(item._id, reason, group.assistantName);
+                await forceRecallTask(item._id, reason, group.assistantName, selectedDate, selectedShift);
                 fetchData(); 
                 onTasksUpdated(); 
                 setModalConfig(p => ({ ...p, isOpen: false }));
@@ -527,7 +527,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 if (!reason) return;
                 const item = group.tasks[itemIndex];
                 if (!item._id) return;
-                await forceRecallTask(item._id, reason, group.testerName);
+                await forceRecallTask(item._id, reason, group.testerName, selectedDate, selectedShift);
                 fetchData(); 
                 onTasksUpdated(); 
                 setModalConfig(p => ({ ...p, isOpen: false }));
@@ -673,7 +673,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 .luxury-red-pulse { animation: red-ring-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
             `}</style>
             
-            <LocalModal isOpen={modalConfig.isOpen} onClose={() => setModalConfig(p => ({ ...p, isOpen: false }))} onConfirm={modalConfig.onConfirm} title={modalConfig.title} message={modalConfig.message} initialValue={modalConfig.initialValue} showInput={modalConfig.showInput} isTextArea={modalConfig.isTextArea} isReadOnly={modalConfig.isReadOnly} inputPlaceholder={modalConfig.inputPlaceholder} confirmText={modalConfig.confirmText} confirmColor={modalConfig.confirmColor} icon={modalConfig.icon} preventOutsideClick={modalConfig.preventOutsideClick} />
+            <LocalModal isOpen={modalConfig.isOpen} onClose={() => setModalConfig(p => ({ ...p, isOpen: false }))} onConfirm={modalConfig.onConfirm} title={modalConfig.title} message={modalConfig.message} initialValue={modalConfig.initialValue} showInput={modalConfig.showInput} iTextArea={modalConfig.iTextArea} isReadOnly={modalConfig.isReadOnly} inputPlaceholder={modalConfig.inputPlaceholder} confirmText={modalConfig.confirmText} confirmColor={modalConfig.confirmColor} icon={modalConfig.icon} preventOutsideClick={modalConfig.preventOutsideClick} />
             <MissionLookupModal isOpen={isLookupOpen} onClose={() => setIsLookupOpen(false)} />
 
             {notification && <div className={`fixed bottom-10 right-10 z-[110] px-6 py-4 rounded-2xl shadow-2xl animate-slide-in-up flex items-center gap-3 font-black text-xs uppercase tracking-widest ${notification.isError ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'}`}><CheckCircleIcon className="h-5 w-5" />{notification.message}</div>}
@@ -713,7 +713,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                 <>
                                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-base font-black text-white shadow-xl ${activePerson.team === 'assistants_4_2' ? 'person-avatar assistant' : 'person-avatar'}`}>{activePerson.name.substring(0, 2).toUpperCase()}</div>
                                     <div>
-                                        <h2 className="text-2xl font-black text-base-900 dark:text-base-100 tracking-tighter leading-none">{activePerson.name}</h2>
+                                        <h2 className="text-2xl font-black text-base-955 dark:text-base-100 tracking-tighter leading-none">{activePerson.name}</h2>
                                         <p className="text-[10px] text-base-400 font-bold uppercase tracking-[0.3em] mt-1.5 flex items-center gap-2">Operational Tasks Control{isPlannerAuthorized && <span className="px-2 py-0.5 bg-indigo-600 text-white rounded text-[8px] font-black tracking-widest">PLANNER MODE</span>}</p>
                                     </div>
                                 </>

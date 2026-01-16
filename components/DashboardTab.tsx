@@ -203,14 +203,17 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         let total = 0, done = 0, poCat = 0, lsp = 0, sprint = 0, urgent = 0;
         
         const processGroup = (groupTasks: RawTask[], category: TaskCategory) => {
-             total += groupTasks.length;
              groupTasks.forEach(t => {
+                const qVal = getTaskValue(t, 'Quantity');
+                const taskQty = typeof qVal === 'number' ? qVal : (parseInt(String(qVal)) || 1);
+                
+                total += taskQty;
                 const priority = getPriorityStatus(t, category);
-                if (priority === 'lsp') lsp++;
-                else if (priority === 'sprint') sprint++;
-                else if (priority === 'urgent') urgent++;
-                else if (priority === 'pocat') poCat++;
-                if (t.status === TaskStatus.Done || t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing') done++;
+                if (priority === 'lsp') lsp += taskQty;
+                else if (priority === 'sprint') sprint += taskQty;
+                else if (priority === 'urgent') urgent += taskQty;
+                else if (priority === 'pocat') poCat += taskQty;
+                if (t.status === TaskStatus.Done || t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing') done += taskQty;
             });
         };
 
@@ -219,7 +222,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         
         // Also process returned items for this shift
         returnedPool.forEach(g => {
-            const docDate = (g as any).returnedDate;
+            const docDate = g.returnedDate;
             if (g.shift === selectedShift && docDate === selectedDate) {
                 processGroup(g.tasks, g.category);
             }
@@ -246,12 +249,15 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         const addActivity = (targetPersonId: string, task: RawTask, cat: TaskCategory, isReady: boolean, isPrep: boolean = false) => {
             if (!stats[targetPersonId]) return; 
             const person = stats[targetPersonId];
+            const qVal = getTaskValue(task, 'Quantity');
+            const taskQty = typeof qVal === 'number' ? qVal : (parseInt(String(qVal)) || 1);
+            
             const priority = isPrep ? 'normal' : getPriorityStatus(task, cat);
             const rawDesc = String(getTaskValue(task, 'Description') || 'General Task');
             const desc = isPrep ? `[PREP] ${rawDesc}` : rawDesc;
             const status = isReady ? 'done' : (task.status === TaskStatus.NotOK ? 'failed' : (task.isReturned ? 'returned' : 'pending'));
             
-            if (status !== 'done') person.pendingTasks++;
+            if (status !== 'done') person.pendingTasks += taskQty;
             
             const summaryKey = `${person.id}_${desc}`;
             
@@ -259,17 +265,17 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                 person.summary[summaryKey] = { desc, total: 0, done: 0, failed: 0, returned: 0, priorityStatus: priority, isManual: task.ManualEntry === true || cat === TaskCategory.Manual, isPrepGroup: isPrep, samples: [] };
             }
             const item = person.summary[summaryKey];
-            item.total++;
-            if (status === 'done') item.done++;
-            if (status === 'failed') item.failed++;
-            if (status === 'returned') item.returned++;
+            item.total += taskQty;
+            if (status === 'done') item.done += taskQty;
+            if (status === 'failed') item.failed += taskQty;
+            if (status === 'returned') item.returned += taskQty;
             
             if (!isPrep) {
                 const priorities = ['lsp', 'sprint', 'urgent', 'pocat', 'normal'];
                 if (priorities.indexOf(priority) < priorities.indexOf(item.priorityStatus)) item.priorityStatus = priority;
             }
             
-            item.samples.push({ name: String(getTaskValue(task, 'Sample Name') || 'N/A'), qty: String(getTaskValue(task, 'Quantity') || '1'), detail: String(getTaskValue(task, 'Variant') || '-'), status: status, isManual: item.isManual, isPrep: isPrep, reason: task.notOkReason || task.returnReason || undefined });
+            item.samples.push({ name: String(getTaskValue(task, 'Sample Name') || 'N/A'), qty: String(taskQty), detail: String(getTaskValue(task, 'Variant') || '-'), status: status, isManual: item.isManual, isPrep: isPrep, reason: task.notOkReason || task.returnReason || undefined });
         };
 
         assignedTasks.forEach(g => (g.tasks || []).forEach(t => addActivity(g.testerId, t, g.category, t.status === TaskStatus.Done, false)));
@@ -278,16 +284,20 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
             addActivity(g.assistantId, t, g.category, isDone, true);
         }));
 
-        // CRITICAL FIX: Include returned pool items for shift history report
-        // This ensures returns made by testers/assistants are visible to planners in the summary
+        // Include returned pool items for shift history report
         returnedPool.forEach(g => {
-            const docDate = (g as any).returnedDate;
+            const docDate = g.returnedDate;
             if (g.shift === selectedShift && docDate === selectedDate) {
                 // Safely match person by name for returned entries
                 const person = testers.find(t => t.name.trim().toLowerCase() === String(g.returnedBy || '').trim().toLowerCase());
                 if (person) {
-                    const isPrep = (g as any).isPrep === true;
-                    (g.tasks || []).forEach(t => addActivity(person.id, t, g.category, false, isPrep));
+                    const isPrep = g.isPrep === true;
+                    (g.tasks || []).forEach(t => {
+                        // Only add items that actually have return info
+                        if (t.isReturned && t.returnedBy === person.name) {
+                            addActivity(person.id, t, g.category, false, isPrep);
+                        }
+                    });
                 }
             }
         });
@@ -374,7 +384,10 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                         return (
                                             <div key={si} className="flex flex-col gap-1">
                                                 <div className="flex items-center justify-between text-[11px] font-bold">
-                                                    <span className={`truncate max-w-[150px] uppercase ${isSampleActioned ? 'opacity-40' : 'text-base-700 dark:text-base-300'}`}>{s.name}</span>
+                                                    <div className="flex items-center gap-1 min-w-0">
+                                                        <span className={`px-1.5 py-0.5 rounded bg-base-100 dark:bg-base-700 text-[9px] font-black`}>x{s.qty}</span>
+                                                        <span className={`truncate max-w-[150px] uppercase ${isSampleActioned ? 'opacity-40' : 'text-base-700 dark:text-base-300'}`}>{s.name}</span>
+                                                    </div>
                                                     <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase ${
                                                         s.status === 'done' ? 'bg-emerald-100 text-emerald-700' : 
                                                         s.status === 'failed' ? 'bg-red-600 text-white shadow-lg animate-pulse' : 
@@ -479,14 +492,14 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
 
                         <div className="grid grid-cols-6 gap-4">
                             <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center">
-                                <span className="text-[10px] font-black text-primary-600 uppercase tracking-widest mb-1">Global Success</span>
+                                <span className="text-[10px] font-black text-primary-600 uppercase tracking-widest mb-1">Global Success (Units)</span>
                                 <div className="flex items-baseline gap-2">
                                     <span className="text-2xl font-black text-base-955 dark:text-white">{globalStats.percent}%</span>
                                     <span className="text-[11px] font-bold text-base-400">({globalStats.done}/{globalStats.total})</span>
                                 </div>
                             </div>
                             <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center">
-                                <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-1">Po Cat Load</span>
+                                <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-1">Po Cat Units</span>
                                 <div className="flex items-baseline gap-2">
                                     <span className="text-2xl font-black text-base-955 dark:text-white">{globalStats.poCat}</span>
                                 </div>
@@ -498,13 +511,13 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                 </div>
                             </div>
                             <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center">
-                                <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-1">Sprint Tasks</span>
+                                <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-1">Sprint Units</span>
                                 <div className="flex items-baseline gap-2">
                                     <span className="text-2xl font-black text-base-955 dark:text-white">{globalStats.sprint}</span>
                                 </div>
                             </div>
                             <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center">
-                                <span className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Urgent Alert</span>
+                                <span className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Urgent Units</span>
                                 <div className="flex items-baseline gap-2">
                                     <span className="text-2xl font-black text-red-600">{globalStats.urgent}</span>
                                 </div>
@@ -546,7 +559,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                                 </div>
                                             </div>
                                             <div className="flex flex-col items-end">
-                                                <span className="text-[10px] font-black text-base-400 uppercase tracking-widest mb-1">Success Rate</span>
+                                                <span className="text-[10px] font-black text-base-400 uppercase tracking-widest mb-1">Success Rate (Units)</span>
                                                 <span className="text-4xl font-black text-primary-700">
                                                     {(Object.values(activePerson.summary) as SummaryItemStats[]).reduce((acc, s) => acc + s.done, 0)}
                                                     <span className="text-base-200 mx-1 font-normal">/</span>
@@ -566,7 +579,10 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
                                                         {sum.samples.map((s, si) => (
                                                             <div key={si} className="flex flex-col p-4 bg-base-50/50 dark:bg-base-800/50 rounded-2xl border border-base-100 dark:border-base-700">
                                                                 <div className="flex justify-between items-center">
-                                                                    <span className="text-[15px] font-black uppercase text-base-900 dark:text-base-100 truncate">{s.name}</span>
+                                                                    <div className="flex items-center gap-1 min-w-0">
+                                                                        <span className="px-1.5 py-0.5 rounded bg-white dark:bg-base-700 text-[10px] font-black shadow-sm">x{s.qty}</span>
+                                                                        <span className="text-[15px] font-black uppercase text-base-900 dark:text-base-100 truncate">{s.name}</span>
+                                                                    </div>
                                                                     <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${
                                                                         s.status === 'done' ? 'bg-emerald-100 text-emerald-700' : 
                                                                         s.status === 'failed' ? 'bg-red-600 text-white animate-pulse' : 

@@ -308,9 +308,10 @@ export const unassignTaskToPool = async (categorizedTask: CategorizedTask): Prom
 };
 
 // FORCE RECALL: Pulls a task back from an assignment and makes it available in the pool
-// Enhanced to support return reason to prevent duplication in the database
-export const forceRecallTask = async (taskId: string, reason?: string, returnedBy?: string) => {
+// Enhanced to support return reason and reporting metadata
+export const forceRecallTask = async (taskId: string, reason?: string, returnedBy?: string, date?: string, shift?: string) => {
     const batch = firestore.batch();
+    let isPrepReturn = false;
     
     // 1. Find and remove from Assigned Tasks (Analyst)
     const assignedSnapshot = await getCollection('assignedTasks').get();
@@ -330,13 +331,14 @@ export const forceRecallTask = async (taskId: string, reason?: string, returnedB
         const data = doc.data() as AssignedPrepareTask;
         const taskIdx = data.tasks.findIndex(t => t._id === taskId);
         if (taskIdx !== -1) {
+            isPrepReturn = true;
             const remaining = data.tasks.filter(t => t._id !== taskId);
             if (remaining.length === 0) batch.delete(doc.ref);
             else batch.update(doc.ref, { tasks: remaining });
         }
     });
 
-    // 3. Clean up status in the deployment pool
+    // 3. Clean up status in the deployment pool and add return metadata for Dashboard
     const poolSnapshot = await getCollection('categorizedTasks').get();
     poolSnapshot.forEach((doc: any) => {
         const data = doc.data() as CategorizedTask;
@@ -345,8 +347,7 @@ export const forceRecallTask = async (taskId: string, reason?: string, returnedB
             const updated = [...data.tasks];
             const { status, notOkReason, preparationStatus, isReturned, returnReason, returnedBy: oldBy, ...cleanTask } = updated[taskIdx];
             
-            // If reason is provided, update with return metadata, otherwise reset to clean state
-            // IMPORTANT: Setting preparationStatus to null ensures it is unlocked for testing assign in the grid
+            // Setting preparationStatus to null ensures it is unlocked for testing assign in the grid
             const finalTask = {
                 ...cleanTask,
                 isReturned: reason ? true : false,
@@ -357,7 +358,16 @@ export const forceRecallTask = async (taskId: string, reason?: string, returnedB
             };
             
             updated[taskIdx] = finalTask as RawTask;
-            batch.update(doc.ref, { tasks: updated });
+            
+            // Mark the document for Dashboard tracking
+            batch.update(doc.ref, { 
+                tasks: updated,
+                isReturnedPool: true,
+                returnedDate: date || new Date().toISOString().split('T')[0],
+                shift: shift || 'day',
+                returnedBy: returnedBy || 'Staff',
+                isPrep: isPrepReturn
+            });
         }
     });
 
