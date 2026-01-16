@@ -292,6 +292,13 @@ const ExpandableCell: React.FC<{
     onInitiateDelete: (docId: string, index: number, label: string) => void;
     onInitiateEdit?: (docId: string, index: number, task: RawTask) => void;
 }> = ({ headerKey, items, isGroupEnd, expandedCell, setExpandedCell, selectedItems, handleSelectItem, setSelectedItems, isAssigningToPrepare, setNoteEditor, onInitiateDelete, onInitiateEdit }) => {
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+    // Reset confirmation when dropdown closes
+    useEffect(() => {
+        if (expandedCell?.headerKey !== headerKey) setConfirmDeleteId(null);
+    }, [expandedCell, headerKey]);
+
     if (items.length === 0) return <td className={`p-0 align-top border border-base-200 dark:border-base-700 ${isGroupEnd ? 'border-r-2 border-r-slate-200 dark:border-r-base-600' : ''}`}></td>;
     
     const anchorDocId = items[0].sourceDocId;
@@ -338,7 +345,7 @@ const ExpandableCell: React.FC<{
                 </div>
             </div>
             {isExpanded && (
-                <div className="absolute top-full left-0 min-w-[440px] bg-white dark:bg-base-900 border-2 border-indigo-500 shadow-2xl rounded-b-[2rem] overflow-hidden z-[90] animate-fade-in origin-top-left">
+                <div className="absolute top-full left-0 min-w-[440px] bg-white dark:bg-base-900 border-2 border-indigo-500 shadow-2xl rounded-b-[2rem] overflow-hidden z-[90] animate-fade-in origin-top-left" onClick={e => e.stopPropagation()}>
                     <div className="p-4 bg-indigo-50 dark:bg-base-800 border-b-2 border-indigo-100 dark:border-base-700 flex justify-between items-center shrink-0">
                         <span className="text-[11px] font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-widest">{headerKey.split('|')[1] || headerKey}</span>
                         <label className="flex items-center gap-2 text-[10px] font-black uppercase cursor-pointer text-indigo-800 dark:text-primary-200"><input type="checkbox" className="h-4 w-4 rounded" checked={areAllSelected} onChange={e => toggleAll(e.target.checked)}/> Select All</label>
@@ -381,7 +388,29 @@ const ExpandableCell: React.FC<{
                                                     <div className="flex items-center gap-2 shrink-0">
                                                         {onInitiateEdit && <button onClick={() => onInitiateEdit(sourceDocId, originalIndex, task)} className="p-2 bg-base-50 dark:bg-base-955 border-base-200 rounded-lg text-base-400 hover:text-indigo-600 transition-all"><PencilIcon className="h-4.5 w-4.5"/></button>}
                                                         <button onClick={() => setNoteEditor({ docId: sourceDocId, index: originalIndex, text: task.plannerNote || '' })} className={`p-2 rounded-lg border ${task.plannerNote ? 'bg-indigo-600 border-indigo-400 text-white shadow-md' : 'bg-base-50 dark:bg-base-955 border-base-200 text-base-400'}`}><ChatBubbleLeftEllipsisIcon className="h-4.5 w-4.5" /></button>
-                                                        <button onClick={() => onInitiateDelete(sourceDocId, originalIndex, sampleLabel)} className="p-2 bg-base-50 dark:bg-base-955 border-base-200 rounded-lg text-base-400 hover:text-red-600 transition-all"><TrashIcon className="h-4.5 w-4.5"/></button>
+                                                        
+                                                        {/* 2-CLICK DELETE FOR INDIVIDUAL ITEM */}
+                                                        <button 
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (confirmDeleteId === task._id) {
+                                                                    onInitiateDelete(sourceDocId, originalIndex, sampleLabel);
+                                                                    setConfirmDeleteId(null);
+                                                                } else {
+                                                                    setConfirmDeleteId(task._id!);
+                                                                    setTimeout(() => setConfirmDeleteId(null), 4000);
+                                                                }
+                                                            }} 
+                                                            className={`p-2 rounded-lg transition-all border ${
+                                                                confirmDeleteId === task._id 
+                                                                    ? 'bg-red-600 border-red-400 text-white animate-pulse' 
+                                                                    : 'bg-base-50 dark:bg-base-955 border-base-200 text-base-400 hover:text-red-600'
+                                                            }`}
+                                                            title={confirmDeleteId === task._id ? "Click again to confirm delete" : "Delete item"}
+                                                        >
+                                                            {confirmDeleteId === task._id ? <TrashIcon className="h-4.5 w-4.5"/> : <XCircleIcon className="h-4.5 w-4.5"/>}
+                                                        </button>
+                                                        
                                                         <div className="px-2 py-1 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-900 dark:text-indigo-100 rounded-lg text-[11px] font-black border border-indigo-100">x{String(getTaskValue(task, 'Quantity'))}</div>
                                                     </div>
                                                 </div>
@@ -420,6 +449,9 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     
     // NEW: Customer Remarks State
     const [activeRemarks, setActiveRemarks] = useState<{ id: string, list: {source: string, text: string}[] } | null>(null);
+    
+    // NEW: Batch Action States
+    const [batchDeleteStage, setBatchDeleteStage] = useState(0); // 0: idle, 1: confirming
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -522,6 +554,43 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
             setNotification({ message: `Successfully deleted "${label}"` });
             fetchData();
         } catch (e) { setNotification({ message: "Failed to delete task.", isError: true }); } finally { setIsAssigning(false); setDeleteConfirm(null); }
+    };
+
+    const handleBatchWipe = async () => {
+        if (selectedItemCount === 0) return;
+        setIsAssigning(true);
+        try {
+            const batch = firestore.batch();
+            const docsToUpdate = new Map<string, RawTask[]>();
+            
+            // Collect all remaining tasks per document
+            categorizedTasks.forEach(doc => {
+                const selectedIdsInDoc = selectedItems[doc.docId!] || new Set();
+                if (selectedIdsInDoc.size > 0) {
+                    const remainingTasks = doc.tasks.filter(t => !selectedIdsInDoc.has(t._id!));
+                    docsToUpdate.set(doc.docId!, remainingTasks);
+                }
+            });
+
+            // Perform batch operations
+            for (const [docId, remaining] of docsToUpdate.entries()) {
+                if (remaining.length === 0) {
+                    batch.delete(firestore.collection('categorizedTasks').doc(docId));
+                } else {
+                    batch.update(firestore.collection('categorizedTasks').doc(docId), { tasks: remaining });
+                }
+            }
+
+            await batch.commit();
+            setSelectedItems({});
+            setBatchDeleteStage(0);
+            fetchData();
+            setNotification({ message: `Permanently deleted ${selectedItemCount} items.` });
+        } catch (e) {
+            setNotification({ message: "Failed to wipe selected tasks.", isError: true });
+        } finally {
+            setIsAssigning(false);
+        }
     };
 
     const handleSaveTaskEdit = async (updatedTask: RawTask) => {
@@ -744,18 +813,36 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     <div className="h-8 w-px bg-slate-200 dark:bg-white/10 mx-1"></div>
 
                     {/* SELECTION INTERFACE */}
-                    <div className={`flex items-center gap-3 transition-all duration-500 shrink-0 ${selectedItemCount > 0 ? 'opacity-100' : 'opacity-20 pointer-events-none'}`}>
+                    <div className={`flex items-center gap-3 transition-all duration-500 shrink-0 ${selectedItemCount > 0 ? 'opacity-100' : 'opacity-20'}`}>
                         <div className="flex flex-col items-center justify-center px-4 py-1.5 bg-indigo-50 dark:bg-indigo-900/10 rounded-lg border border-indigo-200 dark:border-indigo-800 shadow-inner min-w-[70px]">
                             <span className="text-[7px] font-black text-indigo-500 uppercase tracking-widest leading-none mb-0.5">Focus</span>
                             <span className="text-xl font-black text-indigo-900 dark:text-white leading-none">{selectedItemCount}</span>
                         </div>
                         
-                        {selectedItemCount > 0 && (
-                            <div className="flex gap-1 animate-fade-in shrink-0">
-                                <button onClick={() => { setIsAssigningToPrepare(true); setIsModalOpen(true); }} className="px-4 py-2.5 bg-amber-500 text-white text-[9px] font-black rounded-lg hover:bg-amber-600 uppercase shadow-sm transition-all border-b-2 border-amber-700">Assign Prep</button>
-                                <button onClick={() => { setIsAssigningToPrepare(false); setIsModalOpen(true); }} className="px-4 py-2.5 bg-indigo-600 text-white text-[9px] font-black rounded-lg hover:bg-indigo-700 uppercase shadow-sm transition-all border-b-2 border-indigo-800">Assign Test</button>
-                                <button onClick={() => setSelectedItems({})} className="p-2 text-slate-300 hover:text-red-500 transition-all"><XCircleIcon className="h-5 w-5"/></button>
+                        {selectedItemCount > 0 ? (
+                            <div className="flex gap-1 animate-fade-in shrink-0 items-center">
+                                <button onClick={() => { setIsAssigningToPrepare(true); setIsModalOpen(true); }} className="px-4 py-2.5 bg-amber-500 text-white text-[9px] font-black rounded-lg hover:bg-amber-600 uppercase shadow-sm transition-all border-b-2 border-amber-700 active:scale-95">Assign Prep</button>
+                                <button onClick={() => { setIsAssigningToPrepare(false); setIsModalOpen(true); }} className="px-4 py-2.5 bg-indigo-600 text-white text-[9px] font-black rounded-lg hover:bg-indigo-700 uppercase shadow-sm transition-all border-b-2 border-indigo-800 active:scale-95">Assign Test</button>
+                                
+                                {/* 2-CLICK DELETE BUTTON */}
+                                <button 
+                                    onClick={() => {
+                                        if (batchDeleteStage === 0) {
+                                            setBatchDeleteStage(1);
+                                            setTimeout(() => setBatchDeleteStage(0), 4000); // Auto-reset after 4s
+                                        } else {
+                                            handleBatchWipe();
+                                        }
+                                    }}
+                                    className={`px-4 py-2.5 rounded-lg text-[9px] font-black uppercase shadow-sm transition-all border-b-2 active:scale-90 ${batchDeleteStage === 1 ? 'bg-red-600 text-white border-red-800 animate-pulse' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'}`}
+                                >
+                                    {batchDeleteStage === 1 ? 'Confirm Wipe?' : 'Wipe Focus'}
+                                </button>
+
+                                <button onClick={() => { setSelectedItems({}); setBatchDeleteStage(0); }} className="p-2 text-slate-300 hover:text-indigo-500 transition-all active:rotate-90" title="Clear Selection"><XCircleIcon className="h-5 w-5"/></button>
                             </div>
+                        ) : (
+                            <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest ml-2 italic">No assets focused</div>
                         )}
                     </div>
 
