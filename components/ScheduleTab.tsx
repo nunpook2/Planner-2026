@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Tester, AssignedTask, RawTask, CategorizedTask, AssignedPrepareTask } from '../types';
 import { TaskStatus, TaskCategory } from '../types';
 import { 
@@ -274,8 +274,6 @@ const MissionLookupModal: React.FC<{
         </div>
     );
 };
-
-// ... [Rest of ScheduleTab.tsx remains unchanged] ...
 
 const LocalModal: React.FC<{
     isOpen: boolean;
@@ -816,7 +814,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                     </div>
                                                                     <div className="flex flex-shrink-0 items-center gap-3">
                                                                         <div className="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/50 rounded-xl text-[12px] font-black text-amber-800 border border-amber-200">x{qty}</div>
-                                                                        {sampleName && sampleName !== 'N/A' && <div className="px-3 py-1 bg-base-100 dark:bg-base-700/50 rounded-xl text-[12px] font-black text-base-800 dark:text-base-200 border border-base-200 dark:border-base-600 uppercase truncate max-w-[150px]">S: {sampleName}</div>}
+                                                                        {sampleName && sampleName !== 'N/A' && <div className="px-3 py-1 bg-base-100 dark:bg-base-700/50 rounded-xl text-[12px] font-black text-base-800 dark:text-base-200 border border-base-200 dark:border-base-600 uppercase break-words whitespace-normal max-w-[350px] text-left leading-tight">S: {sampleName}</div>}
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex-row items-center gap-2 flex-shrink-0 ml-5 flex">
@@ -866,7 +864,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                     </div>
                                                                     <div className="flex flex-shrink-0 items-center gap-3">
                                                                         <div className={`px-2.5 py-1 rounded-xl text-[12px] font-black border flex-shrink-0 ${isDone ? 'bg-emerald-100 border-emerald-200 text-emerald-700' : isNotOk ? 'bg-red-100 border-red-200 text-red-700' : 'bg-indigo-50 border-indigo-100 text-indigo-700'}`}>x{qty}</div>
-                                                                        {sampleName && sampleName !== 'N/A' && <div className={`px-3 py-1 rounded-xl text-[12px] font-black border uppercase truncate max-w-[180px] flex-shrink-0 ${isDone ? 'bg-emerald-50/50 border-emerald-200 text-emerald-700/50' : isNotOk ? 'bg-red-50/50 border-red-200 text-red-700/50' : 'bg-indigo-100/30 border-indigo-100 text-indigo-955 dark:text-indigo-200'}`}>S: {sampleName}</div>}
+                                                                        {sampleName && sampleName !== 'N/A' && <div className={`px-3 py-1 rounded-xl text-[12px] font-black border uppercase break-words whitespace-normal max-w-[350px] text-left leading-tight flex-shrink-0 ${isDone ? 'bg-emerald-50/50 border-emerald-200 text-emerald-700/50' : isNotOk ? 'bg-red-50/50 border-red-200 text-red-700/50' : 'bg-indigo-100/30 border-indigo-100 text-indigo-955 dark:text-indigo-200'}`}>S: {sampleName}</div>}
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex flex-row items-center gap-2 flex-shrink-0 ml-5">
