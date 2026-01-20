@@ -15,7 +15,7 @@ import {
     getAssignedPrepareTasks,
     firestore
 } from '../services/dataService';
-import { CheckCircleIcon, ChevronDownIcon, TrashIcon, AlertTriangleIcon, RefreshIcon, PlusIcon, DownloadIcon, ChatBubbleLeftEllipsisIcon, BeakerIcon, XCircleIcon, SearchIcon, PencilIcon, ClipboardListIcon } from './common/Icons';
+import { CheckCircleIcon, ChevronDownIcon, TrashIcon, AlertTriangleIcon, RefreshIcon, PlusIcon, DownloadIcon, ChatBubbleLeftEllipsisIcon, BeakerIcon, XCircleIcon, SearchIcon, PencilIcon, ClipboardListIcon, SparklesIcon } from './common/Icons';
 
 declare const XLSX: any;
 
@@ -116,7 +116,6 @@ const getDueDateTimestamp = (tasks: RawTask[]): number => {
 };
 
 const getTaskGridColumnKey = (task: RawTask, mappings: TestMapping[]): string | null => {
-    // Aggressive Thai normalization and space stripping for better matching
     const taskDesc = String(getTaskValue(task, 'Description')).normalize('NFC').toLowerCase().replace(/\s+/g, '');
     const taskVar = String(getTaskValue(task, 'Variant')).normalize('NFC').toLowerCase().replace(/\s+/g, '');
     
@@ -127,6 +126,16 @@ const getTaskGridColumnKey = (task: RawTask, mappings: TestMapping[]): string | 
     
     if (specificMatch) return `${specificMatch.headerGroup}|${specificMatch.headerSub}`;
     return null;
+};
+
+// Helper to generate a unique signature for a task item to detect duplicates across imports
+const getTaskSignature = (reqId: string, task: RawTask): string => {
+    const desc = String(getTaskValue(task, 'Description') || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const variant = String(getTaskValue(task, 'Variant') || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const sample = String(getTaskValue(task, 'Sample Name') || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const cleanReqId = reqId ? reqId.trim().toUpperCase() : 'NO_ID';
+    
+    return `${cleanReqId}|${desc}|${variant}|${sample}`;
 };
 
 // --- SUB-COMPONENTS ---
@@ -140,6 +149,7 @@ const Toast: React.FC<{ message: string; isError?: boolean; onDismiss: () => voi
     );
 };
 
+// ... [Modal Components remain unchanged] ...
 const CustomerRemarkModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -286,7 +296,7 @@ const DeleteConfirmationModal: React.FC<{ isOpen: boolean; onClose: () => void; 
 
 const ExpandableCell: React.FC<{ 
     headerKey: string; 
-    items: { task: RawTask; originalIndex: number; sourceDocId: string; }[]; 
+    items: { task: RawTask; originalIndex: number; sourceDocId: string; requestId: string; isItemActiveInOps?: boolean; isItemDoneInOps?: boolean }[]; 
     isGroupEnd?: boolean;
     expandedCell: { docId: string; headerKey: string } | null;
     setExpandedCell: (val: { docId: string; headerKey: string } | null) => void;
@@ -315,6 +325,8 @@ const ExpandableCell: React.FC<{
     const hasInPrep = items.some(item => item.task.preparationStatus === 'Awaiting Preparation');
     const hasPrepared = items.some(item => item.task.preparationStatus === 'Prepared' || item.task.preparationStatus === 'Ready for Testing');
     const hasReturned = items.some(item => item.task.isReturned);
+    const hasActiveOps = items.some(item => item.isItemActiveInOps); // Check item level
+    const hasDoneOps = items.some(item => item.isItemDoneInOps); // Check if completed
     const areAllSelected = itemCount > 0 && numSelected === itemCount;
 
     const toggleAll = (checked: boolean) => {
@@ -322,7 +334,7 @@ const ExpandableCell: React.FC<{
             const next = { ...prev };
             items.forEach(item => {
                 const currentSet = new Set(next[item.sourceDocId] || []);
-                const isLockedForTesting = !isAssigningToPrepare && item.task.preparationStatus === 'Awaiting Preparation';
+                const isLockedForTesting = (!isAssigningToPrepare && item.task.preparationStatus === 'Awaiting Preparation') || item.isItemActiveInOps || item.isItemDoneInOps;
                 if (checked && !isLockedForTesting) currentSet.add(item.task._id!); 
                 else if (!checked) currentSet.delete(item.task._id!);
                 next[item.sourceDocId] = currentSet;
@@ -347,6 +359,8 @@ const ExpandableCell: React.FC<{
                         {hasReturned && <div className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></div>}
                         {hasInPrep && <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>}
                         {hasPrepared && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>}
+                        {hasActiveOps && !hasDoneOps && <div className="w-1.5 h-1.5 rounded-full bg-purple-500 shadow-sm animate-pulse"></div>}
+                        {hasDoneOps && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm"></div>}
                     </div>
                 </div>
             </div>
@@ -359,15 +373,15 @@ const ExpandableCell: React.FC<{
                     <div className="max-h-96 overflow-y-auto custom-scrollbar bg-white dark:bg-base-955">
                         <table className="w-full border-collapse">
                             <tbody className="divide-y divide-base-100 dark:divide-base-800">
-                                {items.map(({ task, originalIndex, sourceDocId }) => {
+                                {items.map(({ task, originalIndex, sourceDocId, isItemActiveInOps, isItemDoneInOps }) => {
                                     const isReady = task.preparationStatus === 'Prepared' || task.preparationStatus === 'Ready for Testing';
                                     const isInPrep = task.preparationStatus === 'Awaiting Preparation';
-                                    const isLockedForTesting = !isAssigningToPrepare && isInPrep;
+                                    const isLockedForTesting = (!isAssigningToPrepare && isInPrep) || isItemActiveInOps || isItemDoneInOps;
                                     const sampleLabel = String(getTaskValue(task, 'Sample Name'));
                                     const isReturned = task.isReturned;
                                     
                                     return (
-                                        <tr key={task._id} className={`bg-white dark:bg-base-900 hover:bg-indigo-50/40 ${isLockedForTesting ? 'opacity-50' : ''}`}>
+                                        <tr key={task._id} className={`bg-white dark:bg-base-900 hover:bg-indigo-50/40 ${isLockedForTesting ? 'opacity-60' : ''} ${isItemActiveInOps ? 'bg-purple-50/20' : ''} ${isItemDoneInOps ? 'bg-emerald-50/30' : ''}`}>
                                             <td className="p-4 w-12 text-center"><input type="checkbox" disabled={isLockedForTesting} className="h-5 w-5 rounded cursor-pointer border-2 border-base-300 dark:border-base-600 text-indigo-600" checked={selectedItems[sourceDocId]?.has(task._id!) || false} onChange={e => handleSelectItem(sourceDocId, task._id!, e.target.checked)}/></td>
                                             <td className="p-4">
                                                 <div className="flex justify-between items-start mb-1 gap-4">
@@ -377,6 +391,8 @@ const ExpandableCell: React.FC<{
                                                             {isReady && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[8px] font-black rounded uppercase tracking-widest border border-emerald-300">Ready</span>}
                                                             {isInPrep && <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-black rounded uppercase tracking-widest border border-amber-300">In Prep</span>}
                                                             {isReturned && <span className="px-2 py-0.5 bg-rose-600 text-white text-[8px] font-black rounded uppercase tracking-widest animate-pulse shadow-sm">Returned</span>}
+                                                            {isItemActiveInOps && !isItemDoneInOps && <span className="px-2 py-0.5 bg-purple-600 text-white text-[8px] font-black rounded uppercase tracking-widest shadow-sm">ON OPS</span>}
+                                                            {isItemDoneInOps && <span className="px-2 py-0.5 bg-emerald-600 text-white text-[8px] font-black rounded uppercase tracking-widest shadow-sm">COMPLETED</span>}
                                                         </div>
                                                         <p className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300">{String(getTaskValue(task, 'Variant'))}</p>
                                                         
@@ -429,7 +445,7 @@ const ExpandableCell: React.FC<{
                     </div>
                 </div>
             )}
-        </td>
+                </td>
     );
 };
 
@@ -452,12 +468,8 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     const [hideEmptyColumns, setHideEmptyColumns] = useState(true);
     const [isAssigning, setIsAssigning] = useState(false);
     const [noteEditor, setNoteEditor] = useState<{ docId: string, index: number, text: string } | null>(null);
-    
-    // NEW: Customer Remarks State
     const [activeRemarks, setActiveRemarks] = useState<{ id: string, list: {source: string, text: string}[] } | null>(null);
-    
-    // NEW: Batch Action States
-    const [batchDeleteStage, setBatchDeleteStage] = useState(0); // 0: idle, 1: confirming
+    const [batchDeleteStage, setBatchDeleteStage] = useState(0);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -493,6 +505,53 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         assignedGlobal.forEach(a => a.tasks.forEach(t => { if (t._id) ids.add(t._id); }));
         return { ids };
     }, [assignedGlobal]);
+
+    // Create a Set of signatures for all currently assigned tasks (Item Level)
+    // Updated to map signatures to status for "DONE" detection
+    const assignedItemSignatures = useMemo(() => {
+        const sigs = new Map<string, TaskStatus>();
+        assignedGlobal.forEach(doc => {
+            if(doc.tasks) {
+                doc.tasks.forEach(t => {
+                    const sig = getTaskSignature(doc.requestId, t);
+                    // Use status from assigned task, default to Pending if missing
+                    sigs.set(sig, t.status || TaskStatus.Pending);
+                });
+            }
+        });
+        return sigs;
+    }, [assignedGlobal]);
+
+    // Calculate count of completed items visible in the grid
+    const completedItemsCount = useMemo(() => {
+        let count = 0;
+        categorizedTasks.forEach(doc => {
+            doc.tasks.forEach(t => {
+                const sig = getTaskSignature(doc.id, t);
+                const status = assignedItemSignatures.get(sig);
+                if (status === TaskStatus.Done) {
+                    count++;
+                }
+            });
+        });
+        return count;
+    }, [categorizedTasks, assignedItemSignatures]);
+
+    // Request-Level duplicate check (Only if multiple documents for same RequestID exist in POOL)
+    const duplicateRequestIds = useMemo(() => {
+        const idCounts: Record<string, number> = {};
+        categorizedTasks.forEach(doc => {
+            if (doc.category !== TaskCategory.Manual && doc.id) {
+                const rid = doc.id.trim().toUpperCase();
+                idCounts[rid] = (idCounts[rid] || 0) + 1;
+            }
+        });
+        const duplicates = new Set<string>();
+        Object.entries(idCounts).forEach(([rid, count]) => {
+            if (count > 1) duplicates.add(rid);
+        });
+        return duplicates;
+    }, [categorizedTasks]);
 
     const inventoryAudit = useMemo(() => {
         let totalDBItems = 0;
@@ -534,6 +593,33 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         return counts;
     }, [categorizedTasks, assignedStateGlobal]);
 
+    const gridHeaders = useMemo(() => {
+        const groupsMap = new Map<string, string[]>();
+        testMappings.forEach(m => {
+            if (!m.headerGroup || !m.headerSub) return;
+            if (!groupsMap.has(m.headerGroup)) {
+                groupsMap.set(m.headerGroup, []);
+            }
+            const key = `${m.headerGroup}|${m.headerSub}`;
+            if (!groupsMap.get(m.headerGroup)!.includes(key)) {
+                groupsMap.get(m.headerGroup)!.push(key);
+            }
+        });
+        return Array.from(groupsMap.entries());
+    }, [testMappings]);
+
+    const manualTasksFlattened = useMemo(() => {
+        const flat: { docId: string; id: string; task: RawTask; index: number }[] = [];
+        categorizedTasks.forEach(doc => {
+            if (doc.category === TaskCategory.Manual) {
+                doc.tasks.forEach((task, index) => {
+                    flat.push({ docId: doc.docId!, id: doc.id, task, index });
+                });
+            }
+        });
+        return flat;
+    }, [categorizedTasks]);
+
     const selectedItemCount = useMemo(() => Object.values(selectedItems).reduce((acc: number, s: Set<string>) => acc + s.size, 0), [selectedItems]);
 
     const handleAddManualMission = async (rid: string, desc: string, qty: string) => {
@@ -562,6 +648,176 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         } catch (e) { setNotification({ message: "Failed to delete task.", isError: true }); } finally { setIsAssigning(false); setDeleteConfirm(null); }
     };
 
+    // New Function: Auto Clean Completed Items
+    const handleAutoCleanCompleted = async () => {
+        if (completedItemsCount === 0) return;
+        setIsAssigning(true);
+        try {
+            const batch = firestore.batch();
+            let deleteCount = 0;
+
+            categorizedTasks.forEach(doc => {
+                const originalTasks = doc.tasks;
+                const remainingTasks = originalTasks.filter(task => {
+                    const sig = getTaskSignature(doc.id, task);
+                    const status = assignedItemSignatures.get(sig);
+                    // Keep the task ONLY if it is NOT Done
+                    return status !== TaskStatus.Done;
+                });
+
+                if (remainingTasks.length !== originalTasks.length) {
+                    deleteCount += (originalTasks.length - remainingTasks.length);
+                    if (remainingTasks.length === 0) {
+                        batch.delete(firestore.collection('categorizedTasks').doc(doc.docId));
+                    } else {
+                        batch.update(firestore.collection('categorizedTasks').doc(doc.docId), { tasks: remainingTasks });
+                    }
+                }
+            });
+
+            if (deleteCount > 0) {
+                await batch.commit();
+                setNotification({ message: `Successfully cleaned ${deleteCount} completed items from the grid.` });
+                fetchData();
+            } else {
+                setNotification({ message: "No items to clean." });
+            }
+        } catch (e) {
+            setNotification({ message: "Failed to clean completed tasks.", isError: true });
+        } finally {
+            setIsAssigning(false);
+        }
+    };
+
+    // --- NEW FEATURE: Force Mark as Done ---
+    const handleBatchForceDone = async () => {
+        if (selectedItemCount === 0) return;
+        setIsAssigning(true);
+        try {
+            const batch = firestore.batch();
+            const assignments: Record<string, RawTask[]> = {};
+            const docsToUpdate = new Map<string, RawTask[]>();
+
+            // 1. Prepare items to be moved to AssignedTasks with 'Done' status
+            for (const docId in selectedItems) {
+                const ids = selectedItems[docId]; if (!ids || ids.size === 0) continue;
+                const original = categorizedTasks.find(t => t.docId === docId); if (!original) continue;
+                
+                const selectedTasks = original.tasks.filter(t => ids.has(t._id!));
+                
+                // Add to Assignments map
+                selectedTasks.forEach(t => { 
+                    const clean = { ...t }; 
+                    delete clean.status; 
+                    delete clean.preparationStatus;
+                    // Force Status to Done
+                    clean.status = TaskStatus.Done;
+                    
+                    if (original.category === 'manual') clean._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
+                    if (!assignments[original.id]) assignments[original.id] = []; 
+                    assignments[original.id].push(clean);
+                });
+
+                // Calculate remaining tasks for the Pool
+                const remainingTasks = original.tasks.filter(t => !ids.has(t._id!));
+                docsToUpdate.set(docId, remainingTasks);
+            }
+
+            // 2. Add to AssignedTasks Collection
+            for (const [rid, tasks] of Object.entries(assignments)) {
+                batch.set(firestore.collection('assignedTasks').doc(), { 
+                    requestId: rid, 
+                    tasks, 
+                    category: categorizedTasks.find(c => c.id === rid)?.category || 'normal', 
+                    testerId: 'legacy_data_fix', // Special ID for forced done items
+                    testerName: 'Legacy / Manual Done', 
+                    assignedDate: selectedDate, 
+                    shift: selectedShift, 
+                    status: TaskStatus.Done 
+                });
+            }
+
+            // 3. Remove from Pool (CategorizedTasks)
+            for (const [docId, remaining] of docsToUpdate.entries()) {
+                if (remaining.length === 0) {
+                    batch.delete(firestore.collection('categorizedTasks').doc(docId));
+                } else {
+                    batch.update(firestore.collection('categorizedTasks').doc(docId), { tasks: remaining });
+                }
+            }
+
+            await batch.commit();
+            setSelectedItems({});
+            setExpandedCell(null);
+            fetchData();
+            setNotification({ message: `Successfully marked ${selectedItemCount} items as Done.` });
+
+        } catch (e) {
+            setNotification({ message: "Failed to mark items as done.", isError: true });
+        } finally {
+            setIsAssigning(false);
+        }
+    };
+
+    // --- NEW FEATURE: MERGE DUPLICATES ---
+    const handleMergeDuplicates = async (requestId: string) => {
+        setIsAssigning(true);
+        try {
+            // 1. Get all docs for this ID
+            const targetDocs = categorizedTasks.filter(d => d.id === requestId && d.category !== TaskCategory.Manual);
+            
+            if (targetDocs.length < 2) {
+                 setNotification({ message: "No duplicates found to merge." });
+                 return;
+            }
+
+            // 2. Collect unique tasks
+            const uniqueTasksMap = new Map<string, RawTask>();
+            targetDocs.forEach(doc => {
+                doc.tasks.forEach(task => {
+                    // Use the existing signature helper
+                    const sig = getTaskSignature(requestId, task);
+                    
+                    // Priority logic: 
+                    // If we already have this task, prefer the one that has more info (e.g. notes)
+                    // For now, keep the first one found, ignore subsequent identicals.
+                    if (!uniqueTasksMap.has(sig)) {
+                        uniqueTasksMap.set(sig, task);
+                    }
+                });
+            });
+
+            const mergedTasks = Array.from(uniqueTasksMap.values());
+
+            // 3. Batch Operation
+            const batch = firestore.batch();
+            
+            // Delete old docs
+            targetDocs.forEach(doc => {
+                batch.delete(firestore.collection('categorizedTasks').doc(doc.docId));
+            });
+
+            // Create new single doc
+            const newDocRef = firestore.collection('categorizedTasks').doc();
+            batch.set(newDocRef, {
+                id: requestId,
+                category: targetDocs[0].category, // Inherit category from first found
+                tasks: mergedTasks,
+                createdAt: new Date().toISOString()
+            });
+
+            await batch.commit();
+            fetchData();
+            setNotification({ message: `Merged ${targetDocs.length} records into 1 clean record.` });
+
+        } catch (e) {
+            console.error(e);
+            setNotification({ message: "Merge failed.", isError: true });
+        } finally {
+            setIsAssigning(false);
+        }
+    };
+
     const handleBatchWipe = async () => {
         if (selectedItemCount === 0) return;
         setIsAssigning(true);
@@ -569,7 +825,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
             const batch = firestore.batch();
             const docsToUpdate = new Map<string, RawTask[]>();
             
-            // Collect all remaining tasks per document
             categorizedTasks.forEach(doc => {
                 const selectedIdsInDoc = selectedItems[doc.docId!] || new Set();
                 if (selectedIdsInDoc.size > 0) {
@@ -578,7 +833,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                 }
             });
 
-            // Perform batch operations
             for (const [docId, remaining] of docsToUpdate.entries()) {
                 if (remaining.length === 0) {
                     batch.delete(firestore.collection('categorizedTasks').doc(docId));
@@ -613,49 +867,28 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         } catch (e) { setNotification({ message: "Failed to update task.", isError: true }); } finally { setIsAssigning(false); setEditTask(null); }
     };
 
-    const gridHeaders = useMemo(() => {
-        const groupsContent: Record<string, string[]> = {};
-        const groupOrders: Record<string, number> = {};
-        testMappings.forEach(m => {
-            if (!m.headerGroup || !m.headerSub) return;
-            if (!groupsContent[m.headerGroup]) groupsContent[m.headerGroup] = [];
-            const key = `${m.headerGroup}|${m.headerSub}`;
-            if (!groupsContent[m.headerGroup].includes(key)) groupsContent[m.headerGroup].push(key);
-            groupOrders[m.headerGroup] = Math.min(groupOrders[m.headerGroup] ?? Infinity, m.order ?? Infinity);
-        });
-        return Object.keys(groupsContent).sort((a, b) => (groupOrders[a] ?? Infinity) - (groupOrders[b] ?? Infinity)).map(g => [g, groupsContent[g]] as [string, string[]]);
-    }, [testMappings]);
-
-    const manualTasksFlattened = useMemo(() => {
-        const search = filterRequestId.toLowerCase().trim();
-        const list: { docId: string, id: string, task: RawTask, index: number }[] = [];
-        categorizedTasks.forEach(doc => {
-            if (doc.category === TaskCategory.Manual) {
-                if (search && !doc.id.toLowerCase().includes(search) && !String(doc.tasks[0]?.Description || '').toLowerCase().includes(search)) return;
-                doc.tasks.forEach((task, index) => {
-                    list.push({ docId: doc.docId!, id: doc.id, task, index });
-                });
-            }
-        });
-        return list;
-    }, [categorizedTasks, filterRequestId]);
-
     const gridData = useMemo(() => {
         const rows: any[] = [];
         const activeCat = activeCategory.toLowerCase();
         const search = filterRequestId.toLowerCase().trim();
 
-        Object.entries(categorizedTasks.reduce((acc, doc) => { 
+        // Group by normalized ID
+        const groupedByRid = categorizedTasks.reduce((acc, doc) => { 
             const k = doc.id.toLowerCase().replace(/^rs1-/, ''); 
             if (!acc[k]) acc[k] = { rid: doc.id, docs: [] }; 
             acc[k].docs.push(doc); return acc; 
-        }, {} as any)).forEach(([_, group]: any) => {
+        }, {} as any);
+
+        Object.entries(groupedByRid).forEach(([_, group]: any) => {
             const filteredDocs = activeCat === 'all' 
                 ? group.docs.filter((d: any) => d.category !== TaskCategory.Manual) 
                 : group.docs.filter((d: any) => d.category.toLowerCase() === activeCat && d.category !== TaskCategory.Manual);
             
             if (filteredDocs.length === 0) return;
             if (search && !group.rid.toLowerCase().includes(search)) return;
+
+            // Check if this row is considered a "duplicate source" (multiple docs for same ID in Pool)
+            const isDuplicateRow = duplicateRequestIds.has(group.rid.trim().toUpperCase());
 
             const row = { 
                 requestId: group.rid, 
@@ -667,6 +900,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                 isPoCat: false, 
                 isUrgent: false, 
                 isManual: false,
+                isDuplicateRow: isDuplicateRow, 
                 customerRemarks: [] as {source: string, text: string}[]
             };
             
@@ -681,6 +915,13 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     if (task._id && seenTaskIdsInRow.has(task._id)) return;
                     if (task._id) seenTaskIdsInRow.add(task._id);
 
+                    // Check if *this specific item* is already in Ops (duplicate check)
+                    // We check signatures against currently assigned tasks
+                    const itemSignature = getTaskSignature(group.rid, task);
+                    const activeStatus = assignedItemSignatures.get(itemSignature);
+                    const isItemActiveInOps = activeStatus !== undefined;
+                    const isItemDoneInOps = activeStatus === TaskStatus.Done;
+
                     const isFullyAssigned = task._id && assignedStateGlobal.ids.has(task._id);
                     if (isFullyAssigned) return;
 
@@ -689,7 +930,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     row.itemCount++;
                     if (task.preparationStatus !== 'Awaiting Preparation') row.availableItems++;
                     
-                    // Capture Customer Remarks from file
                     const fields = [
                         { key: 'Remark (Requester)', label: 'Request Remark' },
                         { key: 'Note to planer', label: 'Planer Note (Cust)' },
@@ -705,7 +945,8 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                         }
                     });
 
-                    const item = { task, originalIndex: index, sourceDocId: doc.docId! };
+                    // Pass isItemActiveInOps and isItemDoneInOps to the cell renderer
+                    const item = { task, originalIndex: index, sourceDocId: doc.docId!, requestId: group.rid, isItemActiveInOps, isItemDoneInOps };
                     const colKey = getTaskGridColumnKey(task, testMappings);
                     if (colKey) { 
                         if (!row.cells[colKey]) row.cells[colKey] = []; 
@@ -718,7 +959,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
             if (row.itemCount > 0) rows.push(row);
         });
         return rows.sort((a, b) => a.minDueDate - b.minDueDate);
-    }, [categorizedTasks, activeCategory, filterRequestId, testMappings, assignedStateGlobal]);
+    }, [categorizedTasks, activeCategory, filterRequestId, testMappings, assignedStateGlobal, duplicateRequestIds, assignedItemSignatures]);
 
     const activeColumnKeys = useMemo(() => {
         const keys = gridHeaders.flatMap(([, sk]) => sk);
@@ -768,6 +1009,47 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         } catch (e) { setNotification({ message: "Error in assignment", isError: true }); } finally { setIsAssigning(false); setIsModalOpen(false); }
     };
 
+    const handleExportGrid = () => {
+        if (!gridData || gridData.length === 0) return;
+        // ... (Export logic unchanged) ...
+        const row1 = ["Due Date", "Request ID"];
+        const row2 = ["", ""];
+        activeColumnKeys.forEach(key => { const [group, sub] = key.split('|'); row1.push(group); row2.push(sub); });
+        row1.push("Unmapped"); row2.push("Items");
+        const dataRows = gridData.map(row => {
+            const dateStr = new Date(row.minDueDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
+            const reqId = row.requestId.replace(/^RS1-/, '');
+            const rowArray = [dateStr, reqId];
+            activeColumnKeys.forEach(key => {
+                const items = row.cells[key] || [];
+                if (items.length > 0) {
+                    const cellContent = items.map(item => {
+                        const sample = String(getTaskValue(item.task, 'Sample Name')).trim();
+                        const qty = String(getTaskValue(item.task, 'Quantity')).trim();
+                        return `${sample} (x${qty})`;
+                    }).join('\r\n');
+                    rowArray.push(cellContent);
+                } else { rowArray.push(""); }
+            });
+            if (row.unmappedItems && row.unmappedItems.length > 0) {
+                const unmappedContent = row.unmappedItems.map(item => {
+                    const sample = String(getTaskValue(item.task, 'Sample Name')).trim();
+                    const qty = String(getTaskValue(item.task, 'Quantity')).trim();
+                    const variant = String(getTaskValue(item.task, 'Variant')).trim();
+                    return `[${variant}] ${sample} (x${qty})`;
+                }).join('\r\n');
+                rowArray.push(unmappedContent);
+            } else { rowArray.push(""); }
+            return rowArray;
+        });
+        const wsData = [row1, row2, ...dataRows];
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        const wscols = [{wch: 10}, {wch: 20}];
+        activeColumnKeys.forEach(() => wscols.push({wch: 30})); wscols.push({wch: 40});
+        ws['!cols'] = wscols;
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Task Grid"); XLSX.writeFile(wb, `TaskGrid_Export_${selectedDate}_${Date.now()}.xlsx`);
+    };
+
     return (
         <div className="flex flex-col h-[calc(100vh-120px)] space-y-2 animate-slide-in-up relative overflow-hidden bg-white/50 dark:bg-base-955">
             {notification && <Toast message={notification.message} isError={notification.isError} onDismiss={() => setNotification(null)} />}
@@ -788,15 +1070,21 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                         <div className="flex flex-col"><span className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.2em] mb-1">Deployed Assets</span><span className="text-xl font-black text-slate-900 dark:text-white leading-none tracking-tighter">{inventoryAudit.assignedToStaff}</span></div>
                     </div>
                     <div className="flex gap-2 pr-2">
+                        {completedItemsCount > 0 && (
+                            <button onClick={handleAutoCleanCompleted} className="px-5 py-2.5 bg-emerald-600 text-white text-[10px] font-black rounded-xl hover:bg-emerald-700 transition-all uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 border-b-4 border-emerald-800 animate-pulse-subtle">
+                                <TrashIcon className="h-4 w-4" /> Clean Completed ({completedItemsCount})
+                            </button>
+                        )}
                         {activeCategory === 'manual' && (
                             <button onClick={() => setIsAddManualModalOpen(true)} className="px-5 py-2.5 bg-indigo-600 text-white text-[10px] font-black rounded-xl hover:bg-indigo-700 transition-all uppercase tracking-widest flex items-center gap-2 shadow-sm active:scale-95"><PlusIcon className="h-4 w-4" /> New Template</button>
                         )}
+                        <button onClick={handleExportGrid} className="px-5 py-2.5 bg-white dark:bg-base-800 border border-slate-200 dark:border-white/5 rounded-xl text-base-500 hover:text-indigo-600 shadow-sm transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest active:scale-95" title="Export Current Grid"><DownloadIcon className="h-4 w-4" /> Export Grid</button>
                         <button onClick={() => setHideEmptyColumns(!hideEmptyColumns)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${hideEmptyColumns ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-white dark:bg-base-800 text-slate-400 border border-slate-200 dark:border-white/5 shadow-sm'}`}>{hideEmptyColumns ? 'Standard View' : 'Compact View'}</button>
                         <button onClick={fetchData} className="p-2.5 bg-white dark:bg-base-800 border border-slate-200 dark:border-white/5 rounded-xl text-indigo-500 hover:text-indigo-700 transition-all shadow-sm active:scale-90"><RefreshIcon className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} /></button>
                     </div>
                 </div>
 
-                {/* CATEGORY & HUB - Clean Glass */}
+                {/* CATEGORY & HUB */}
                 <div className="p-2 bg-white/70 dark:bg-base-900/40 backdrop-blur-xl rounded-2xl border border-white dark:border-white/10 shadow-sm flex items-center gap-3">
                     <div className="flex items-center gap-1 p-1 bg-indigo-50/50 dark:bg-black/20 rounded-xl flex-grow overflow-x-auto no-scrollbar">
                         {['all', 'pocat', 'urgent', 'normal', 'manual'].map(c => {
@@ -830,12 +1118,20 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                 <button onClick={() => { setIsAssigningToPrepare(true); setIsModalOpen(true); }} className="px-4 py-2.5 bg-amber-500 text-white text-[9px] font-black rounded-lg hover:bg-amber-600 uppercase shadow-sm transition-all border-b-2 border-amber-700 active:scale-95">Assign Prep</button>
                                 <button onClick={() => { setIsAssigningToPrepare(false); setIsModalOpen(true); }} className="px-4 py-2.5 bg-indigo-600 text-white text-[9px] font-black rounded-lg hover:bg-indigo-700 uppercase shadow-sm transition-all border-b-2 border-indigo-800 active:scale-95">Assign Test</button>
                                 
-                                {/* 2-CLICK DELETE BUTTON */}
+                                {/* NEW MARK DONE BUTTON FOR GHOST TASKS */}
+                                <button 
+                                    onClick={handleBatchForceDone}
+                                    className="px-4 py-2.5 bg-emerald-600 text-white text-[9px] font-black rounded-lg hover:bg-emerald-700 uppercase shadow-sm transition-all border-b-2 border-emerald-800 active:scale-95 flex items-center gap-1"
+                                    title="Force Mark Ghost Tasks as Done (Prevents re-import duplicates)"
+                                >
+                                    <CheckCircleIcon className="h-3.5 w-3.5" /> Mark Done
+                                </button>
+
                                 <button 
                                     onClick={() => {
                                         if (batchDeleteStage === 0) {
                                             setBatchDeleteStage(1);
-                                            setTimeout(() => setBatchDeleteStage(0), 4000); // Auto-reset after 4s
+                                            setTimeout(() => setBatchDeleteStage(0), 4000); 
                                         } else {
                                             handleBatchWipe();
                                         }
@@ -882,6 +1178,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                         <div className="p-8">
                             <div className="overflow-hidden rounded-2xl border border-indigo-100 dark:border-indigo-900/30 shadow-md">
                                 <table className="w-full text-left border-collapse">
+                                    {/* Manual Task Table Implementation... (same as before) */}
                                     <thead className="bg-indigo-600 text-white">
                                         <tr>
                                             <th className="p-4 w-16 text-center border-r border-white/10"><input type="checkbox" className="h-5 w-5 rounded" onChange={e => {
@@ -934,13 +1231,13 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                 </thead>
                                 <tbody className="divide-y divide-base-100 dark:divide-base-800">
                                     {gridData.map(row => (
-                                        <tr key={row.requestId} className="hover:bg-indigo-50/20 group transition-colors">
+                                        <tr key={row.requestId} className={`group transition-colors ${row.isDuplicateRow ? 'bg-red-50 hover:bg-red-100 border-l-4 border-red-500' : 'hover:bg-indigo-50/20'}`}>
                                             <td className="p-0.5 border-r border-base-200 bg-white dark:bg-base-955 sticky left-0 z-40 text-center font-black text-slate-800 text-[9px] leading-tight">{`${(new Date(row.minDueDate)).getDate()}/${(new Date(row.minDueDate)).getMonth()+1}`}</td>
-                                            <td className="px-2 py-2 border-r-2 border-indigo-400 bg-white dark:bg-base-900 sticky left-[42px] z-40 shadow-sm">
+                                            <td className={`px-2 py-2 border-r-2 border-indigo-400 bg-white dark:bg-base-900 sticky left-[42px] z-40 shadow-sm`}>
                                                 <div className="flex flex-col gap-0.5">
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-1 min-w-0">
-                                                            <span className="text-[13px] font-black uppercase text-base-955 dark:text-base-50 leading-none tracking-tighter truncate">{row.requestId.replace(/^RS1-/, '')}</span>
+                                                            <span className={`text-[13px] font-black uppercase leading-none tracking-tighter truncate ${row.isDuplicateRow ? 'text-red-600' : 'text-base-955 dark:text-base-50'}`}>{row.requestId.replace(/^RS1-/, '')}</span>
                                                             {row.customerRemarks.length > 0 && (
                                                                 <button 
                                                                     onClick={() => setActiveRemarks({ id: row.requestId, list: row.customerRemarks })}
@@ -953,7 +1250,18 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                                         </div>
                                                         <span className="text-[8px] font-black text-slate-400 shrink-0">#{row.availableItems}/{row.itemCount}</span>
                                                     </div>
-                                                    <div className="flex gap-1">{row.isPoCat && <span className="px-1 py-0.5 bg-orange-600 text-white text-[6px] rounded-sm font-black">PO</span>}{row.isUrgent && <span className="px-1 py-0.5 bg-red-600 text-white text-[6px] rounded-sm font-black">URG</span>}</div>
+                                                    <div className="flex gap-1 flex-wrap">
+                                                        {row.isDuplicateRow && (
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <span className="px-1 py-0.5 bg-red-600 text-white text-[6px] rounded-sm font-black animate-pulse">DUPLICATE SOURCE</span>
+                                                                <button onClick={(e) => { e.stopPropagation(); handleMergeDuplicates(row.requestId); }} className="px-2 py-0.5 bg-white border border-red-200 text-red-600 text-[8px] font-bold rounded hover:bg-red-50 shadow-sm flex items-center gap-1">
+                                                                    <SparklesIcon className="h-3 w-3"/> Fix / Merge
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                        {row.isPoCat && <span className="px-1 py-0.5 bg-orange-600 text-white text-[6px] rounded-sm font-black">PO</span>}
+                                                        {row.isUrgent && <span className="px-1 py-0.5 bg-red-600 text-white text-[6px] rounded-sm font-black">URG</span>}
+                                                    </div>
                                                 </div>
                                             </td>
                                             {activeColumnKeys.map(header => <ExpandableCell key={header} headerKey={header} items={row.cells[header] || []} isGroupEnd={lastKeysOfGroups.has(header)} expandedCell={expandedCell} setExpandedCell={setExpandedCell} selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems} isAssigningToPrepare={isAssigningToPrepare} setNoteEditor={setNoteEditor} onInitiateDelete={(d, i, l) => setDeleteConfirm({ docId: d, index: i, label: l })} />)}

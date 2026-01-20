@@ -23,6 +23,44 @@ const safeGet = async (query: any) => {
     }
 };
 
+// --- Duplicate Prevention Service ---
+export const getAllExistingRequestIds = async (): Promise<Set<string>> => {
+    if (!firestore) return new Set();
+    
+    const existingIds = new Set<string>();
+
+    try {
+        // 1. Check Pool (Categorized Tasks)
+        const poolSnapshot = await getCollection('categorizedTasks').select('id').get();
+        poolSnapshot.forEach((doc: any) => {
+            const data = doc.data();
+            if (data.id) existingIds.add(String(data.id).trim().toUpperCase());
+        });
+
+        // 2. Check Assigned Tasks (Testing)
+        const assignedSnapshot = await getCollection('assignedTasks').select('requestId').get();
+        assignedSnapshot.forEach((doc: any) => {
+            const data = doc.data();
+            if (data.requestId) existingIds.add(String(data.requestId).trim().toUpperCase());
+        });
+
+        // 3. Check Assigned Tasks (Preparation)
+        const prepSnapshot = await getCollection('assignedPrepareTasks').select('requestId').get();
+        prepSnapshot.forEach((doc: any) => {
+            const data = doc.data();
+            if (data.requestId) existingIds.add(String(data.requestId).trim().toUpperCase());
+        });
+
+        // 4. (Optional) Check Archived/Completed collections if you move them there later
+        // ...
+
+    } catch (error) {
+        console.error("Error fetching existing IDs for duplicate check:", error);
+    }
+
+    return existingIds;
+};
+
 // --- Equipment Management ---
 export const getEquipments = async (): Promise<Equipment[]> => {
     if (!firestore) return [];

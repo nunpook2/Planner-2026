@@ -18,7 +18,8 @@ import {
     RefreshIcon, BeakerIcon, CalendarIcon,
     XCircleIcon, UserGroupIcon, DownloadIcon,
     SparklesIcon, PlusIcon, TrashIcon, ArrowUpIcon,
-    ClipboardListIcon, PencilIcon, ChevronDownIcon
+    ClipboardListIcon, PencilIcon, ChevronDownIcon,
+    DatabaseIcon, SearchIcon
 } from './common/Icons';
 
 declare const XLSX: any;
@@ -44,10 +45,18 @@ interface GroupedByRequest {
 interface AnalystPerformance {
     name: string;
     backlogCount: number;
-    avgDays: number;
-    maxDays: number;
+    activeMaxDays: number;
+    historicalAvgDays: number;
+    historicalCount: number;
     severity: 'low' | 'medium' | 'high';
 }
+
+const getTaskValue = (task: RawTask, header: string): any => {
+    const keys = Object.keys(task);
+    const target = header.toLowerCase().trim();
+    const matchedKey = keys.find(k => k.toLowerCase().trim() === target);
+    return matchedKey ? task[matchedKey] : '';
+};
 
 const PremiumScatterPlot: React.FC<{ 
     data: DistillationLog[]; 
@@ -258,8 +267,10 @@ const DistillationFormModal: React.FC<{
 
 const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> = ({ onResolve, testers }) => {
     const [activeSubTab, setActiveSubTab] = useState<'issues' | 'distillation'>('issues');
+    const [issuesMode, setIssuesMode] = useState<'active' | 'history'>('active');
     const [allAssigned, setAllAssigned] = useState<AssignedTask[]>([]);
     const [distLogs, setDistLogs] = useState<DistillationLog[]>([]);
+    const [historyLogs, setHistoryLogs] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchAnalyst, setSearchAnalyst] = useState('');
     const [isDistModalOpen, setIsDistModalOpen] = useState(false);
@@ -276,9 +287,14 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [assigned, dist] = await Promise.all([ getAssignedTasks(), getDistillationLogs() ]);
+            const [assigned, dist, history] = await Promise.all([ 
+                getAssignedTasks(), 
+                getDistillationLogs(),
+                getResolutionHistory()
+            ]);
             setAllAssigned(assigned || []);
             setDistLogs(dist || []);
+            setHistoryLogs(history || []);
             if (!selectedChemical && dist.length > 0) setSelectedChemical(dist[0].chemicalName);
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
     }, [selectedChemical]);
@@ -300,23 +316,49 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
     };
 
     const performanceData = useMemo(() => {
-        const stats: Record<string, { count: number, totalDays: number, max: number }> = {};
+        const stats: Record<string, { currentCount: number, activeMaxDays: number }> = {};
+        const historyStats: Record<string, { totalDays: number, count: number }> = {};
+
+        // 1. Current Active Backlog
         allAssigned.forEach(doc => {
             const notOkTasks = (doc.tasks || []).filter(t => t.status === TaskStatus.NotOK);
             if (notOkTasks.length > 0) {
                 const days = getDaysDiff(doc.assignedDate);
-                if (!stats[doc.testerName]) stats[doc.testerName] = { count: 0, totalDays: 0, max: 0 };
-                stats[doc.testerName].count += notOkTasks.length;
-                stats[doc.testerName].totalDays += (days * notOkTasks.length);
-                if (days > stats[doc.testerName].max) stats[doc.testerName].max = days;
+                if (!stats[doc.testerName]) stats[doc.testerName] = { currentCount: 0, activeMaxDays: 0 };
+                stats[doc.testerName].currentCount += notOkTasks.length;
+                if (days > stats[doc.testerName].activeMaxDays) stats[doc.testerName].activeMaxDays = days;
             }
         });
-        return Object.entries(stats).map(([name, data]): AnalystPerformance => {
-            const avg = Math.round(data.totalDays / data.count);
-            let severity: 'low' | 'medium' | 'high' = data.max >= 5 ? 'high' : data.max >= 3 ? 'medium' : 'low';
-            return { name, backlogCount: data.count, avgDays: avg, maxDays: data.max, severity };
-        }).sort((a, b) => b.backlogCount - a.backlogCount);
-    }, [allAssigned]);
+
+        // 2. Historical Resolution Stats
+        historyLogs.forEach(h => {
+            if (!historyStats[h.testerName]) historyStats[h.testerName] = { totalDays: 0, count: 0 };
+            historyStats[h.testerName].totalDays += (Number(h.daysToResolve) || 0);
+            historyStats[h.testerName].count++;
+        });
+
+        // 3. Merge
+        const mergedNames = new Set([...Object.keys(stats), ...Object.keys(historyStats)]);
+        
+        return Array.from(mergedNames).map(name => {
+            const current = stats[name] || { currentCount: 0, activeMaxDays: 0 };
+            const hist = historyStats[name] || { totalDays: 0, count: 0 };
+            const histAvg = hist.count > 0 ? Math.round(hist.totalDays / hist.count) : 0;
+            
+            let severity: 'low' | 'medium' | 'high' = 'low';
+            if (current.activeMaxDays >= 4) severity = 'high'; // UPDATED: 4 days is now high severity (Red)
+            else if (current.activeMaxDays >= 2) severity = 'medium'; // UPDATED: 2 days is now medium
+
+            return {
+                name,
+                backlogCount: current.currentCount,
+                activeMaxDays: current.activeMaxDays,
+                historicalAvgDays: histAvg,
+                historicalCount: hist.count,
+                severity
+            } as AnalystPerformance;
+        }).sort((a, b) => b.backlogCount - a.backlogCount); // Sort by active issues first
+    }, [allAssigned, historyLogs]);
 
     const groupedIssuesData: GroupedByRequest[] = useMemo(() => {
         const groups: Record<string, GroupedByRequest> = {};
@@ -326,10 +368,14 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
             (doc.tasks || []).forEach((t, idx) => {
                 if (t.status === TaskStatus.NotOK && analystMatch) {
                     if (!groups[doc.requestId]) groups[doc.requestId] = { requestId: doc.requestId, earliestDate: doc.assignedDate, category: doc.category, oldestDays: 0, tasksByDescription: {}, allTasks: [] };
-                    const desc = String(t.Description || 'General Task');
-                    if (!groups[doc.requestId].tasksByDescription[desc]) groups[doc.requestId].tasksByDescription[desc] = [];
+                    const desc = String(getTaskValue(t, 'Description') || 'General Task');
+                    const variant = String(getTaskValue(t, 'Variant') || '');
+                    // Create unique key for grouping by description and variant
+                    const uniqueKey = `${desc}__${variant}`;
+                    
+                    if (!groups[doc.requestId].tasksByDescription[uniqueKey]) groups[doc.requestId].tasksByDescription[uniqueKey] = [];
                     const item: FlattenedNotOkTask = { docId: doc.id, originalDoc: doc, task: t, taskIndex: idx };
-                    groups[doc.requestId].tasksByDescription[desc].push(item);
+                    groups[doc.requestId].tasksByDescription[uniqueKey].push(item);
                     groups[doc.requestId].allTasks.push(item);
                     const days = getDaysDiff(doc.assignedDate);
                     if (days > groups[doc.requestId].oldestDays) groups[doc.requestId].oldestDays = days;
@@ -387,23 +433,36 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
     const handleBatchResolve = async (targets: FlattenedNotOkTask[]) => {
         try {
             const historyEntries = targets.map(t => ({
-                testerName: t.originalDoc.testerName, requestId: t.originalDoc.requestId, sampleName: String(t.task['Sample Name'] || 'N/A'),
-                description: String(t.task['Description'] || 'N/A'), assignedDate: t.originalDoc.assignedDate, resolvedDate: new Date().toISOString().split('T')[0],
+                testerName: t.originalDoc.testerName, requestId: t.originalDoc.requestId, sampleName: String(getTaskValue(t.task, 'Sample Name') || 'N/A'),
+                description: String(getTaskValue(t.task, 'Description') || 'N/A'), assignedDate: t.originalDoc.assignedDate, resolvedDate: new Date().toISOString().split('T')[0],
                 daysToResolve: getDaysDiff(t.originalDoc.assignedDate), failureReason: t.task.notOkReason || 'N/A', category: t.originalDoc.category
             }));
             await logResolutionEntries(historyEntries);
-            const byDocId: Record<string, { originalDoc: AssignedTask, indicesToRemove: number[] }> = {};
+            
+            // KEY FIX: Do NOT delete the task. Instead, update its status to 'Done' and add a note.
+            const byDocId: Record<string, { originalDoc: AssignedTask, indicesToResolve: number[] }> = {};
             targets.forEach(t => {
-                if (!byDocId[t.docId]) byDocId[t.docId] = { originalDoc: t.originalDoc, indicesToRemove: [] };
-                byDocId[t.docId].indicesToRemove.push(t.taskIndex);
+                if (!byDocId[t.docId]) byDocId[t.docId] = { originalDoc: t.originalDoc, indicesToResolve: [] };
+                byDocId[t.docId].indicesToResolve.push(t.taskIndex);
             });
+
             for (const docId in byDocId) {
-                const { originalDoc, indicesToRemove } = byDocId[docId];
-                const updatedTasks = originalDoc.tasks.filter((_, idx) => !indicesToRemove.includes(idx));
-                if (updatedTasks.length > 0) await updateAssignedTask(originalDoc.id, { tasks: updatedTasks });
-                else await deleteAssignedTask(originalDoc.id);
+                const { originalDoc, indicesToResolve } = byDocId[docId];
+                const updatedTasks = originalDoc.tasks.map((task, idx) => {
+                    if (indicesToResolve.includes(idx)) {
+                        return {
+                            ...task,
+                            status: TaskStatus.Done, // Changed from Deleting to Done
+                            plannerNote: task.plannerNote ? `${task.plannerNote} | [RESOLVED BY PLANNER]` : `[RESOLVED BY PLANNER]`,
+                            // We keep the notOkReason for historical record in the task itself, but status is Done
+                        };
+                    }
+                    return task;
+                });
+                
+                await updateAssignedTask(originalDoc.id, { tasks: updatedTasks });
             }
-            setNotification({ message: "Task resolved." }); fetchData(); onResolve();
+            setNotification({ message: "Task marked as Resolved (Done)." }); fetchData(); onResolve();
         } catch (e) { setNotification({ message: "Failed.", isError: true }); }
         finally { setConfirmModal({ isOpen: false, targetItems: null, title: '', description: '' }); }
     };
@@ -442,6 +501,14 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
         }
     };
 
+    const handleExportHistory = () => {
+        if (historyLogs.length === 0) return;
+        const ws = XLSX.utils.json_to_sheet(historyLogs);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Resolution History");
+        XLSX.writeFile(wb, `Quality_Issue_History_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
     const formatDate = (dateStr: string) => {
         if (!dateStr) return 'N/A';
         return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -457,6 +524,9 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
         }
         return '';
     };
+
+    // Calculate Total Issues for Badge
+    const totalIssuesCount = groupedIssuesData.reduce((acc, g) => acc + g.allTasks.length, 0);
 
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] animate-slide-in-up relative overflow-hidden bg-white font-sans">
@@ -483,6 +553,7 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
                         <div>
                             <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter italic">Resolve Task?</h3>
                             <p className="text-slate-500 mt-4 text-[15px] font-bold">ยืนยันการเคลียร์งาน <span className="text-emerald-600">"{confirmModal.description}"</span></p>
+                            <p className="text-slate-400 mt-2 text-[10px] font-medium uppercase tracking-widest">Mark as DONE and Keep in History</p>
                         </div>
                         <div className="flex flex-col gap-2 pt-2">
                             <button onClick={() => handleBatchResolve(confirmModal.targetItems!)} className="w-full py-4 bg-emerald-600 text-white font-black rounded-xl shadow-lg uppercase text-[11px] tracking-widest active:scale-95">Confirm</button>
@@ -546,97 +617,190 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
 
             <div className="flex-grow overflow-hidden flex flex-col p-6 bg-slate-50/10">
                 {activeSubTab === 'issues' ? (
-                    <>
-                        <div className="grid grid-cols-12 gap-6 h-[280px] shrink-0 mb-6">
-                            <div className="col-span-3 bg-white rounded-[3rem] p-8 border border-slate-200 shadow-xl flex flex-col justify-between">
-                                <div className="space-y-4">
-                                    <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 ml-1">Personnel Filter</h3>
-                                    <div className="relative group">
-                                        <input type="text" placeholder="Personnel..." value={searchAnalyst} onChange={e => setSearchAnalyst(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none font-black text-sm transition-all focus:border-indigo-500 shadow-inner" />
-                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500"><UserGroupIcon className="h-5 w-5" /></div>
-                                    </div>
+                    <div className="flex h-full gap-6">
+                        {/* LEFT SIDEBAR - ANALYST PERFORMANCE */}
+                        <div className="w-[320px] shrink-0 bg-white rounded-[3rem] border border-slate-200 shadow-xl flex flex-col overflow-hidden">
+                            {/* Header */}
+                            <div className="p-6 pb-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Analyst Tracking</h3>
+                                    <span className="px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-[9px] font-black uppercase tracking-wider">{totalIssuesCount} Issues</span>
                                 </div>
-                                <div className="p-8 bg-indigo-50 rounded-[2rem] text-center border border-indigo-100 shadow-inner">
-                                    <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest block mb-1">Issue Pool</span>
-                                    <span className="text-6xl font-black text-indigo-600 tracking-tighter leading-none">{groupedIssuesData.reduce((acc, g) => acc + g.allTasks.length, 0)}</span>
+                                <div className="relative group">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Filter Analyst..." 
+                                        value={searchAnalyst} 
+                                        onChange={e => setSearchAnalyst(e.target.value)} 
+                                        className="w-full pl-9 pr-3 py-2.5 bg-white border-2 border-slate-100 rounded-2xl outline-none font-bold text-xs transition-all focus:border-indigo-500 shadow-sm" 
+                                    />
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><SearchIcon className="h-4 w-4" /></div>
                                 </div>
                             </div>
-                            <div className="col-span-9 bg-white rounded-[3rem] p-8 border border-slate-200 shadow-xl overflow-hidden flex flex-col">
-                                <div className="flex justify-between items-center mb-6"><h3 className="text-[11px] font-black uppercase tracking-[0.4em] text-slate-400">Analyst Backlog Tracking</h3><button onClick={fetchData} className="p-2 text-slate-300 hover:text-indigo-600"><RefreshIcon className={`h-6 w-6 ${isLoading ? 'animate-spin' : ''}`} /></button></div>
-                                <div className="flex-grow flex overflow-x-auto no-scrollbar gap-5 py-2">
-                                    {performanceData.map(p => {
-                                        const isFiltering = searchAnalyst && p.name.toLowerCase().includes(searchAnalyst.toLowerCase());
-                                        const severityCol = p.severity === 'high' ? 'bg-rose-600' : p.severity === 'medium' ? 'bg-amber-500' : 'bg-emerald-600';
-                                        return (
-                                            <div key={p.name} onClick={() => setSearchAnalyst(isFiltering ? '' : p.name)} className={`min-w-[220px] shrink-0 flex flex-col justify-between p-6 rounded-[2.5rem] border-2 transition-all duration-300 cursor-pointer ${isFiltering ? 'bg-indigo-50 border-indigo-500 scale-[1.03] shadow-2xl' : 'bg-white border-slate-50 hover:border-indigo-100 shadow-md'}`}>
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-[13px] shrink-0 ${isFiltering ? 'bg-indigo-600 text-white' : 'bg-base-900 text-white'}`}>{p.name.charAt(0)}</div>
-                                                    <span className="text-[13px] font-black uppercase whitespace-normal leading-tight">{p.name}</span>
+                            
+                            {/* Vertical List - High Contrast Cards */}
+                            <div className="flex-grow overflow-y-auto custom-scrollbar p-4 space-y-5 bg-slate-50/30">
+                                {performanceData.map(p => {
+                                    const isSelected = searchAnalyst === p.name;
+                                    const severityColor = p.severity === 'high' ? 'text-rose-600' : p.severity === 'medium' ? 'text-amber-500' : 'text-emerald-600';
+                                    const severityBg = p.severity === 'high' ? 'bg-rose-100' : p.severity === 'medium' ? 'bg-amber-100' : 'bg-emerald-100';
+                                    const ageColor = p.activeMaxDays >= 4 ? 'bg-rose-600' : p.activeMaxDays >= 2 ? 'bg-amber-500' : 'bg-emerald-500';
+
+                                    return (
+                                        <div 
+                                            key={p.name} 
+                                            onClick={() => setSearchAnalyst(isSelected ? '' : p.name)} 
+                                            className={`p-5 rounded-[2rem] border-[3px] transition-all cursor-pointer relative overflow-hidden group shadow-lg ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white scale-[1.02]' : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-xl'}`}
+                                        >
+                                            <div className="flex justify-between items-start mb-4 relative z-10">
+                                                <div>
+                                                    <span className={`text-[16px] font-black uppercase block leading-none tracking-tight ${isSelected ? 'text-white' : 'text-slate-800'}`}>{p.name}</span>
+                                                    <span className={`text-[10px] font-bold uppercase tracking-widest mt-1 block ${isSelected ? 'text-indigo-200' : 'text-slate-500'}`}>Analyst</span>
                                                 </div>
-                                                <div className="my-4"><div className="flex items-baseline gap-2"><span className={`text-4xl font-black tracking-tighter ${p.backlogCount >= 10 ? 'text-rose-600' : 'text-base-900'}`}>{p.backlogCount}</span><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">UNITS</span></div></div>
-                                                <div className="space-y-3">
-                                                    <div className="flex items-center gap-3">
-                                                        <span className={`text-[14px] font-black ${p.severity === 'high' ? 'text-rose-600' : p.severity === 'medium' ? 'text-amber-500' : 'text-emerald-600'}`}>{p.maxDays}D</span>
-                                                        <div className="flex-grow h-2 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full ${severityCol} transition-all duration-1000`} style={{ width: `${Math.min(p.maxDays * 20, 100)}%` }}></div></div>
+                                                {p.activeMaxDays > 0 && (
+                                                    <div className={`px-3 py-1.5 rounded-xl font-black uppercase text-white shadow-md ${ageColor} flex flex-col items-center leading-none`}>
+                                                        <span className="text-[18px]">{p.activeMaxDays}D</span>
+                                                        <span className="text-[7px] opacity-80">MAX AGE</span>
                                                     </div>
+                                                )}
+                                            </div>
+                                            
+                                            <div className="flex items-end gap-3 relative z-10 mb-4">
+                                                <div className="flex items-baseline gap-2">
+                                                    <span className={`text-6xl font-black leading-none tracking-tighter ${isSelected ? 'text-white' : severityColor}`}>{p.backlogCount}</span>
+                                                    <span className={`text-[11px] font-bold uppercase tracking-widest ${isSelected ? 'text-indigo-200' : 'text-slate-500'}`}>Pending</span>
                                                 </div>
                                             </div>
-                                        );
-                                    })}
-                                </div>
+
+                                            <div className={`pt-3 border-t-2 border-dashed flex justify-between text-[10px] font-bold uppercase relative z-10 ${isSelected ? 'border-white/20' : 'border-slate-200'}`}>
+                                                <span className={isSelected ? 'text-indigo-200' : 'text-slate-500 tracking-wider'}>AVG SPEED</span>
+                                                <span className={`tracking-wide ${isSelected ? 'text-white' : 'text-indigo-600 font-black'}`}>{p.historicalAvgDays} Day</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            
+                            {/* Refresh Footer */}
+                            <div className="p-4 border-t border-slate-100 bg-white text-center shrink-0">
+                                <button onClick={fetchData} className="w-full py-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-all font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2">
+                                    <RefreshIcon className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} /> Refresh Data
+                                </button>
                             </div>
                         </div>
 
-                        <div className="flex-grow overflow-y-auto no-scrollbar space-y-3 px-1 pb-10">
-                            {groupedIssuesData.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center opacity-10 text-center py-24"><CheckCircleIcon className="h-24 w-24 mb-6 text-emerald-500" /><span className="text-2xl font-black uppercase tracking-[0.5em]">Systems Stable</span></div>
-                            ) : groupedIssuesData.map((reqGroup) => (
-                                <div key={reqGroup.requestId} className="space-y-2 animate-fade-in">
-                                    <div className="flex items-center gap-5 px-6 py-3 bg-base-900 text-white rounded-[2rem] shadow-xl border border-slate-800">
-                                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shrink-0"><BeakerIcon className="h-5 w-5" /></div>
-                                        <div className="flex-grow min-w-0 flex items-center gap-6">
-                                            <h3 className="text-xl font-black uppercase tracking-tighter italic leading-none">{reqGroup.requestId}</h3>
-                                            <span className="px-3 py-1 bg-rose-600 text-white rounded-lg font-black text-[9px] uppercase tracking-widest shadow-md">{reqGroup.allTasks.length} FAIL</span>
-                                            <div className={`px-4 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2.5 border border-white/10 ${reqGroup.oldestDays >= 5 ? 'bg-rose-600' : reqGroup.oldestDays >= 3 ? 'bg-amber-500' : 'bg-emerald-500'}`}>
-                                                <CalendarIcon className="h-4 w-4" /> {reqGroup.oldestDays}D AGED
-                                            </div>
-                                        </div>
-                                        <button 
-                                            onClick={() => setConfirmModal({ isOpen: true, targetItems: reqGroup.allTasks, title: 'Batch?', description: reqGroup.requestId })} 
-                                            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-[10px] uppercase tracking-widest transition-all border border-emerald-500 shadow-lg"
-                                        >
-                                            Resolve Group
-                                        </button>
-                                    </div>
-                                    <div className="space-y-1.5 pl-8">
-                                        {Object.entries(reqGroup.tasksByDescription).map(([description, items]) => (
-                                            <div key={description} className="space-y-1.5">
-                                                {items.map((it, idx) => {
-                                                    const days = getDaysDiff(it.originalDoc.assignedDate);
-                                                    const agingColor = days >= 5 ? 'text-rose-600' : days >= 3 ? 'text-amber-500' : 'text-emerald-600';
-                                                    const agingBg = days >= 5 ? 'bg-rose-50' : days >= 3 ? 'bg-amber-50' : 'bg-emerald-50';
-                                                    
-                                                    return (
-                                                        <div key={idx} className="flex items-center gap-4 bg-white p-3 rounded-[1.5rem] border-2 border-slate-100 hover:border-indigo-100 transition-all shadow-sm group">
-                                                            <div className="flex items-center gap-3 w-52 shrink-0 border-r-2 border-slate-50 pr-3">
-                                                                <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-[12px] bg-indigo-600 text-white shadow-md">{it.originalDoc.testerName.charAt(0)}</div>
-                                                                <div className="min-w-0"><span className="text-[13px] font-black text-slate-900 uppercase truncate block leading-none">{it.originalDoc.testerName}</span><span className="text-[9px] font-black text-slate-400 uppercase mt-1 block italic tracking-widest">{formatDate(it.originalDoc.assignedDate)}</span></div>
-                                                            </div>
-                                                            <div className="flex-grow min-w-0 flex items-center gap-6">
-                                                                <div className={`shrink-0 w-20 flex flex-col items-center justify-center p-2 rounded-xl border-2 ${agingBg} border-transparent shadow-inner`}><span className={`text-2xl font-black tracking-tighter leading-none ${agingColor}`}>{days}D</span></div>
-                                                                <div className="flex-grow min-w-0"><span className="text-[16px] font-black text-slate-900 uppercase truncate block tracking-tighter leading-tight">{String(it.task['Sample Name'] || 'N/A')}</span><p className="text-[10px] font-bold text-rose-600 italic mt-0.5 truncate">ERR: "{it.task.notOkReason}"</p></div>
-                                                            </div>
-                                                            <button onClick={() => setConfirmModal({ isOpen: true, targetItems: [it], title: 'Resolve?', description: String(it.task['Sample Name']) })} className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all shadow-md group-hover:scale-105 active:scale-90"><CheckCircleIcon className="h-6 w-6"/></button>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        ))}
-                                    </div>
+                        {/* RIGHT MAIN CONTENT - ISSUES LIST */}
+                        <div className="flex-grow flex flex-col bg-white rounded-[3rem] border border-slate-200 shadow-xl overflow-hidden">
+                            <div className="flex items-center justify-between px-8 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
+                                <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
+                                    <button onClick={() => setIssuesMode('active')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${issuesMode === 'active' ? 'bg-white shadow-md text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}>Live Queue</button>
+                                    <button onClick={() => setIssuesMode('history')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${issuesMode === 'history' ? 'bg-white shadow-md text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}>Resolution Archive</button>
                                 </div>
-                            ))}
+                                {issuesMode === 'history' && (
+                                    <button onClick={handleExportHistory} className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-md active:scale-95 border-b-4 border-emerald-700">
+                                        <DownloadIcon className="h-4 w-4" /> Download History
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="flex-grow overflow-y-auto no-scrollbar p-6 bg-slate-50/30">
+                                {issuesMode === 'active' ? (
+                                    groupedIssuesData.length === 0 ? (
+                                        <div className="h-full flex flex-col items-center justify-center opacity-10 text-center"><CheckCircleIcon className="h-24 w-24 mb-6 text-emerald-500" /><span className="text-2xl font-black uppercase tracking-[0.5em]">Systems Stable</span></div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {groupedIssuesData.map((reqGroup) => (
+                                                <div key={reqGroup.requestId} className="space-y-2 animate-fade-in">
+                                                    <div className="flex items-center gap-5 px-6 py-3 bg-base-900 text-white rounded-[2rem] shadow-xl border border-slate-800">
+                                                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shrink-0"><BeakerIcon className="h-5 w-5" /></div>
+                                                        <div className="flex-grow min-w-0 flex items-center gap-6">
+                                                            <h3 className="text-xl font-black uppercase tracking-tighter italic leading-none">{reqGroup.requestId}</h3>
+                                                            <span className="px-3 py-1 bg-rose-600 text-white rounded-lg font-black text-[9px] uppercase tracking-widest shadow-md">{reqGroup.allTasks.length} FAIL</span>
+                                                            <div className={`px-4 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2.5 border border-white/10 ${reqGroup.oldestDays >= 4 ? 'bg-rose-600' : reqGroup.oldestDays >= 2 ? 'bg-amber-500' : 'bg-emerald-500'}`}>
+                                                                <CalendarIcon className="h-4 w-4" /> {reqGroup.oldestDays}D AGED
+                                                            </div>
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => setConfirmModal({ isOpen: true, targetItems: reqGroup.allTasks, title: 'Batch?', description: reqGroup.requestId })} 
+                                                            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-[10px] uppercase tracking-widest transition-all border border-emerald-500 shadow-lg"
+                                                        >
+                                                            Resolve Group
+                                                        </button>
+                                                    </div>
+                                                    <div className="space-y-1.5 pl-8">
+                                                        {Object.entries(reqGroup.tasksByDescription).map(([key, items]) => (
+                                                            <div key={key} className="space-y-1.5">
+                                                                {items.map((it, idx) => {
+                                                                    const days = getDaysDiff(it.originalDoc.assignedDate);
+                                                                    const agingColor = days >= 4 ? 'text-rose-600' : days >= 2 ? 'text-amber-500' : 'text-emerald-600';
+                                                                    const agingBg = days >= 4 ? 'bg-rose-50' : days >= 2 ? 'bg-amber-50' : 'bg-emerald-50';
+                                                                    
+                                                                    return (
+                                                                        <div key={idx} className="flex items-center gap-4 bg-white p-4 rounded-[1.5rem] border-2 border-slate-100 hover:border-indigo-100 transition-all shadow-sm group">
+                                                                            <div className="flex items-center gap-3 w-52 shrink-0 border-r-2 border-slate-50 pr-3">
+                                                                                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-[12px] bg-indigo-600 text-white shadow-md">{it.originalDoc.testerName.charAt(0)}</div>
+                                                                                <div className="min-w-0"><span className="text-[13px] font-black text-slate-900 uppercase truncate block leading-none">{it.originalDoc.testerName}</span><span className="text-[9px] font-black text-slate-400 uppercase mt-1 block italic tracking-widest">{formatDate(it.originalDoc.assignedDate)}</span></div>
+                                                                            </div>
+                                                                            <div className="flex-grow min-w-0 flex items-center gap-6">
+                                                                                <div className={`shrink-0 w-20 flex flex-col items-center justify-center p-2 rounded-xl border-2 ${agingBg} border-transparent shadow-inner`}><span className={`text-2xl font-black tracking-tighter leading-none ${agingColor}`}>{days}D</span></div>
+                                                                                <div className="flex-grow min-w-0">
+                                                                                    <span className="text-[16px] font-black text-slate-900 uppercase truncate block tracking-tighter leading-tight">{String(getTaskValue(it.task, 'Sample Name') || 'N/A')}</span>
+                                                                                    {/* Added Detailed Info Here */}
+                                                                                    <div className="flex flex-col mt-1">
+                                                                                        <div className="text-[11px] font-bold text-indigo-900 leading-tight">{String(getTaskValue(it.task, 'Description') || 'General')}</div>
+                                                                                        {String(getTaskValue(it.task, 'Variant')) && <div className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider">{String(getTaskValue(it.task, 'Variant'))}</div>}
+                                                                                    </div>
+                                                                                    <p className="text-[10px] font-bold text-rose-600 italic mt-1 truncate bg-rose-50 px-2 py-1 rounded-lg w-fit border border-rose-100">ERR: "{it.task.notOkReason}"</p>
+                                                                                </div>
+                                                                            </div>
+                                                                            <button onClick={() => setConfirmModal({ isOpen: true, targetItems: [it], title: 'Resolve?', description: String(getTaskValue(it.task, 'Sample Name')) })} className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all shadow-md group-hover:scale-105 active:scale-90 border border-emerald-100"><CheckCircleIcon className="h-6 w-6"/></button>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )
+                                ) : (
+                                    // History Mode
+                                    historyLogs.length === 0 ? (
+                                        <div className="h-full flex flex-col items-center justify-center opacity-20 text-center"><DatabaseIcon className="h-24 w-24 mb-6" /><span className="text-xl font-black uppercase tracking-[0.3em]">Archive Empty</span></div>
+                                    ) : (
+                                        <table className="w-full text-left border-separate border-spacing-0">
+                                            <thead className="sticky top-0 bg-white z-10 shadow-sm">
+                                                <tr>
+                                                    {['Analyst', 'Request ID', 'Sample', 'Test / Variant', 'Resolution Time', 'Reason'].map(h => (
+                                                        <th key={h} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">{h}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {historyLogs.map((log, i) => (
+                                                    <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                                        <td className="px-6 py-4"><span className="text-[11px] font-black text-slate-800 uppercase">{log.testerName}</span></td>
+                                                        <td className="px-6 py-4"><span className="text-[12px] font-bold text-indigo-600">{log.requestId}</span></td>
+                                                        <td className="px-6 py-4 text-[12px] font-medium text-slate-600 truncate max-w-[150px]">{log.sampleName}</td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[11px] font-bold text-slate-700 truncate max-w-[200px]">{log.description}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase border border-emerald-100">{log.daysToResolve} Days</span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-[11px] text-rose-600 italic max-w-[200px] truncate">{log.failureReason}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )
+                                )}
+                            </div>
                         </div>
-                    </>
+                    </div>
                 ) : (
                     <>
                         <div className="flex gap-6 shrink-0 h-[220px] mb-6">

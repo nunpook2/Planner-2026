@@ -3,8 +3,8 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import type { RawTask, GroupedTask } from '../types';
 import { TaskCategory } from '../types';
-import { addCategorizedTask } from '../services/dataService';
-import { ChevronDownIcon, UploadIcon, DownloadIcon, RefreshIcon, SparklesIcon } from './common/Icons';
+import { addCategorizedTask, getAllExistingRequestIds } from '../services/dataService';
+import { ChevronDownIcon, UploadIcon, DownloadIcon, RefreshIcon, SparklesIcon, CheckCircleIcon, XCircleIcon, AlertTriangleIcon } from './common/Icons';
 
 declare const XLSX: any;
 
@@ -56,6 +56,48 @@ const isValidTask = (task: RawTask): boolean => {
 
 const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
 
+const SkippedListModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    skippedIds: string[];
+}> = ({ isOpen, onClose, skippedIds }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-base-900/80 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-fade-in" onClick={onClose}>
+            <div className="bg-white dark:bg-base-900 rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden flex flex-col border border-white/20 max-h-[80vh]" onClick={e => e.stopPropagation()}>
+                <div className="p-6 border-b border-base-100 dark:border-base-800 bg-amber-50 dark:bg-amber-900/20 flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-amber-100 text-amber-600 rounded-xl"><AlertTriangleIcon className="h-6 w-6"/></div>
+                        <div>
+                            <h3 className="text-lg font-black text-base-900 dark:text-white uppercase tracking-tighter">Skipped Duplicates</h3>
+                            <p className="text-[10px] font-bold text-base-500 uppercase tracking-widest">{skippedIds.length} Items Found in Database</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-amber-100 rounded-full transition-colors"><XCircleIcon className="h-6 w-6 text-base-400"/></button>
+                </div>
+                <div className="p-6 overflow-y-auto custom-scrollbar flex-grow bg-white dark:bg-base-955">
+                    <p className="text-xs font-medium text-base-500 mb-4 leading-relaxed">
+                        The following Request IDs were found in the uploaded file but <strong className="text-amber-600">already exist</strong> in the system (Pool, Assigned, or Completed). They were skipped to prevent duplication.
+                    </p>
+                    <ul className="space-y-2">
+                        {skippedIds.map((id, idx) => (
+                            <li key={idx} className="flex items-center gap-3 p-3 bg-base-50 dark:bg-base-900 rounded-xl border border-base-100 dark:border-base-800">
+                                <span className="text-[10px] font-black text-base-400 w-6 text-center">{idx + 1}</span>
+                                <span className="text-sm font-black text-base-800 dark:text-base-200 uppercase tracking-tight">{id}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+                <div className="p-4 border-t border-base-100 dark:border-base-800 bg-base-50 dark:bg-base-900/50 flex justify-center shrink-0">
+                    <button onClick={onClose} className="px-8 py-3 bg-white dark:bg-base-800 border-2 border-base-200 dark:border-base-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-base-50 transition-all shadow-sm">
+                        Acknowledge & Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
     const [rawTasks, setRawTasks] = useState<RawTask[]>([]);
     const [headers, setHeaders] = useState<string[]>([]);
@@ -65,6 +107,9 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
     const [groupedTasks, setGroupedTasks] = useState<GroupedTask[]>([]);
     const [fileName, setFileName] = useState('');
     const [globalFilter, setGlobalFilter] = useState('');
+    const [skippedCount, setSkippedCount] = useState(0);
+    const [skippedIds, setSkippedIds] = useState<string[]>([]);
+    const [showSkippedModal, setShowSkippedModal] = useState(false);
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -106,49 +151,80 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
         });
     };
 
-    const processData = useCallback(() => {
+    const processData = useCallback(async () => {
         setIsProcessing(true);
-        const processedTasks: RawTask[] = [];
+        setSkippedCount(0);
+        setSkippedIds([]);
+        
+        try {
+            // Fetch all existing Request IDs currently in the system (Assigned, Pool, etc.)
+            const existingRequestIds = await getAllExistingRequestIds();
+            const processedTasks: RawTask[] = [];
+            const skippedList: string[] = [];
+            let duplicatesSkipped = 0;
 
-        rawTasks.forEach(task => {
-            const baseTask: RawTask = {};
-            for (const key in task) {
-                if (!excludedColumns.has(key)) baseTask[key] = task[key];
-            }
+            // Helper to track duplicates within the file itself to avoid double counting
+            const seenInFile = new Set<string>();
 
-            if (!isValidTask(baseTask)) return;
+            rawTasks.forEach(task => {
+                const baseTask: RawTask = {};
+                for (const key in task) {
+                    if (!excludedColumns.has(key)) baseTask[key] = task[key];
+                }
 
-            // Robust Thai character normalization for splitting logic
-            const desc = String(getTaskValue(baseTask, 'Description') || '').normalize('NFC').trim();
-            const SPECIAL_KEYWORD = "การสกัด EbP,hPP ใน ICP".normalize('NFC');
+                if (!isValidTask(baseTask)) return;
 
-            if (desc === SPECIAL_KEYWORD) {
-                const variantKey = Object.keys(baseTask).find(k => k.toLowerCase() === 'variant') || 'Variant';
+                // CHECK FOR DUPLICATES
+                const reqId = String(getTaskValue(baseTask, 'Request ID') || '').trim().toUpperCase();
                 
-                // Task 1: PER-ICP
-                const task1 = { ...baseTask, _id: generateId() };
-                task1[variantKey] = "PER-ICP";
-                processedTasks.push(task1);
+                if (reqId) {
+                    if (existingRequestIds.has(reqId)) {
+                        if (!seenInFile.has(reqId)) {
+                            skippedList.push(reqId);
+                            seenInFile.add(reqId);
+                        }
+                        duplicatesSkipped++;
+                        return; // Skip
+                    }
+                }
 
-                // Task 2: HppEbp-ICP
-                const task2 = { ...baseTask, _id: generateId() };
-                task2[variantKey] = "HppEbp-ICP";
-                processedTasks.push(task2);
-            } else {
-                processedTasks.push({ ...baseTask, _id: generateId() });
+                // Robust Thai character normalization for splitting logic
+                const desc = String(getTaskValue(baseTask, 'Description') || '').normalize('NFC').trim();
+                const SPECIAL_KEYWORD = "การสกัด EbP,hPP ใน ICP".normalize('NFC');
+
+                if (desc === SPECIAL_KEYWORD) {
+                    const variantKey = Object.keys(baseTask).find(k => k.toLowerCase() === 'variant') || 'Variant';
+                    
+                    // Task 1: PER-ICP
+                    const task1 = { ...baseTask, _id: generateId() };
+                    task1[variantKey] = "PER-ICP";
+                    processedTasks.push(task1);
+
+                    // Task 2: HppEbp-ICP
+                    const task2 = { ...baseTask, _id: generateId() };
+                    task2[variantKey] = "HppEbp-ICP";
+                    processedTasks.push(task2);
+                } else {
+                    processedTasks.push({ ...baseTask, _id: generateId() });
+                }
+            });
+
+            const grouped: Record<string, RawTask[]> = {};
+            for (const task of processedTasks) {
+                const requestId = String(getTaskValue(task, 'Request ID') || `no-id-${Math.random()}`);
+                if (!grouped[requestId]) grouped[requestId] = [];
+                grouped[requestId].push(task);
             }
-        });
 
-        const grouped: Record<string, RawTask[]> = {};
-        for (const task of processedTasks) {
-            const requestId = String(getTaskValue(task, 'Request ID') || `no-id-${Math.random()}`);
-            if (!grouped[requestId]) grouped[requestId] = [];
-            grouped[requestId].push(task);
+            const result: GroupedTask[] = Object.entries(grouped).map(([id, tasks]) => ({ id, tasks }));
+            setGroupedTasks(result);
+            setSkippedCount(duplicatesSkipped);
+            setSkippedIds(skippedList);
+        } catch (error) {
+            console.error("Processing Error:", error);
+        } finally {
+            setIsProcessing(false);
         }
-
-        const result: GroupedTask[] = Object.entries(grouped).map(([id, tasks]) => ({ id, tasks }));
-        setGroupedTasks(result);
-        setIsProcessing(false);
     }, [rawTasks, excludedColumns]);
 
     const handleAiTriage = async () => {
@@ -230,6 +306,8 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
     
     return (
         <div className="space-y-8 animate-slide-in-up p-4">
+            <SkippedListModal isOpen={showSkippedModal} onClose={() => setShowSkippedModal(false)} skippedIds={skippedIds} />
+            
             <div className="flex justify-between items-start">
                 <div>
                     <h2 className="text-3xl font-black text-base-955 dark:text-base-50 tracking-tighter">Mission Intake</h2>
@@ -297,6 +375,23 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                 </div>
             )}
             
+            {skippedCount > 0 && (
+                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-[1.5rem] border border-amber-200 dark:border-amber-800/50 flex items-center justify-between gap-3 shadow-sm animate-slide-in-up">
+                    <div className="flex items-center gap-3">
+                        <CheckCircleIcon className="h-5 w-5 text-amber-500" />
+                        <span className="text-xs font-bold text-amber-800 dark:text-amber-200 uppercase tracking-widest">
+                            Smart Guard: {skippedCount} duplicate items were detected and automatically skipped.
+                        </span>
+                    </div>
+                    <button 
+                        onClick={() => setShowSkippedModal(true)}
+                        className="px-4 py-2 bg-white dark:bg-base-800 text-amber-600 text-[10px] font-black uppercase tracking-widest rounded-xl shadow-sm hover:bg-amber-50 transition-colors"
+                    >
+                        Review Skipped
+                    </button>
+                </div>
+            )}
+
             {groupedTasks.length > 0 && (
                 <div className="space-y-6 animate-fade-in">
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">

@@ -41,6 +41,13 @@ interface ScheduleTabProps {
     onShiftChange: (shift: 'day' | 'night') => void;
 }
 
+const getTaskValue = (task: RawTask, header: string): any => {
+    const keys = Object.keys(task);
+    const target = header.toLowerCase().trim();
+    const matchedKey = keys.find(k => k.toLowerCase().trim() === target);
+    return matchedKey ? task[matchedKey] : '';
+};
+
 const MissionLookupModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -63,13 +70,30 @@ const MissionLookupModal: React.FC<{
             ]);
 
             const query = searchQuery.toLowerCase().trim();
-            const filterById = (items: any[]) => items.filter(item => 
-                String(item.requestId || item.id || '').toLowerCase().includes(query)
-            );
+            
+            // Helper to check if task content matches
+            const taskMatches = (task: RawTask) => {
+                const desc = String(getTaskValue(task, 'Description') || '').toLowerCase();
+                const sample = String(getTaskValue(task, 'Sample Name') || '').toLowerCase();
+                const variant = String(getTaskValue(task, 'Variant') || '').toLowerCase();
+                return desc.includes(query) || sample.includes(query) || variant.includes(query);
+            };
+
+            const filterDeep = (items: any[]) => items.filter(item => {
+                // 1. Check ID
+                const idMatch = String(item.requestId || item.id || '').toLowerCase().includes(query);
+                if (idMatch) return true;
+                
+                // 2. Check Tasks Content
+                if (item.tasks && Array.isArray(item.tasks)) {
+                    return item.tasks.some((t: any) => taskMatches(t));
+                }
+                return false;
+            });
 
             setResults({
-                assigned: [...filterById(assigned), ...filterById(prepare)].sort((a, b) => b.assignedDate.localeCompare(a.assignedDate)),
-                inPool: filterById(pool)
+                assigned: [...filterDeep(assigned), ...filterDeep(prepare)].sort((a, b) => b.assignedDate.localeCompare(a.assignedDate)),
+                inPool: filterDeep(pool)
             });
         } catch (e) {
             console.error(e);
@@ -99,7 +123,7 @@ const MissionLookupModal: React.FC<{
                         <input 
                             autoFocus
                             type="text" 
-                            placeholder="Enter Request ID (e.g. RS1-12345)..." 
+                            placeholder="Enter Request ID, Sample Name, or Description..." 
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && handleSearch()}
@@ -122,7 +146,7 @@ const MissionLookupModal: React.FC<{
                             {results.assigned.length > 0 && (
                                 <div className="space-y-4">
                                     <h4 className="text-[10px] font-black text-primary-500 uppercase tracking-[0.4em] ml-4">Deployment History</h4>
-                                    <div className="grid gap-3">
+                                    <div className="grid gap-4">
                                         {results.assigned.map((entry, idx) => {
                                             const isPrep = 'assistantName' in entry;
                                             const staffName = isPrep ? (entry as AssignedPrepareTask).assistantName : (entry as AssignedTask).testerName;
@@ -131,26 +155,55 @@ const MissionLookupModal: React.FC<{
                                                 : (entry as AssignedTask).status === TaskStatus.Done;
 
                                             return (
-                                                <div key={idx} className="flex items-center gap-6 p-6 bg-white dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-[2rem] shadow-md hover:border-primary-300 transition-all group">
-                                                    <div className="flex flex-col items-center gap-1 shrink-0 w-20">
-                                                        <span className="text-[10px] font-black text-base-400 uppercase">{entry.shift.toUpperCase()}</span>
-                                                        <span className="text-[16px] font-black text-base-900 dark:text-base-100">{entry.assignedDate.split('-').reverse().slice(0,2).join('/')}</span>
-                                                    </div>
-                                                    <div className="w-px h-10 bg-base-100 dark:bg-base-800"></div>
-                                                    <div className="flex-grow min-w-0">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-[17px] font-black text-base-955 dark:text-base-50 uppercase tracking-tighter">{entry.requestId}</span>
-                                                            <span className={`px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest ${isPrep ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>{isPrep ? 'PREPARATION' : 'TESTING'}</span>
+                                                <div key={idx} className="flex flex-col p-6 bg-white dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-[2rem] shadow-md hover:border-primary-300 transition-all group">
+                                                    <div className="flex items-center gap-6 mb-4">
+                                                        <div className="flex flex-col items-center gap-1 shrink-0 w-20">
+                                                            <span className="text-[10px] font-black text-base-400 uppercase">{entry.shift.toUpperCase()}</span>
+                                                            <span className="text-[16px] font-black text-base-900 dark:text-base-100">{entry.assignedDate.split('-').reverse().slice(0,2).join('/')}</span>
                                                         </div>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <UserGroupIcon className="h-3.5 w-3.5 text-base-300" />
-                                                            <span className="text-[12px] font-bold text-base-600 dark:text-base-400 uppercase">{staffName}</span>
+                                                        <div className="w-px h-10 bg-base-100 dark:bg-base-800"></div>
+                                                        <div className="flex-grow min-w-0">
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-[17px] font-black text-base-955 dark:text-base-50 uppercase tracking-tighter">{entry.requestId}</span>
+                                                                <span className={`px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest ${isPrep ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>{isPrep ? 'PREPARATION' : 'TESTING'}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <UserGroupIcon className="h-3.5 w-3.5 text-base-300" />
+                                                                <span className="text-[12px] font-bold text-base-600 dark:text-base-400 uppercase">{staffName}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="shrink-0 flex items-center gap-3">
+                                                            <div className={`px-5 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest ${isDone ? 'bg-emerald-100 text-emerald-700' : 'bg-base-100 dark:bg-base-800 text-base-400 animate-pulse'}`}>
+                                                                {isDone ? 'COMPLETED' : 'IN PROGRESS'}
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                    <div className="shrink-0 flex items-center gap-3">
-                                                        <span className="text-[10px] font-black text-base-400 uppercase">{entry.tasks.length} items</span>
-                                                        <div className={`px-5 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest ${isDone ? 'bg-emerald-100 text-emerald-700' : 'bg-base-100 dark:bg-base-800 text-base-400 animate-pulse'}`}>
-                                                            {isDone ? 'COMPLETED' : 'IN PROGRESS'}
+                                                    
+                                                    {/* Sub-tasks Detailed View - Now shows specific items */}
+                                                    <div className="pl-24 pr-4">
+                                                        <div className="p-4 bg-base-50 dark:bg-base-900/50 rounded-2xl border border-base-100 dark:border-base-800 space-y-3">
+                                                            {entry.tasks.map((task, tIdx) => {
+                                                                const taskStatus = isPrep 
+                                                                    ? (task.preparationStatus === 'Prepared' ? 'Ready' : 'Prep')
+                                                                    : (task.status === TaskStatus.Done ? 'Done' : (task.status === TaskStatus.NotOK ? 'Fail' : 'Pend'));
+                                                                
+                                                                return (
+                                                                    <div key={tIdx} className="flex justify-between items-start text-[11px] border-b border-base-200 dark:border-base-700 last:border-0 pb-2 last:pb-0">
+                                                                        <div className="flex flex-col gap-0.5">
+                                                                            <span className="font-black text-base-800 dark:text-base-200 uppercase">{String(getTaskValue(task, 'Description'))}</span>
+                                                                            <span className="text-[10px] text-primary-600 font-bold">{String(getTaskValue(task, 'Variant'))}</span>
+                                                                            <span className="text-[9px] text-base-400">{String(getTaskValue(task, 'Sample Name'))}</span>
+                                                                        </div>
+                                                                        <div className="flex flex-col items-end gap-1">
+                                                                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                                                                taskStatus === 'Done' || taskStatus === 'Ready' ? 'text-emerald-600 bg-emerald-50' : 
+                                                                                taskStatus === 'Fail' ? 'text-red-600 bg-red-50' : 'text-base-400 bg-base-100'
+                                                                            }`}>{taskStatus}</span>
+                                                                            <span className="text-[8px] font-bold text-base-400 uppercase tracking-wider">{staffName}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -165,17 +218,33 @@ const MissionLookupModal: React.FC<{
                                     <h4 className="text-[10px] font-black text-orange-500 uppercase tracking-[0.4em] ml-4">Unassigned Queue</h4>
                                     <div className="grid gap-3">
                                         {results.inPool.map((entry, idx) => (
-                                            <div key={idx} className="flex items-center gap-6 p-6 bg-orange-50/30 dark:bg-orange-955/10 border-2 border-orange-100 dark:border-orange-900/30 rounded-[2rem] shadow-sm">
-                                                <div className="flex-grow min-w-0">
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="text-[17px] font-black text-orange-955 dark:text-orange-100 uppercase tracking-tighter">{entry.id}</span>
-                                                        <span className={`px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest bg-orange-200 text-orange-800`}>AWAITING ASSIGNMENT</span>
+                                            <div key={idx} className="flex flex-col p-6 bg-orange-50/30 dark:bg-orange-955/10 border-2 border-orange-100 dark:border-orange-900/30 rounded-[2rem] shadow-sm">
+                                                <div className="flex items-center gap-6 mb-3">
+                                                    <div className="flex-grow min-w-0">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-[17px] font-black text-orange-955 dark:text-orange-100 uppercase tracking-tighter">{entry.id}</span>
+                                                            <span className={`px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest bg-orange-200 text-orange-800`}>AWAITING ASSIGNMENT</span>
+                                                        </div>
+                                                        <p className="text-[11px] font-bold text-orange-600/70 mt-1 uppercase">Stored in {entry.category} pool</p>
                                                     </div>
-                                                    <p className="text-[11px] font-bold text-orange-600/70 mt-1 uppercase">Stored in {entry.category} pool</p>
+                                                    <div className="shrink-0 flex items-center gap-4">
+                                                        <span className="text-[10px] font-black text-orange-400 uppercase">{entry.tasks.length} items pending</span>
+                                                        <div className="w-10 h-10 rounded-full bg-white dark:bg-base-900 flex items-center justify-center text-orange-500 shadow-sm"><AlertTriangleIcon className="h-5 w-5" /></div>
+                                                    </div>
                                                 </div>
-                                                <div className="shrink-0 flex items-center gap-4">
-                                                    <span className="text-[10px] font-black text-orange-400 uppercase">{entry.tasks.length} items pending</span>
-                                                    <div className="w-10 h-10 rounded-full bg-white dark:bg-base-900 flex items-center justify-center text-orange-500 shadow-sm"><AlertTriangleIcon className="h-5 w-5" /></div>
+                                                {/* Detailed Tasks for Pool items */}
+                                                <div className="pl-4 pr-4">
+                                                    <div className="p-3 bg-white/50 dark:bg-base-900/50 rounded-2xl border border-orange-200/30 space-y-2">
+                                                        {entry.tasks.map((task, tIdx) => (
+                                                            <div key={tIdx} className="text-[10px] font-bold text-orange-800/70 dark:text-orange-200/70 flex justify-between border-b border-orange-100/50 last:border-0 pb-1">
+                                                                <div className="flex flex-col">
+                                                                    <span>{String(getTaskValue(task, 'Description'))}</span>
+                                                                    <span className="text-[9px] opacity-70">{String(getTaskValue(task, 'Variant'))}</span>
+                                                                </div>
+                                                                <span className="opacity-50">{String(getTaskValue(task, 'Sample Name'))}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
@@ -186,7 +255,7 @@ const MissionLookupModal: React.FC<{
                             {results.assigned.length === 0 && results.inPool.length === 0 && (
                                 <div className="py-20 text-center opacity-30 flex flex-col items-center">
                                     <BeakerIcon className="h-20 w-20 mb-4" />
-                                    <span className="text-lg font-black uppercase tracking-[0.3em]">No data found for this Request ID</span>
+                                    <span className="text-lg font-black uppercase tracking-[0.3em]">No data found</span>
                                 </div>
                             )}
                         </>
@@ -205,6 +274,8 @@ const MissionLookupModal: React.FC<{
         </div>
     );
 };
+
+// ... [Rest of ScheduleTab.tsx remains unchanged] ...
 
 const LocalModal: React.FC<{
     isOpen: boolean;
@@ -293,18 +364,6 @@ const LocalModal: React.FC<{
             </div>
         </div>
     );
-};
-
-const getTaskValue = (task: RawTask, header: string): any => {
-    const keys = Object.keys(task);
-    const target = header.toLowerCase().trim();
-    // Special mapping for common variations
-    if (target === 'quantity' || target === 'qty') {
-        const qtyKey = keys.find(k => ['quantity', 'qty', 'amount', 'units'].includes(k.toLowerCase().trim()));
-        if (qtyKey) return task[qtyKey];
-    }
-    const matchedKey = keys.find(k => k.toLowerCase().trim() === target);
-    return matchedKey ? task[matchedKey] : '';
 };
 
 const getPriorityLabel = (category: string, tasks: RawTask[]): string => {
