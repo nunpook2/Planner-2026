@@ -63,6 +63,17 @@ const getTaskValue = (task: RawTask, header: string): string | number => {
     return matchedKey ? task[matchedKey] : '';
 };
 
+// Robust quantity parser handling "5", "x5", "5pcs", etc.
+const parseTaskQty = (task: RawTask): number => {
+    const val = getTaskValue(task, 'Quantity');
+    if (typeof val === 'number') return val;
+    if (!val) return 1;
+    const str = String(val).trim();
+    // Extract first number found in string
+    const match = str.match(/(\d+(\.\d+)?)/);
+    return match ? parseFloat(match[0]) : 1;
+};
+
 const getPriorityStatus = (task: RawTask, category: TaskCategory): 'lsp' | 'sprint' | 'urgent' | 'pocat' | 'normal' => {
     const allContent = Object.values(task).map(v => String(v).toLowerCase()).join(' ');
     const cat = String(category).toLowerCase();
@@ -204,8 +215,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         
         const processGroup = (groupTasks: RawTask[], category: TaskCategory) => {
              groupTasks.forEach(t => {
-                const qVal = getTaskValue(t, 'Quantity');
-                const taskQty = typeof qVal === 'number' ? qVal : (parseInt(String(qVal)) || 1);
+                const taskQty = parseTaskQty(t);
                 
                 total += taskQty;
                 const priority = getPriorityStatus(t, category);
@@ -220,11 +230,13 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         assignedTasks.forEach(g => processGroup(g.tasks, g.category));
         prepareTasks.forEach(g => processGroup(g.tasks, g.category));
         
-        // Also process returned items for this shift
+        // FIX: For returned pool, ONLY count items that are actually returned.
+        // Previously it counted the entire pool document (including unassigned items) which inflated the total.
         returnedPool.forEach(g => {
             const docDate = g.returnedDate;
             if (g.shift === selectedShift && docDate === selectedDate) {
-                processGroup(g.tasks, g.category);
+                const returnedItemsOnly = g.tasks.filter(t => t.isReturned);
+                processGroup(returnedItemsOnly, g.category);
             }
         });
 
@@ -249,8 +261,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({
         const addActivity = (targetPersonId: string, task: RawTask, cat: TaskCategory, isReady: boolean, isPrep: boolean = false) => {
             if (!stats[targetPersonId]) return; 
             const person = stats[targetPersonId];
-            const qVal = getTaskValue(task, 'Quantity');
-            const taskQty = typeof qVal === 'number' ? qVal : (parseInt(String(qVal)) || 1);
+            const taskQty = parseTaskQty(task);
             
             const priority = isPrep ? 'normal' : getPriorityStatus(task, cat);
             const rawDesc = String(getTaskValue(task, 'Description') || 'General Task');

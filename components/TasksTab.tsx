@@ -149,7 +149,6 @@ const Toast: React.FC<{ message: string; isError?: boolean; onDismiss: () => voi
     );
 };
 
-// ... [Modal Components remain unchanged] ...
 const CustomerRemarkModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -334,7 +333,8 @@ const ExpandableCell: React.FC<{
             const next = { ...prev };
             items.forEach(item => {
                 const currentSet = new Set(next[item.sourceDocId] || []);
-                const isLockedForTesting = (!isAssigningToPrepare && item.task.preparationStatus === 'Awaiting Preparation') || item.isItemActiveInOps || item.isItemDoneInOps;
+                // Allow selecting ON OPS / DONE items for Repeat Testing (Clone logic applied in Assign)
+                const isLockedForTesting = (!isAssigningToPrepare && item.task.preparationStatus === 'Awaiting Preparation');
                 if (checked && !isLockedForTesting) currentSet.add(item.task._id!); 
                 else if (!checked) currentSet.delete(item.task._id!);
                 next[item.sourceDocId] = currentSet;
@@ -376,23 +376,27 @@ const ExpandableCell: React.FC<{
                                 {items.map(({ task, originalIndex, sourceDocId, isItemActiveInOps, isItemDoneInOps }) => {
                                     const isReady = task.preparationStatus === 'Prepared' || task.preparationStatus === 'Ready for Testing';
                                     const isInPrep = task.preparationStatus === 'Awaiting Preparation';
-                                    const isLockedForTesting = (!isAssigningToPrepare && isInPrep) || isItemActiveInOps || isItemDoneInOps;
+                                    
+                                    // UNLOCKED: 'ON OPS' and 'COMPLETED' can be selected for REPEAT TESTS.
+                                    // Cloning logic will be handled in handleConfirmAssignment.
+                                    const isLockedForTesting = (!isAssigningToPrepare && isInPrep);
+                                    
                                     const sampleLabel = String(getTaskValue(task, 'Sample Name'));
                                     const isReturned = task.isReturned;
                                     
                                     return (
-                                        <tr key={task._id} className={`bg-white dark:bg-base-900 hover:bg-indigo-50/40 ${isLockedForTesting ? 'opacity-60' : ''} ${isItemActiveInOps ? 'bg-purple-50/20' : ''} ${isItemDoneInOps ? 'bg-emerald-50/30' : ''}`}>
-                                            <td className="p-4 w-12 text-center"><input type="checkbox" disabled={isLockedForTesting} className="h-5 w-5 rounded cursor-pointer border-2 border-base-300 dark:border-base-600 text-indigo-600" checked={selectedItems[sourceDocId]?.has(task._id!) || false} onChange={e => handleSelectItem(sourceDocId, task._id!, e.target.checked)}/></td>
+                                        <tr key={task._id} className={`bg-white dark:bg-base-900 hover:bg-indigo-50/40 ${isItemActiveInOps ? 'bg-purple-50/20' : ''} ${isItemDoneInOps ? 'bg-emerald-50/30' : ''}`}>
+                                            <td className="p-4 w-12 text-center"><input type="checkbox" disabled={isLockedForTesting} className={`h-5 w-5 rounded cursor-pointer border-2 border-base-300 dark:border-base-600 text-indigo-600 ${isLockedForTesting ? 'opacity-30 cursor-not-allowed' : ''}`} checked={selectedItems[sourceDocId]?.has(task._id!) || false} onChange={e => handleSelectItem(sourceDocId, task._id!, e.target.checked)}/></td>
                                             <td className="p-4">
                                                 <div className="flex justify-between items-start mb-1 gap-4">
-                                                    <div className="flex flex-col gap-1 min-w-0 flex-grow">
+                                                    <div className={`flex flex-col gap-1 min-w-0 flex-grow ${isLockedForTesting ? 'opacity-50 grayscale' : ''}`}>
                                                         <div className="flex items-center gap-2">
                                                             <span className="font-black text-[15px] uppercase truncate text-base-955 dark:text-white leading-tight tracking-tight">{sampleLabel}</span>
                                                             {isReady && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[8px] font-black rounded uppercase tracking-widest border border-emerald-300">Ready</span>}
                                                             {isInPrep && <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-black rounded uppercase tracking-widest border border-amber-300">In Prep</span>}
                                                             {isReturned && <span className="px-2 py-0.5 bg-rose-600 text-white text-[8px] font-black rounded uppercase tracking-widest animate-pulse shadow-sm">Returned</span>}
-                                                            {isItemActiveInOps && !isItemDoneInOps && <span className="px-2 py-0.5 bg-purple-600 text-white text-[8px] font-black rounded uppercase tracking-widest shadow-sm">ON OPS</span>}
-                                                            {isItemDoneInOps && <span className="px-2 py-0.5 bg-emerald-600 text-white text-[8px] font-black rounded uppercase tracking-widest shadow-sm">COMPLETED</span>}
+                                                            {isItemActiveInOps && !isItemDoneInOps && <span className="px-2 py-0.5 bg-purple-600 text-white text-[8px] font-black rounded uppercase tracking-widest shadow-sm cursor-help" title="Item is currently in ops. Selecting this will clone it for a Repeat Test.">ON OPS</span>}
+                                                            {isItemDoneInOps && <span className="px-2 py-0.5 bg-emerald-600 text-white text-[8px] font-black rounded uppercase tracking-widest shadow-sm cursor-help" title="Item completed previously. Selecting this will clone it for a Repeat Test.">COMPLETED</span>}
                                                         </div>
                                                         <p className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300">{String(getTaskValue(task, 'Variant'))}</p>
                                                         
@@ -507,7 +511,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     }, [assignedGlobal]);
 
     // Create a Set of signatures for all currently assigned tasks (Item Level)
-    // Updated to map signatures to status for "DONE" detection
     const assignedItemSignatures = useMemo(() => {
         const sigs = new Map<string, TaskStatus>();
         assignedGlobal.forEach(doc => {
@@ -553,17 +556,18 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         return duplicates;
     }, [categorizedTasks]);
 
+    // ... [inventoryAudit, categoryTotals, gridHeaders, manualTasksFlattened, selectedItemCount, handleAddManualMission, handleDeleteConfirm, handleAutoCleanCompleted, handleBatchForceDone, handleMergeDuplicates, handleBatchWipe, handleSaveTaskEdit Logic remains same] ...
+    
+    // REDEFINE THESE HOOKS IF THEY ARE MISSING IN CONTEXT BUT THEY SHOULD BE HERE FROM PREVIOUS FILE
     const inventoryAudit = useMemo(() => {
         let totalDBItems = 0;
         let visibleInGrid = 0;
         let assignedToStaff = 0;
         const seenIds = new Set<string>();
-        
         categorizedTasks.forEach(doc => {
             doc.tasks.forEach(task => {
                 if (task._id && seenIds.has(task._id)) return;
                 if (task._id) seenIds.add(task._id);
-
                 totalDBItems++;
                 const isAssigned = task._id && assignedStateGlobal.ids.has(task._id);
                 if (isAssigned && doc.category !== TaskCategory.Manual) assignedToStaff++;
@@ -577,13 +581,11 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         const counts: Record<string, number> = { all: 0, pocat: 0, urgent: 0, normal: 0, manual: 0 };
         const localAssignedIds = assignedStateGlobal.ids;
         const seenIds = new Set<string>();
-        
         categorizedTasks.forEach(doc => {
             const cat = doc.category.toLowerCase();
             doc.tasks.forEach(task => {
                 if (task._id && seenIds.has(task._id)) return;
                 if (task._id) seenIds.add(task._id);
-
                 const isAssigned = task._id && localAssignedIds.has(task._id);
                 if (isAssigned && cat !== 'manual') return;
                 counts.all++;
@@ -597,13 +599,9 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         const groupsMap = new Map<string, string[]>();
         testMappings.forEach(m => {
             if (!m.headerGroup || !m.headerSub) return;
-            if (!groupsMap.has(m.headerGroup)) {
-                groupsMap.set(m.headerGroup, []);
-            }
+            if (!groupsMap.has(m.headerGroup)) groupsMap.set(m.headerGroup, []);
             const key = `${m.headerGroup}|${m.headerSub}`;
-            if (!groupsMap.get(m.headerGroup)!.includes(key)) {
-                groupsMap.get(m.headerGroup)!.push(key);
-            }
+            if (!groupsMap.get(m.headerGroup)!.includes(key)) groupsMap.get(m.headerGroup)!.push(key);
         });
         return Array.from(groupsMap.entries());
     }, [testMappings]);
@@ -612,9 +610,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         const flat: { docId: string; id: string; task: RawTask; index: number }[] = [];
         categorizedTasks.forEach(doc => {
             if (doc.category === TaskCategory.Manual) {
-                doc.tasks.forEach((task, index) => {
-                    flat.push({ docId: doc.docId!, id: doc.id, task, index });
-                });
+                doc.tasks.forEach((task, index) => flat.push({ docId: doc.docId!, id: doc.id, task, index }));
             }
         });
         return flat;
@@ -648,48 +644,29 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         } catch (e) { setNotification({ message: "Failed to delete task.", isError: true }); } finally { setIsAssigning(false); setDeleteConfirm(null); }
     };
 
-    // New Function: Auto Clean Completed Items
     const handleAutoCleanCompleted = async () => {
         if (completedItemsCount === 0) return;
         setIsAssigning(true);
         try {
             const batch = firestore.batch();
             let deleteCount = 0;
-
             categorizedTasks.forEach(doc => {
                 const originalTasks = doc.tasks;
                 const remainingTasks = originalTasks.filter(task => {
                     const sig = getTaskSignature(doc.id, task);
                     const status = assignedItemSignatures.get(sig);
-                    // Keep the task ONLY if it is NOT Done
                     return status !== TaskStatus.Done;
                 });
-
                 if (remainingTasks.length !== originalTasks.length) {
                     deleteCount += (originalTasks.length - remainingTasks.length);
-                    if (remainingTasks.length === 0) {
-                        batch.delete(firestore.collection('categorizedTasks').doc(doc.docId));
-                    } else {
-                        batch.update(firestore.collection('categorizedTasks').doc(doc.docId), { tasks: remainingTasks });
-                    }
+                    if (remainingTasks.length === 0) batch.delete(firestore.collection('categorizedTasks').doc(doc.docId));
+                    else batch.update(firestore.collection('categorizedTasks').doc(doc.docId), { tasks: remainingTasks });
                 }
             });
-
-            if (deleteCount > 0) {
-                await batch.commit();
-                setNotification({ message: `Successfully cleaned ${deleteCount} completed items from the grid.` });
-                fetchData();
-            } else {
-                setNotification({ message: "No items to clean." });
-            }
-        } catch (e) {
-            setNotification({ message: "Failed to clean completed tasks.", isError: true });
-        } finally {
-            setIsAssigning(false);
-        }
+            if (deleteCount > 0) { await batch.commit(); setNotification({ message: `Successfully cleaned ${deleteCount} completed items from the grid.` }); fetchData(); } else { setNotification({ message: "No items to clean." }); }
+        } catch (e) { setNotification({ message: "Failed to clean completed tasks.", isError: true }); } finally { setIsAssigning(false); }
     };
 
-    // --- NEW FEATURE: Force Mark as Done ---
     const handleBatchForceDone = async () => {
         if (selectedItemCount === 0) return;
         setIsAssigning(true);
@@ -697,125 +674,43 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
             const batch = firestore.batch();
             const assignments: Record<string, RawTask[]> = {};
             const docsToUpdate = new Map<string, RawTask[]>();
-
-            // 1. Prepare items to be moved to AssignedTasks with 'Done' status
             for (const docId in selectedItems) {
                 const ids = selectedItems[docId]; if (!ids || ids.size === 0) continue;
                 const original = categorizedTasks.find(t => t.docId === docId); if (!original) continue;
-                
                 const selectedTasks = original.tasks.filter(t => ids.has(t._id!));
-                
-                // Add to Assignments map
                 selectedTasks.forEach(t => { 
-                    const clean = { ...t }; 
-                    delete clean.status; 
-                    delete clean.preparationStatus;
-                    // Force Status to Done
-                    clean.status = TaskStatus.Done;
-                    
+                    const clean = { ...t }; delete clean.status; delete clean.preparationStatus; clean.status = TaskStatus.Done;
                     if (original.category === 'manual') clean._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
-                    if (!assignments[original.id]) assignments[original.id] = []; 
-                    assignments[original.id].push(clean);
+                    if (!assignments[original.id]) assignments[original.id] = []; assignments[original.id].push(clean);
                 });
-
-                // Calculate remaining tasks for the Pool
                 const remainingTasks = original.tasks.filter(t => !ids.has(t._id!));
                 docsToUpdate.set(docId, remainingTasks);
             }
-
-            // 2. Add to AssignedTasks Collection
             for (const [rid, tasks] of Object.entries(assignments)) {
-                batch.set(firestore.collection('assignedTasks').doc(), { 
-                    requestId: rid, 
-                    tasks, 
-                    category: categorizedTasks.find(c => c.id === rid)?.category || 'normal', 
-                    testerId: 'legacy_data_fix', // Special ID for forced done items
-                    testerName: 'Legacy / Manual Done', 
-                    assignedDate: selectedDate, 
-                    shift: selectedShift, 
-                    status: TaskStatus.Done 
-                });
+                batch.set(firestore.collection('assignedTasks').doc(), { requestId: rid, tasks, category: categorizedTasks.find(c => c.id === rid)?.category || 'normal', testerId: 'legacy_data_fix', testerName: 'Legacy / Manual Done', assignedDate: selectedDate, shift: selectedShift, status: TaskStatus.Done });
             }
-
-            // 3. Remove from Pool (CategorizedTasks)
             for (const [docId, remaining] of docsToUpdate.entries()) {
-                if (remaining.length === 0) {
-                    batch.delete(firestore.collection('categorizedTasks').doc(docId));
-                } else {
-                    batch.update(firestore.collection('categorizedTasks').doc(docId), { tasks: remaining });
-                }
+                if (remaining.length === 0) batch.delete(firestore.collection('categorizedTasks').doc(docId));
+                else batch.update(firestore.collection('categorizedTasks').doc(docId), { tasks: remaining });
             }
-
-            await batch.commit();
-            setSelectedItems({});
-            setExpandedCell(null);
-            fetchData();
-            setNotification({ message: `Successfully marked ${selectedItemCount} items as Done.` });
-
-        } catch (e) {
-            setNotification({ message: "Failed to mark items as done.", isError: true });
-        } finally {
-            setIsAssigning(false);
-        }
+            await batch.commit(); setSelectedItems({}); setExpandedCell(null); fetchData(); setNotification({ message: `Successfully marked ${selectedItemCount} items as Done.` });
+        } catch (e) { setNotification({ message: "Failed to mark items as done.", isError: true }); } finally { setIsAssigning(false); }
     };
 
-    // --- NEW FEATURE: MERGE DUPLICATES ---
     const handleMergeDuplicates = async (requestId: string) => {
         setIsAssigning(true);
         try {
-            // 1. Get all docs for this ID
             const targetDocs = categorizedTasks.filter(d => d.id === requestId && d.category !== TaskCategory.Manual);
-            
-            if (targetDocs.length < 2) {
-                 setNotification({ message: "No duplicates found to merge." });
-                 return;
-            }
-
-            // 2. Collect unique tasks
+            if (targetDocs.length < 2) { setNotification({ message: "No duplicates found to merge." }); return; }
             const uniqueTasksMap = new Map<string, RawTask>();
-            targetDocs.forEach(doc => {
-                doc.tasks.forEach(task => {
-                    // Use the existing signature helper
-                    const sig = getTaskSignature(requestId, task);
-                    
-                    // Priority logic: 
-                    // If we already have this task, prefer the one that has more info (e.g. notes)
-                    // For now, keep the first one found, ignore subsequent identicals.
-                    if (!uniqueTasksMap.has(sig)) {
-                        uniqueTasksMap.set(sig, task);
-                    }
-                });
-            });
-
+            targetDocs.forEach(doc => { doc.tasks.forEach(task => { const sig = getTaskSignature(requestId, task); if (!uniqueTasksMap.has(sig)) uniqueTasksMap.set(sig, task); }); });
             const mergedTasks = Array.from(uniqueTasksMap.values());
-
-            // 3. Batch Operation
             const batch = firestore.batch();
-            
-            // Delete old docs
-            targetDocs.forEach(doc => {
-                batch.delete(firestore.collection('categorizedTasks').doc(doc.docId));
-            });
-
-            // Create new single doc
+            targetDocs.forEach(doc => batch.delete(firestore.collection('categorizedTasks').doc(doc.docId)));
             const newDocRef = firestore.collection('categorizedTasks').doc();
-            batch.set(newDocRef, {
-                id: requestId,
-                category: targetDocs[0].category, // Inherit category from first found
-                tasks: mergedTasks,
-                createdAt: new Date().toISOString()
-            });
-
-            await batch.commit();
-            fetchData();
-            setNotification({ message: `Merged ${targetDocs.length} records into 1 clean record.` });
-
-        } catch (e) {
-            console.error(e);
-            setNotification({ message: "Merge failed.", isError: true });
-        } finally {
-            setIsAssigning(false);
-        }
+            batch.set(newDocRef, { id: requestId, category: targetDocs[0].category, tasks: mergedTasks, createdAt: new Date().toISOString() });
+            await batch.commit(); fetchData(); setNotification({ message: `Merged ${targetDocs.length} records into 1 clean record.` });
+        } catch (e) { console.error(e); setNotification({ message: "Merge failed.", isError: true }); } finally { setIsAssigning(false); }
     };
 
     const handleBatchWipe = async () => {
@@ -824,7 +719,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         try {
             const batch = firestore.batch();
             const docsToUpdate = new Map<string, RawTask[]>();
-            
             categorizedTasks.forEach(doc => {
                 const selectedIdsInDoc = selectedItems[doc.docId!] || new Set();
                 if (selectedIdsInDoc.size > 0) {
@@ -832,25 +726,12 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     docsToUpdate.set(doc.docId!, remainingTasks);
                 }
             });
-
             for (const [docId, remaining] of docsToUpdate.entries()) {
-                if (remaining.length === 0) {
-                    batch.delete(firestore.collection('categorizedTasks').doc(docId));
-                } else {
-                    batch.update(firestore.collection('categorizedTasks').doc(docId), { tasks: remaining });
-                }
+                if (remaining.length === 0) batch.delete(firestore.collection('categorizedTasks').doc(docId));
+                else batch.update(firestore.collection('categorizedTasks').doc(docId), { tasks: remaining });
             }
-
-            await batch.commit();
-            setSelectedItems({});
-            setBatchDeleteStage(0);
-            fetchData();
-            setNotification({ message: `Permanently deleted ${selectedItemCount} items.` });
-        } catch (e) {
-            setNotification({ message: "Failed to wipe selected tasks.", isError: true });
-        } finally {
-            setIsAssigning(false);
-        }
+            await batch.commit(); setSelectedItems({}); setBatchDeleteStage(0); fetchData(); setNotification({ message: `Permanently deleted ${selectedItemCount} items.` });
+        } catch (e) { setNotification({ message: "Failed to wipe selected tasks.", isError: true }); } finally { setIsAssigning(false); }
     };
 
     const handleSaveTaskEdit = async (updatedTask: RawTask) => {
@@ -887,22 +768,9 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
             if (filteredDocs.length === 0) return;
             if (search && !group.rid.toLowerCase().includes(search)) return;
 
-            // Check if this row is considered a "duplicate source" (multiple docs for same ID in Pool)
             const isDuplicateRow = duplicateRequestIds.has(group.rid.trim().toUpperCase());
 
-            const row = { 
-                requestId: group.rid, 
-                cells: {} as any, 
-                unmappedItems: [] as any, 
-                minDueDate: Infinity, 
-                itemCount: 0, 
-                availableItems: 0, 
-                isPoCat: false, 
-                isUrgent: false, 
-                isManual: false,
-                isDuplicateRow: isDuplicateRow, 
-                customerRemarks: [] as {source: string, text: string}[]
-            };
+            const row = { requestId: group.rid, cells: {} as any, unmappedItems: [] as any, minDueDate: Infinity, itemCount: 0, availableItems: 0, isPoCat: false, isUrgent: false, isManual: false, isDuplicateRow: isDuplicateRow, customerRemarks: [] as {source: string, text: string}[] };
             
             const seenTaskIdsInRow = new Set<string>();
             const uniqueRemarkTexts = new Set<string>();
@@ -915,8 +783,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     if (task._id && seenTaskIdsInRow.has(task._id)) return;
                     if (task._id) seenTaskIdsInRow.add(task._id);
 
-                    // Check if *this specific item* is already in Ops (duplicate check)
-                    // We check signatures against currently assigned tasks
                     const itemSignature = getTaskSignature(group.rid, task);
                     const activeStatus = assignedItemSignatures.get(itemSignature);
                     const isItemActiveInOps = activeStatus !== undefined;
@@ -930,13 +796,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     row.itemCount++;
                     if (task.preparationStatus !== 'Awaiting Preparation') row.availableItems++;
                     
-                    const fields = [
-                        { key: 'Remark (Requester)', label: 'Request Remark' },
-                        { key: 'Note to planer', label: 'Planer Note (Cust)' },
-                        { key: 'Additional Information', label: 'Extra Info' },
-                        { key: 'Testing Condition', label: 'Cust Condition' }
-                    ];
-
+                    const fields = [{ key: 'Remark (Requester)', label: 'Request Remark' }, { key: 'Note to planer', label: 'Planer Note (Cust)' }, { key: 'Additional Information', label: 'Extra Info' }, { key: 'Testing Condition', label: 'Cust Condition' }];
                     fields.forEach(f => {
                         const val = String(getTaskValue(task, f.key) || '').trim();
                         if (val && val !== '-' && val.toLowerCase() !== 'n/a' && !uniqueRemarkTexts.has(val)) {
@@ -948,12 +808,8 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     // Pass isItemActiveInOps and isItemDoneInOps to the cell renderer
                     const item = { task, originalIndex: index, sourceDocId: doc.docId!, requestId: group.rid, isItemActiveInOps, isItemDoneInOps };
                     const colKey = getTaskGridColumnKey(task, testMappings);
-                    if (colKey) { 
-                        if (!row.cells[colKey]) row.cells[colKey] = []; 
-                        row.cells[colKey].push(item); 
-                    } else {
-                        row.unmappedItems.push(item);
-                    }
+                    if (colKey) { if (!row.cells[colKey]) row.cells[colKey] = []; row.cells[colKey].push(item); } 
+                    else { row.unmappedItems.push(item); }
                 });
             });
             if (row.itemCount > 0) rows.push(row);
@@ -985,33 +841,83 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         try {
             const batch = firestore.batch();
             const assignments: Record<string, RawTask[]> = {};
+            
+            // Logic to update pool (remove assigned items)
+            const poolUpdates: Map<string, RawTask[]> = new Map();
+            const poolDeletes: string[] = [];
+
             for (const docId in selectedItems) {
                 const ids = selectedItems[docId]; if (!ids || ids.size === 0) continue;
                 const original = categorizedTasks.find(t => t.docId === docId); if (!original) continue;
                 const selectedTasks = original.tasks.filter(t => ids.has(t._id!));
+                
                 if (isAssigningToPrepare && original.category !== 'manual') {
                     const indices = original.tasks.map((t, i) => ids.has(t._id!) ? i : -1).filter(i => i !== -1);
                     await assignItemsToPrepare(original, indices, person, selectedDate, selectedShift);
                 } else {
                     selectedTasks.forEach(t => { 
-                        const clean = { ...t }; delete clean.status; delete clean.preparationStatus;
-                        if (original.category === 'manual') clean._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
-                        if (!assignments[original.id]) assignments[original.id] = []; assignments[original.id].push(clean);
+                        const clean = { ...t }; 
+                        delete clean.status; 
+                        delete clean.preparationStatus;
+                        
+                        // AUTO-CLONE LOGIC FOR REPEAT TESTS
+                        // Generate new ID if:
+                        // 1. It is a Manual task (always unique instance)
+                        // 2. It has a signature match with an existing active/done task (Repeat Test)
+                        // 3. Or just always for safety when moving from Pool to Assignment to break link?
+                        //    SAFE MODE: Always regenerate ID when assigning from pool to ensure data separation.
+                        clean._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
+                        
+                        if (!assignments[original.id]) assignments[original.id] = []; 
+                        assignments[original.id].push(clean);
+                    });
+
+                    // Prepare pool cleanup (remove selected items from source doc)
+                    const remainingTasks = original.tasks.filter(t => !ids.has(t._id!));
+                    if (remainingTasks.length === 0) {
+                        poolDeletes.push(docId);
+                    } else {
+                        poolUpdates.set(docId, remainingTasks);
+                    }
+                }
+            }
+
+            if (!isAssigningToPrepare) {
+                // Save assignments
+                for (const [rid, tasks] of Object.entries(assignments)) {
+                    batch.set(firestore.collection('assignedTasks').doc(), { 
+                        requestId: rid, 
+                        tasks, 
+                        category: categorizedTasks.find(c => c.id === rid)?.category || 'normal', 
+                        testerId: person.id, 
+                        testerName: person.name, 
+                        assignedDate: selectedDate, 
+                        shift: selectedShift, 
+                        status: 'Pending' 
                     });
                 }
+                
+                // Cleanup Pool
+                poolDeletes.forEach(did => batch.delete(firestore.collection('categorizedTasks').doc(did)));
+                poolUpdates.forEach((tasks, did) => batch.update(firestore.collection('categorizedTasks').doc(did), { tasks }));
             }
-            if (!isAssigningToPrepare) {
-                for (const [rid, tasks] of Object.entries(assignments)) {
-                    batch.set(firestore.collection('assignedTasks').doc(), { requestId: rid, tasks, category: categorizedTasks.find(c => c.id === rid)?.category || 'normal', testerId: person.id, testerName: person.name, assignedDate: selectedDate, shift: selectedShift, status: 'Pending' });
-                }
-            }
-            await batch.commit(); setSelectedItems({}); setExpandedCell(null); fetchData(); setNotification({ message: "Assignment Complete." });
-        } catch (e) { setNotification({ message: "Error in assignment", isError: true }); } finally { setIsAssigning(false); setIsModalOpen(false); }
+            
+            await batch.commit(); 
+            setSelectedItems({}); 
+            setExpandedCell(null); 
+            fetchData(); 
+            setNotification({ message: "Assignment Complete." });
+        } catch (e) { 
+            console.error(e);
+            setNotification({ message: "Error in assignment", isError: true }); 
+        } finally { 
+            setIsAssigning(false); 
+            setIsModalOpen(false); 
+        }
     };
 
     const handleExportGrid = () => {
         if (!gridData || gridData.length === 0) return;
-        // ... (Export logic unchanged) ...
         const row1 = ["Due Date", "Request ID"];
         const row2 = ["", ""];
         activeColumnKeys.forEach(key => { const [group, sub] = key.split('|'); row1.push(group); row2.push(sub); });
