@@ -4,7 +4,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import type { RawTask, GroupedTask } from '../types';
 import { TaskCategory } from '../types';
 import { addCategorizedTask, getAllExistingRequestIds } from '../services/dataService';
-import { ChevronDownIcon, UploadIcon, DownloadIcon, RefreshIcon, SparklesIcon, CheckCircleIcon, XCircleIcon, AlertTriangleIcon } from './common/Icons';
+import { ChevronDownIcon, UploadIcon, DownloadIcon, RefreshIcon, SparklesIcon, CheckCircleIcon, XCircleIcon, AlertTriangleIcon, ArrowUturnLeftIcon } from './common/Icons';
 
 declare const XLSX: any;
 
@@ -59,38 +59,51 @@ const generateId = () => Math.random().toString(36).substring(2) + Date.now().to
 const SkippedListModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
-    skippedIds: string[];
-}> = ({ isOpen, onClose, skippedIds }) => {
+    skippedGroups: GroupedTask[];
+    onForceImport: (group: GroupedTask) => void;
+}> = ({ isOpen, onClose, skippedGroups, onForceImport }) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-base-900/80 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-fade-in" onClick={onClose}>
-            <div className="bg-white dark:bg-base-900 rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden flex flex-col border border-white/20 max-h-[80vh]" onClick={e => e.stopPropagation()}>
+            <div className="bg-white dark:bg-base-900 rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col border border-white/20 max-h-[80vh]" onClick={e => e.stopPropagation()}>
                 <div className="p-6 border-b border-base-100 dark:border-base-800 bg-amber-50 dark:bg-amber-900/20 flex justify-between items-center shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-amber-100 text-amber-600 rounded-xl"><AlertTriangleIcon className="h-6 w-6"/></div>
                         <div>
                             <h3 className="text-lg font-black text-base-900 dark:text-white uppercase tracking-tighter">Skipped Duplicates</h3>
-                            <p className="text-[10px] font-bold text-base-500 uppercase tracking-widest">{skippedIds.length} Items Found in Database</p>
+                            <p className="text-[10px] font-bold text-base-500 uppercase tracking-widest">{skippedGroups.length} Request IDs Found in Database</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-amber-100 rounded-full transition-colors"><XCircleIcon className="h-6 w-6 text-base-400"/></button>
                 </div>
                 <div className="p-6 overflow-y-auto custom-scrollbar flex-grow bg-white dark:bg-base-955">
                     <p className="text-xs font-medium text-base-500 mb-4 leading-relaxed">
-                        The following Request IDs were found in the uploaded file but <strong className="text-amber-600">already exist</strong> in the system (Pool, Assigned, or Completed). They were skipped to prevent duplication.
+                        These IDs were skipped because they already exist in the system. 
+                        <br/><span className="text-indigo-600 font-bold">Tip:</span> If you are trying to restore a recalled or lost task, use <strong>"Import Anyway"</strong> to force it back into the queue.
                     </p>
                     <ul className="space-y-2">
-                        {skippedIds.map((id, idx) => (
-                            <li key={idx} className="flex items-center gap-3 p-3 bg-base-50 dark:bg-base-900 rounded-xl border border-base-100 dark:border-base-800">
-                                <span className="text-[10px] font-black text-base-400 w-6 text-center">{idx + 1}</span>
-                                <span className="text-sm font-black text-base-800 dark:text-base-200 uppercase tracking-tight">{id}</span>
+                        {skippedGroups.map((group, idx) => (
+                            <li key={idx} className="flex items-center justify-between p-3 bg-base-50 dark:bg-base-900 rounded-xl border border-base-100 dark:border-base-800 hover:border-amber-200 transition-all">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-[10px] font-black text-base-400 w-6 text-center">{idx + 1}</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-black text-base-800 dark:text-base-200 uppercase tracking-tight">{group.id}</span>
+                                        <span className="text-[9px] font-bold text-base-400">{group.tasks.length} items</span>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => onForceImport(group)}
+                                    className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-1 border border-indigo-100 dark:border-indigo-800"
+                                >
+                                    <ArrowUturnLeftIcon className="h-3 w-3" /> Import Anyway
+                                </button>
                             </li>
                         ))}
                     </ul>
                 </div>
                 <div className="p-4 border-t border-base-100 dark:border-base-800 bg-base-50 dark:bg-base-900/50 flex justify-center shrink-0">
                     <button onClick={onClose} className="px-8 py-3 bg-white dark:bg-base-800 border-2 border-base-200 dark:border-base-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-base-50 transition-all shadow-sm">
-                        Acknowledge & Close
+                        Close
                     </button>
                 </div>
             </div>
@@ -107,8 +120,9 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
     const [groupedTasks, setGroupedTasks] = useState<GroupedTask[]>([]);
     const [fileName, setFileName] = useState('');
     const [globalFilter, setGlobalFilter] = useState('');
-    const [skippedCount, setSkippedCount] = useState(0);
-    const [skippedIds, setSkippedIds] = useState<string[]>([]);
+    
+    // Updated state to store full groups instead of just IDs
+    const [skippedGroups, setSkippedGroups] = useState<GroupedTask[]>([]);
     const [showSkippedModal, setShowSkippedModal] = useState(false);
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -153,19 +167,17 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
 
     const processData = useCallback(async () => {
         setIsProcessing(true);
-        setSkippedCount(0);
-        setSkippedIds([]);
+        setSkippedGroups([]);
         
         try {
             // Fetch all existing Request IDs currently in the system (Assigned, Pool, etc.)
             const existingRequestIds = await getAllExistingRequestIds();
-            const processedTasks: RawTask[] = [];
-            const skippedList: string[] = [];
-            let duplicatesSkipped = 0;
+            
+            // Temporary storage for processing
+            const validTasks: RawTask[] = [];
+            const duplicateTasksMap: Record<string, RawTask[]> = {};
 
-            // Helper to track duplicates within the file itself to avoid double counting
-            const seenInFile = new Set<string>();
-
+            // 1. First pass: Clean and validate tasks
             rawTasks.forEach(task => {
                 const baseTask: RawTask = {};
                 for (const key in task) {
@@ -174,58 +186,69 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
 
                 if (!isValidTask(baseTask)) return;
 
-                // CHECK FOR DUPLICATES
-                const reqId = String(getTaskValue(baseTask, 'Request ID') || '').trim().toUpperCase();
-                
-                if (reqId) {
-                    if (existingRequestIds.has(reqId)) {
-                        if (!seenInFile.has(reqId)) {
-                            skippedList.push(reqId);
-                            seenInFile.add(reqId);
-                        }
-                        duplicatesSkipped++;
-                        return; // Skip
-                    }
-                }
-
                 // Robust Thai character normalization for splitting logic
                 const desc = String(getTaskValue(baseTask, 'Description') || '').normalize('NFC').trim();
                 const SPECIAL_KEYWORD = "การสกัด EbP,hPP ใน ICP".normalize('NFC');
 
+                const tasksToProcess = [];
+
                 if (desc === SPECIAL_KEYWORD) {
                     const variantKey = Object.keys(baseTask).find(k => k.toLowerCase() === 'variant') || 'Variant';
-                    
                     // Task 1: PER-ICP
                     const task1 = { ...baseTask, _id: generateId() };
                     task1[variantKey] = "PER-ICP";
-                    processedTasks.push(task1);
-
+                    tasksToProcess.push(task1);
                     // Task 2: HppEbp-ICP
                     const task2 = { ...baseTask, _id: generateId() };
                     task2[variantKey] = "HppEbp-ICP";
-                    processedTasks.push(task2);
+                    tasksToProcess.push(task2);
                 } else {
-                    processedTasks.push({ ...baseTask, _id: generateId() });
+                    tasksToProcess.push({ ...baseTask, _id: generateId() });
                 }
+
+                // 2. Second pass: Check duplicates against DB
+                tasksToProcess.forEach(processedTask => {
+                    const reqId = String(getTaskValue(processedTask, 'Request ID') || '').trim().toUpperCase();
+                    if (reqId && existingRequestIds.has(reqId)) {
+                        if (!duplicateTasksMap[reqId]) duplicateTasksMap[reqId] = [];
+                        duplicateTasksMap[reqId].push(processedTask);
+                    } else {
+                        validTasks.push(processedTask);
+                    }
+                });
             });
 
+            // Group valid tasks
             const grouped: Record<string, RawTask[]> = {};
-            for (const task of processedTasks) {
+            for (const task of validTasks) {
                 const requestId = String(getTaskValue(task, 'Request ID') || `no-id-${Math.random()}`);
                 if (!grouped[requestId]) grouped[requestId] = [];
                 grouped[requestId].push(task);
             }
 
+            // Set main results
             const result: GroupedTask[] = Object.entries(grouped).map(([id, tasks]) => ({ id, tasks }));
             setGroupedTasks(result);
-            setSkippedCount(duplicatesSkipped);
-            setSkippedIds(skippedList);
+
+            // Set skipped results
+            const skippedResult: GroupedTask[] = Object.entries(duplicateTasksMap).map(([id, tasks]) => ({ id, tasks }));
+            setSkippedGroups(skippedResult);
+
         } catch (error) {
             console.error("Processing Error:", error);
         } finally {
             setIsProcessing(false);
         }
     }, [rawTasks, excludedColumns]);
+
+    const handleForceImport = (group: GroupedTask) => {
+        // Remove from skipped
+        setSkippedGroups(prev => prev.filter(g => g.id !== group.id));
+        // Add to main list (regenerate IDs to ensure uniqueness in UI keying)
+        const freshTasks = group.tasks.map(t => ({ ...t, _id: generateId() }));
+        const freshGroup = { ...group, tasks: freshTasks };
+        setGroupedTasks(prev => [...prev, freshGroup]);
+    };
 
     const handleAiTriage = async () => {
         if (groupedTasks.length === 0) return;
@@ -306,7 +329,12 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
     
     return (
         <div className="space-y-8 animate-slide-in-up p-4">
-            <SkippedListModal isOpen={showSkippedModal} onClose={() => setShowSkippedModal(false)} skippedIds={skippedIds} />
+            <SkippedListModal 
+                isOpen={showSkippedModal} 
+                onClose={() => setShowSkippedModal(false)} 
+                skippedGroups={skippedGroups} 
+                onForceImport={handleForceImport}
+            />
             
             <div className="flex justify-between items-start">
                 <div>
@@ -375,19 +403,19 @@ const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                 </div>
             )}
             
-            {skippedCount > 0 && (
+            {skippedGroups.length > 0 && (
                 <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-[1.5rem] border border-amber-200 dark:border-amber-800/50 flex items-center justify-between gap-3 shadow-sm animate-slide-in-up">
                     <div className="flex items-center gap-3">
                         <CheckCircleIcon className="h-5 w-5 text-amber-500" />
                         <span className="text-xs font-bold text-amber-800 dark:text-amber-200 uppercase tracking-widest">
-                            Smart Guard: {skippedCount} duplicate items were detected and automatically skipped.
+                            Smart Guard: {skippedGroups.length} IDs are already in the system (Hidden). Click to Recover.
                         </span>
                     </div>
                     <button 
                         onClick={() => setShowSkippedModal(true)}
-                        className="px-4 py-2 bg-white dark:bg-base-800 text-amber-600 text-[10px] font-black uppercase tracking-widest rounded-xl shadow-sm hover:bg-amber-50 transition-colors"
+                        className="px-4 py-2 bg-white dark:bg-base-800 text-amber-600 text-[10px] font-black uppercase tracking-widest rounded-xl shadow-sm hover:bg-amber-50 transition-colors border border-amber-100 dark:border-amber-800"
                     >
-                        Review Skipped
+                        Review & Recover
                     </button>
                 </div>
             )}

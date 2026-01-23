@@ -346,68 +346,155 @@ export const unassignTaskToPool = async (categorizedTask: CategorizedTask): Prom
 };
 
 // FORCE RECALL: Pulls a task back from an assignment and makes it available in the pool
-// Enhanced to support return reason and reporting metadata
+// Enhanced to support return reason, reporting metadata, and RE-CREATION if missing in pool.
 export const forceRecallTask = async (taskId: string, reason?: string, returnedBy?: string, date?: string, shift?: string) => {
     const batch = firestore.batch();
-    let isPrepReturn = false;
-    
-    // 1. Find and remove from Assigned Tasks (Analyst)
+    let foundInAssigned = false;
+    let foundInPrep = false;
+
+    // Helper to clean task object and remove undefined fields to prevent Firestore crashes
+    const createCleanTask = (original: RawTask, rReason: string, rBy: string) => {
+        const t = { ...original };
+        delete t.status;
+        delete t.preparationStatus;
+        delete t.notOkReason;
+        t.isReturned = true;
+        t.returnReason = rReason;
+        t.returnedBy = rBy;
+        // plannerNote preserved naturally
+        return t;
+    };
+
+    // 1. Try AssignedTasks (Testing) - These are deleted from pool, so must be recreated
     const assignedSnapshot = await getCollection('assignedTasks').get();
-    assignedSnapshot.forEach((doc: any) => {
+    for (const doc of assignedSnapshot.docs) {
         const data = doc.data() as AssignedTask;
-        const taskIdx = data.tasks.findIndex(t => t._id === taskId);
-        if (taskIdx !== -1) {
+        const task = data.tasks.find(t => t._id === taskId);
+        
+        if (task) {
+            foundInAssigned = true;
+            // Remove from assigned
             const remaining = data.tasks.filter(t => t._id !== taskId);
             if (remaining.length === 0) batch.delete(doc.ref);
             else batch.update(doc.ref, { tasks: remaining });
-        }
-    });
 
-    // 2. Find and remove from Prepare Tasks (Assistant)
-    const prepareSnapshot = await getCollection('assignedPrepareTasks').get();
-    prepareSnapshot.forEach((doc: any) => {
-        const data = doc.data() as AssignedPrepareTask;
-        const taskIdx = data.tasks.findIndex(t => t._id === taskId);
-        if (taskIdx !== -1) {
-            isPrepReturn = true;
-            const remaining = data.tasks.filter(t => t._id !== taskId);
-            if (remaining.length === 0) batch.delete(doc.ref);
-            else batch.update(doc.ref, { tasks: remaining });
-        }
-    });
+            // Create new pool document for this returned task to ensure it reappears
+            const cleanTask = createCleanTask(task, reason || "Recalled", returnedBy || "System");
 
-    // 3. Clean up status in the deployment pool and add return metadata for Dashboard
-    const poolSnapshot = await getCollection('categorizedTasks').get();
-    poolSnapshot.forEach((doc: any) => {
-        const data = doc.data() as CategorizedTask;
-        const taskIdx = data.tasks.findIndex(t => t._id === taskId);
-        if (taskIdx !== -1) {
-            const updated = [...data.tasks];
-            const { status, notOkReason, preparationStatus, isReturned, returnReason, returnedBy: oldBy, ...cleanTask } = updated[taskIdx];
-            
-            // Setting preparationStatus to null ensures it is unlocked for testing assign in the grid
-            const finalTask = {
-                ...cleanTask,
-                isReturned: reason ? true : false,
-                returnReason: reason || null,
-                returnedBy: returnedBy || null,
-                preparationStatus: null,
-                status: null
-            };
-            
-            updated[taskIdx] = finalTask as RawTask;
-            
-            // Mark the document for Dashboard tracking
-            batch.update(doc.ref, { 
-                tasks: updated,
+            const poolDocRef = getCollection('categorizedTasks').doc();
+            batch.set(poolDocRef, {
+                id: data.requestId,
+                category: data.category,
+                tasks: [cleanTask],
                 isReturnedPool: true,
                 returnedDate: date || new Date().toISOString().split('T')[0],
                 shift: shift || 'day',
-                returnedBy: returnedBy || 'Staff',
-                isPrep: isPrepReturn
+                returnedBy: returnedBy || 'System',
+                createdAt: new Date().toISOString()
             });
+            break; // Found it, stop searching assigned
         }
-    });
+    }
+
+    // 2. If not in Assigned, Try AssignedPrepareTasks - These usually exist in pool, need status update
+    if (!foundInAssigned) {
+        const prepareSnapshot = await getCollection('assignedPrepareTasks').get();
+        for (const doc of prepareSnapshot.docs) {
+            const data = doc.data() as AssignedPrepareTask;
+            const task = data.tasks.find(t => t._id === taskId);
+
+            if (task) {
+                foundInPrep = true;
+                // Remove from assigned prep
+                const remaining = data.tasks.filter(t => t._id !== taskId);
+                if (remaining.length === 0) batch.delete(doc.ref);
+                else batch.update(doc.ref, { tasks: remaining });
+
+                // Update original pool doc if it exists
+                if (data.originalDocId) {
+                    const poolDocRef = getCollection('categorizedTasks').doc(data.originalDocId);
+                    const poolDoc = await safeGet(poolDocRef);
+                    
+                    if (poolDoc.exists) {
+                        const poolData = poolDoc.data() as CategorizedTask;
+                        const updatedTasks = [...poolData.tasks];
+                        const poolTaskIndex = updatedTasks.findIndex(t => t._id === taskId);
+                        
+                        if (poolTaskIndex !== -1) {
+                            // Update existing item in pool
+                            const t = { ...updatedTasks[poolTaskIndex] };
+                            delete t.preparationStatus;
+                            t.isReturned = true;
+                            t.returnReason = reason || "Recalled from Prep";
+                            t.returnedBy = returnedBy || "System";
+                            updatedTasks[poolTaskIndex] = t;
+
+                            batch.update(poolDocRef, { 
+                                tasks: updatedTasks,
+                                isReturnedPool: true,
+                                returnedDate: date || new Date().toISOString().split('T')[0],
+                                shift: shift || 'day'
+                            });
+                        } else {
+                            // Rare case: Task not found in original doc (mismatch), recreate safe
+                            const cleanTask = createCleanTask(task, reason || "Recalled from Prep", returnedBy || "System");
+                            const newPoolRef = getCollection('categorizedTasks').doc();
+                            batch.set(newPoolRef, {
+                                id: data.requestId,
+                                category: data.category,
+                                tasks: [cleanTask],
+                                isReturnedPool: true,
+                                returnedDate: date || new Date().toISOString().split('T')[0],
+                                shift: shift || 'day',
+                                isPrep: true
+                            });
+                        }
+                    } else {
+                        // Original doc gone? Create new one.
+                        const cleanTask = createCleanTask(task, reason || "Recalled from Prep", returnedBy || "System");
+                        const newPoolRef = getCollection('categorizedTasks').doc();
+                        batch.set(newPoolRef, {
+                            id: data.requestId,
+                            category: data.category,
+                            tasks: [cleanTask],
+                            isReturnedPool: true,
+                            returnedDate: date || new Date().toISOString().split('T')[0],
+                            shift: shift || 'day',
+                            isPrep: true
+                        });
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    // 3. Fallback: If found nowhere (maybe already in pool but needed flag update, or called erroneously)
+    if (!foundInAssigned && !foundInPrep) {
+        const poolSnapshot = await getCollection('categorizedTasks').get();
+        poolSnapshot.forEach((doc: any) => {
+            const data = doc.data() as CategorizedTask;
+            const taskIdx = data.tasks.findIndex(t => t._id === taskId);
+            if (taskIdx !== -1) {
+                const updated = [...data.tasks];
+                const t = { ...updated[taskIdx] };
+                delete t.status;
+                delete t.preparationStatus;
+                t.isReturned = true;
+                t.returnReason = reason || null;
+                t.returnedBy = returnedBy || null;
+                updated[taskIdx] = t;
+
+                batch.update(doc.ref, { 
+                    tasks: updated,
+                    isReturnedPool: true, 
+                    returnedDate: date || new Date().toISOString().split('T')[0],
+                    shift: shift || 'day',
+                    returnedBy: returnedBy || 'Staff'
+                });
+            }
+        });
+    }
 
     await batch.commit();
 };
