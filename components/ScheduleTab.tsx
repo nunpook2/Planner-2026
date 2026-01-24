@@ -427,8 +427,10 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     const groupedPersonTasks = useMemo(() => {
         const groups: Record<string, { requestId: string, category: TaskCategory, items: { task: RawTask, sourceGroup: AssignedTask, index: number }[] }> = {};
         personTasks.forEach(group => {
-            const effectiveId = group.category === TaskCategory.Manual ? 'AD-HOC-TASKS' : group.requestId;
-            const displayId = group.category === TaskCategory.Manual ? 'MANUAL TASKS' : group.requestId;
+            // UPDATED: No longer override ID for Manual tasks. Use actual Request ID for all.
+            const effectiveId = group.requestId;
+            const displayId = group.requestId;
+            
             if (!groups[effectiveId]) groups[effectiveId] = { requestId: displayId, category: group.category, items: [] };
             group.tasks.forEach((task, idx) => groups[effectiveId].items.push({ task, sourceGroup: group, index: idx }));
         });
@@ -438,8 +440,10 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     const groupedPrepTasks = useMemo(() => {
         const groups: Record<string, { requestId: string, category: TaskCategory, items: { task: RawTask, sourceGroup: AssignedPrepareTask, index: number }[] }> = {};
         personPrepTasks.forEach(group => {
-            const effectiveId = group.category === TaskCategory.Manual ? 'MANUAL-PREP' : group.requestId;
-            const displayId = group.category === TaskCategory.Manual ? 'MANUAL PREP' : group.requestId;
+            // UPDATED: No longer override ID for Manual tasks. Use actual Request ID for all.
+            const effectiveId = group.requestId;
+            const displayId = group.requestId;
+            
             if (!groups[effectiveId]) groups[effectiveId] = { requestId: displayId, category: group.category, items: [] };
             group.tasks.forEach((task, idx) => groups[effectiveId].items.push({ task, sourceGroup: group, index: idx }));
         });

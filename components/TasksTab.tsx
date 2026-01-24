@@ -873,11 +873,14 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                     });
 
                     // Prepare pool cleanup (remove selected items from source doc)
-                    const remainingTasks = original.tasks.filter(t => !ids.has(t._id!));
-                    if (remainingTasks.length === 0) {
-                        poolDeletes.push(docId);
-                    } else {
-                        poolUpdates.set(docId, remainingTasks);
+                    // NEW CHANGE: Only update pool if category is NOT Manual
+                    if (original.category !== TaskCategory.Manual) {
+                        const remainingTasks = original.tasks.filter(t => !ids.has(t._id!));
+                        if (remainingTasks.length === 0) {
+                            poolDeletes.push(docId);
+                        } else {
+                            poolUpdates.set(docId, remainingTasks);
+                        }
                     }
                 }
             }
