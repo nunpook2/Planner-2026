@@ -274,7 +274,7 @@ const MonthView: React.FC<{
 
 const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-    const [viewMode, setViewMode] = useState<'day' | 'month'>('day');
+    const [viewMode, setViewMode] = useState<'day' | 'month'>('month');
     const [monthViewDate, setMonthViewDate] = useState(new Date()); 
     
     const [bookings, setBookings] = useState<Booking[]>([]); 
