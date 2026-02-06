@@ -8,11 +8,12 @@ import DashboardTab from './components/DashboardTab';
 import SettingsTab from './components/SettingsTab';
 import EquipmentTab from './components/EquipmentTab';
 import QualityDashboard from './components/QualityDashboard';
+import BookingTab from './components/BookingTab'; // Import the new Booking Tab
 import { getTesters, getAssignedTasks } from './services/dataService';
 import type { Tester, AssignedTask } from './types';
 import { TaskStatus } from './types';
 // Import RefreshIcon from common icons to fix the 'Cannot find name' error
-import { DatabaseIcon, UploadIcon, ClipboardListIcon, CalendarIcon, CogIcon, BeakerIcon, AlertTriangleIcon, RefreshIcon } from './components/common/Icons';
+import { DatabaseIcon, UploadIcon, ClipboardListIcon, CalendarIcon, CogIcon, BeakerIcon, AlertTriangleIcon, RefreshIcon, UserCircleIcon } from './components/common/Icons'; // Added UserCircleIcon for Booking
 
 const LoadingSpinner = () => (
     <div className="flex flex-col items-center justify-center h-full animate-fade-in">
@@ -120,6 +121,7 @@ const App: React.FC = () => {
                     onShiftChange={setGlobalSelectedShift}
                 />
             );
+            case 'booking': return <BookingTab testers={testers} />; // New Booking Tab
             case 'equipment': return <EquipmentTab />;
             case 'roster': return (
                 <RosterTab 
@@ -223,6 +225,7 @@ const App: React.FC = () => {
                             <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
                             <TabButton tabName="import" label="Import Data" icon={<UploadIcon className="h-5 w-5"/>} />
                             <TabButton tabName="tasks" label="Assign Tasks" icon={<ClipboardListIcon className="h-5 w-5"/>} />
+                            <TabButton tabName="booking" label="Special Booking" icon={<UserCircleIcon className="h-5 w-5"/>} />
                             <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
                             <TabButton tabName="schedule" label="Shift Tracking" icon={<CalendarIcon className="h-5 w-5"/>} />
                             <TabButton tabName="dashboard" label="Shift Summary" icon={<BeakerIcon className="h-5 w-5"/>} />
@@ -238,7 +241,7 @@ const App: React.FC = () => {
                         <TabButton tabName="import" label="" icon={<UploadIcon className="h-5 w-5"/>} />
                         <TabButton tabName="tasks" label="" icon={<ClipboardListIcon className="h-5 w-5"/>} />
                         <TabButton tabName="schedule" label="" icon={<CalendarIcon className="h-5 w-5"/>} />
-                        <TabButton tabName="dashboard" label="" icon={<BeakerIcon className="h-5 w-5"/>} />
+                        <TabButton tabName="booking" label="" icon={<UserCircleIcon className="h-5 w-5"/>} />
                     </div>
 
                     <main className="flex-1 min-w-0 min-h-[calc(100vh-8rem)]">

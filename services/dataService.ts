@@ -1,6 +1,6 @@
 
 import { firestore } from './firebase';
-import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog } from '../types';
+import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog, Booking } from '../types';
 import { TaskCategory } from '../types';
 
 // Export firestore for use in components
@@ -529,7 +529,7 @@ export const runCleanup = async () => {
 
 export const clearAllTaskData = async () => {
     if (!firestore) throw new Error("Database not initialized");
-    const collections = ['categorizedTasks', 'assignedTasks', 'assignedPrepareTasks', 'shiftReports'];
+    const collections = ['categorizedTasks', 'assignedTasks', 'assignedPrepareTasks', 'shiftReports', 'bookings'];
     for (const colName of collections) {
         const snapshot = await getCollection(colName).get();
         const batch = firestore.batch();
@@ -558,4 +558,34 @@ export const updateDistillationLog = async (id: string, updates: Partial<Distill
 
 export const deleteDistillationLog = async (id: string): Promise<void> => {
     await getCollection('distillationLogs').doc(id).delete();
+};
+
+// --- Booking System Logic ---
+export const getBookings = async (date: string): Promise<Booking[]> => {
+    if (!firestore) return [];
+    const snapshot = await safeGet(getCollection('bookings').where('date', '==', date));
+    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Booking));
+};
+
+export const getBookingsRange = async (startDate: string, endDate: string): Promise<Booking[]> => {
+    if (!firestore) return [];
+    const snapshot = await safeGet(
+        getCollection('bookings')
+            .where('date', '>=', startDate)
+            .where('date', '<=', endDate)
+    );
+    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Booking));
+};
+
+export const addBooking = async (booking: Omit<Booking, 'id'>): Promise<Booking> => {
+    const docRef = await getCollection('bookings').add(booking);
+    return { id: docRef.id, ...booking };
+};
+
+export const updateBooking = async (id: string, updates: Partial<Booking>): Promise<void> => {
+    await getCollection('bookings').doc(id).update(updates);
+};
+
+export const deleteBooking = async (id: string): Promise<void> => {
+    await getCollection('bookings').doc(id).delete();
 };

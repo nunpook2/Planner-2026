@@ -45,6 +45,8 @@ export interface CategorizedTask {
     order?: number; 
     createdAt?: string; 
     shift?: 'day' | 'night'; 
+    returnedDate?: string;
+    isPrep?: boolean;
 }
 
 export interface EquipmentHistory {
@@ -138,4 +140,18 @@ export interface DistillationLog {
     recorderName: string;
     notes?: string;
     createdAt: string;
+}
+
+// --- Special Booking System ---
+export interface Booking {
+    id: string;
+    resourceId: string; // Tester ID
+    resourceName: string;
+    date: string; // YYYY-MM-DD
+    startTime: string; // HH:mm (e.g., "09:00")
+    durationMinutes: number;
+    customerName: string;
+    description: string;
+    contactInfo?: string;
+    createdBy?: string;
 }
