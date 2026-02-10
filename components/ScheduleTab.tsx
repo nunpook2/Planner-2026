@@ -427,7 +427,6 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     const groupedPersonTasks = useMemo(() => {
         const groups: Record<string, { requestId: string, category: TaskCategory, items: { task: RawTask, sourceGroup: AssignedTask, index: number }[] }> = {};
         personTasks.forEach(group => {
-            // UPDATED: No longer override ID for Manual tasks. Use actual Request ID for all.
             const effectiveId = group.requestId;
             const displayId = group.requestId;
             
@@ -440,7 +439,6 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     const groupedPrepTasks = useMemo(() => {
         const groups: Record<string, { requestId: string, category: TaskCategory, items: { task: RawTask, sourceGroup: AssignedPrepareTask, index: number }[] }> = {};
         personPrepTasks.forEach(group => {
-            // UPDATED: No longer override ID for Manual tasks. Use actual Request ID for all.
             const effectiveId = group.requestId;
             const displayId = group.requestId;
             
@@ -455,6 +453,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
         updatedItems[itemIndex] = { ...updatedItems[itemIndex], status: newStatus, notOkReason: reason };
         await updateAssignedTask(group.id, { tasks: updatedItems });
         fetchData();
+        onTasksUpdated(); // Updated to ensure TasksTab refresh
     };
 
     const handleUpdateNote = async (type: 'exec' | 'prep', group: any, itemIndex: number, note: string) => {
@@ -528,6 +527,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     const handleMarkPrepared = async (group: AssignedPrepareTask, itemIndex: number) => {
         await markItemAsPrepared(group, itemIndex);
         fetchData();
+        onTasksUpdated(); // Ensure TasksTab unlocks the item immediately
     };
 
     const handleResetPrep = async (group: AssignedPrepareTask, itemIndex: number) => {
@@ -537,6 +537,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
         }
         await resetItemPreparation(group, itemIndex);
         fetchData();
+        onTasksUpdated(); // Ensure TasksTab re-locks the item
     };
 
     const handleCorrectionReturn = async (group: AssignedTask, itemIndex: number) => {

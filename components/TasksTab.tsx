@@ -333,10 +333,8 @@ const ExpandableCell: React.FC<{
             const next = { ...prev };
             items.forEach(item => {
                 const currentSet = new Set(next[item.sourceDocId] || []);
-                // Allow selecting ON OPS / DONE items for Repeat Testing (Clone logic applied in Assign)
-                const isLockedForTesting = (!isAssigningToPrepare && item.task.preparationStatus === 'Awaiting Preparation');
-                if (checked && !isLockedForTesting) currentSet.add(item.task._id!); 
-                else if (!checked) currentSet.delete(item.task._id!);
+                if (checked) currentSet.add(item.task._id!); 
+                else currentSet.delete(item.task._id!);
                 next[item.sourceDocId] = currentSet;
             });
             return next;
@@ -376,20 +374,15 @@ const ExpandableCell: React.FC<{
                                 {items.map(({ task, originalIndex, sourceDocId, isItemActiveInOps, isItemDoneInOps }) => {
                                     const isReady = task.preparationStatus === 'Prepared' || task.preparationStatus === 'Ready for Testing';
                                     const isInPrep = task.preparationStatus === 'Awaiting Preparation';
-                                    
-                                    // UNLOCKED: 'ON OPS' and 'COMPLETED' can be selected for REPEAT TESTS.
-                                    // Cloning logic will be handled in handleConfirmAssignment.
-                                    const isLockedForTesting = (!isAssigningToPrepare && isInPrep);
-                                    
                                     const sampleLabel = String(getTaskValue(task, 'Sample Name'));
                                     const isReturned = task.isReturned;
                                     
                                     return (
                                         <tr key={task._id} className={`bg-white dark:bg-base-900 hover:bg-indigo-50/40 ${isItemActiveInOps ? 'bg-purple-50/20' : ''} ${isItemDoneInOps ? 'bg-emerald-50/30' : ''}`}>
-                                            <td className="p-4 w-12 text-center"><input type="checkbox" disabled={isLockedForTesting} className={`h-5 w-5 rounded cursor-pointer border-2 border-base-300 dark:border-base-600 text-indigo-600 ${isLockedForTesting ? 'opacity-30 cursor-not-allowed' : ''}`} checked={selectedItems[sourceDocId]?.has(task._id!) || false} onChange={e => handleSelectItem(sourceDocId, task._id!, e.target.checked)}/></td>
+                                            <td className="p-4 w-12 text-center"><input type="checkbox" className="h-5 w-5 rounded cursor-pointer border-2 border-base-300 dark:border-base-600 text-indigo-600" checked={selectedItems[sourceDocId]?.has(task._id!) || false} onChange={e => handleSelectItem(sourceDocId, task._id!, e.target.checked)}/></td>
                                             <td className="p-4">
                                                 <div className="flex justify-between items-start mb-1 gap-4">
-                                                    <div className={`flex flex-col gap-1 min-w-0 flex-grow ${isLockedForTesting ? 'opacity-50 grayscale' : ''}`}>
+                                                    <div className={`flex flex-col gap-1 min-w-0 flex-grow`}>
                                                         <div className="flex items-center gap-2">
                                                             <span className="font-black text-[15px] uppercase truncate text-base-955 dark:text-white leading-tight tracking-tight">{sampleLabel}</span>
                                                             {isReady && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[8px] font-black rounded uppercase tracking-widest border border-emerald-300">Ready</span>}
