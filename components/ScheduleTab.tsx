@@ -15,7 +15,7 @@ import {
     CheckCircleIcon, XCircleIcon, ArrowUturnLeftIcon, 
     RefreshIcon, AlertTriangleIcon, BeakerIcon, 
     ClipboardListIcon, CalendarIcon, UserGroupIcon, DownloadIcon,
-    ChatBubbleLeftEllipsisIcon, SearchIcon
+    ChatBubbleLeftEllipsisIcon, SearchIcon, SparklesIcon
 } from './common/Icons';
 
 declare const XLSX: any;
@@ -189,10 +189,15 @@ const MissionLookupModal: React.FC<{
                                                                 
                                                                 return (
                                                                     <div key={tIdx} className="flex justify-between items-start text-[11px] border-b border-base-200 dark:border-base-700 last:border-0 pb-2 last:pb-0">
-                                                                        <div className="flex flex-col gap-0.5">
-                                                                            <span className="font-black text-base-800 dark:text-base-200 uppercase">{String(getTaskValue(task, 'Description'))}</span>
-                                                                            <span className="text-[10px] text-primary-600 font-bold">{String(getTaskValue(task, 'Variant'))}</span>
-                                                                            <span className="text-[9px] text-base-400">{String(getTaskValue(task, 'Sample Name'))}</span>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className="flex flex-col gap-0.5">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="font-black text-base-800 dark:text-base-200 uppercase">{String(getTaskValue(task, 'Description'))}</span>
+                                                                                    {task.isOverPlan && <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[8px] font-black rounded-md animate-pulse">⚡ OVER PLAN</span>}
+                                                                                </div>
+                                                                                <span className="text-[10px] text-primary-600 font-bold">{String(getTaskValue(task, 'Variant'))}</span>
+                                                                                <span className="text-[9px] text-base-400">{String(getTaskValue(task, 'Sample Name'))}</span>
+                                                                            </div>
                                                                         </div>
                                                                         <div className="flex flex-col items-end gap-1">
                                                                             <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
@@ -636,9 +641,9 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
         combinedRawAssignments.forEach(({ personnel, requestId, task, taskType, priority }) => {
             const desc = String(getTaskValue(task, 'Description') || 'General Task').trim();
             const variant = String(getTaskValue(task, 'Variant') || '-').trim();
-            const remark = task.plannerNote || '';
+            const isOverPlan = task.isOverPlan === true;
+            const remark = (task.plannerNote || '') + (isOverPlan ? ' [OVER PLAN]' : '');
             const qVal = getTaskValue(task, 'Quantity');
-            // Correctly parse quantity from task data (numeric or string)
             const taskQty = typeof qVal === 'number' ? qVal : (parseInt(String(qVal)) || 1);
             
             if (!hierarchy[personnel]) hierarchy[personnel] = {};
@@ -652,7 +657,6 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                 hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant] = { count: 0, remark: remark };
             }
             
-            // Increment by actual quantity value instead of always adding 1
             hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant].count += taskQty;
             
             const currentObj = hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant];
@@ -814,7 +818,10 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                 </div>
                                                                 <div className="flex-grow min-w-0 flex flex-row items-center gap-5 ml-2">
                                                                     <div className="flex flex-col flex-grow">
-                                                                        <div className={`font-black uppercase leading-tight line-clamp-2 ${isPrepared ? 'text-emerald-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>{desc}</div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className={`font-black uppercase leading-tight line-clamp-2 ${isPrepared ? 'text-emerald-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>{desc}</div>
+                                                                            {item.task.isOverPlan && <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[9px] font-black rounded shadow-sm animate-pulse shrink-0">⚡ OVER PLAN</span>}
+                                                                        </div>
                                                                         {variant && variant !== 'Manual Mission' && <div className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase mt-0.5 tracking-wider italic">{variant}</div>}
                                                                     </div>
                                                                     <div className="flex flex-shrink-0 items-center gap-3">
@@ -864,7 +871,10 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                                                 </div>
                                                                 <div className="flex-grow min-w-0 flex flex-row items-center gap-5 ml-2">
                                                                     <div className="flex flex-col flex-grow">
-                                                                        <div className={`font-black uppercase leading-tight line-clamp-2 ${isDone ? 'text-emerald-800 opacity-60' : isNotOk ? 'text-red-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>{desc}</div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className={`font-black uppercase leading-tight line-clamp-2 ${isDone ? 'text-emerald-800 opacity-60' : isNotOk ? 'text-red-800 opacity-60' : 'text-base-955 dark:text-base-100'} text-[16px]`}>{desc}</div>
+                                                                            {item.task.isOverPlan && <span className="px-2 py-0.5 bg-indigo-600 text-white text-[9px] font-black rounded shadow-md animate-pulse shrink-0">⚡ OVER PLAN</span>}
+                                                                        </div>
                                                                         {variant && variant !== 'Manual Mission' && <div className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase mt-0.5 tracking-wider italic">{variant}</div>}
                                                                     </div>
                                                                     <div className="flex flex-shrink-0 items-center gap-3">

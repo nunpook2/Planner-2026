@@ -242,7 +242,7 @@ const EditManualTaskModal: React.FC<{ isOpen: boolean; onClose: () => void; onSa
     );
 };
 
-const AssignmentModal: React.FC<{ isOpen: boolean; onClose: () => void; onAssign: (person: Tester) => void; personnel: { testers: Tester[]; assistants: Tester[] }; schedule: DailySchedule | null; shift: 'day' | 'night'; isPreparation: boolean; selectedItemCount: number; isProcessing: boolean; }> = ({ isOpen, onClose, onAssign, personnel, schedule, shift, isPreparation, selectedItemCount, isProcessing }) => {
+const AssignmentModal: React.FC<{ isOpen: boolean; onClose: () => void; onAssign: (person: Tester) => void; personnel: { testers: Tester[]; assistants: Tester[] }; schedule: DailySchedule | null; shift: 'day' | 'night'; isPreparation: boolean; isOverPlan: boolean; selectedItemCount: number; isProcessing: boolean; }> = ({ isOpen, onClose, onAssign, personnel, schedule, shift, isPreparation, isOverPlan, selectedItemCount, isProcessing }) => {
     const filteredPersonnelList = useMemo(() => {
         if (!schedule) return [];
         const scheduledIds = shift === 'day' ? [...(schedule.dayShiftTesters || []), ...(schedule.dayShiftAssistants || [])] : [...(schedule.nightShiftTesters || []), ...(schedule.nightShiftAssistants || [])];
@@ -256,9 +256,13 @@ const AssignmentModal: React.FC<{ isOpen: boolean; onClose: () => void; onAssign
         <div className="fixed inset-0 bg-base-900/80 backdrop-blur-md flex items-center justify-center z-[100] animate-fade-in" onClick={!isProcessing ? onClose : undefined}>
             <div className="bg-white dark:bg-base-800 rounded-[3rem] shadow-2xl p-8 w-full max-w-lg m-4 space-y-6 border border-base-200 dark:border-base-700" onClick={e => e.stopPropagation()}>
                 <div className="text-center space-y-2">
-                    <h2 className="text-2xl font-black text-base-900 dark:text-base-100 tracking-tight uppercase leading-none">{isPreparation ? "Assign Preparation" : "Assign Testing Mission"}</h2>
+                    <h2 className="text-2xl font-black text-base-900 dark:text-base-100 tracking-tight uppercase leading-none">
+                        {isPreparation ? "Assign Preparation" : isOverPlan ? "Assign Over Plan" : "Assign Testing Mission"}
+                    </h2>
                     <p className="text-sm font-bold text-base-500">Scheduled for: <span className="text-primary-600 uppercase">{shift} Shift</span></p>
-                    <div className="inline-block px-4 py-1 bg-primary-50 dark:bg-primary-900/30 rounded-full"><span className="text-xs font-black text-primary-700 dark:text-primary-400 uppercase tracking-widest">{selectedItemCount} Items Selected</span></div>
+                    <div className="inline-block px-4 py-1 bg-primary-50 dark:bg-primary-900/30 rounded-full">
+                        <span className="text-xs font-black text-primary-700 dark:text-primary-400 uppercase tracking-widest">{selectedItemCount} Items Selected</span>
+                    </div>
                 </div>
                 <div className="border-2 border-base-100 dark:border-base-700 rounded-[2rem] bg-base-50 dark:bg-base-900/50 max-h-[50vh] overflow-y-auto custom-scrollbar">
                     {filteredPersonnelList.length > 0 ? (
@@ -459,6 +463,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     const [deleteConfirm, setDeleteConfirm] = useState<{ docId: string, index: number, label: string } | null>(null);
     const [editTask, setEditTask] = useState<{ docId: string, index: number, task: RawTask } | null>(null);
     const [isAssigningToPrepare, setIsAssigningToPrepare] = useState(false); 
+    const [isOverPlanAssignment, setIsOverPlanAssignment] = useState(false);
     const [notification, setNotification] = useState<{message: string, isError?: boolean} | null>(null);
     const [selectedItems, setSelectedItems] = useState<Record<string, Set<string>>>({});
     const [expandedCell, setExpandedCell] = useState<{ docId: string; headerKey: string } | null>(null);
@@ -549,9 +554,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         return duplicates;
     }, [categorizedTasks]);
 
-    // ... [inventoryAudit, categoryTotals, gridHeaders, manualTasksFlattened, selectedItemCount, handleAddManualMission, handleDeleteConfirm, handleAutoCleanCompleted, handleBatchForceDone, handleMergeDuplicates, handleBatchWipe, handleSaveTaskEdit Logic remains same] ...
-    
-    // REDEFINE THESE HOOKS IF THEY ARE MISSING IN CONTEXT BUT THEY SHOULD BE HERE FROM PREVIOUS FILE
     const inventoryAudit = useMemo(() => {
         let totalDBItems = 0;
         let visibleInGrid = 0;
@@ -854,19 +856,19 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                         delete clean.preparationStatus;
                         
                         // AUTO-CLONE LOGIC FOR REPEAT TESTS
-                        // Generate new ID if:
-                        // 1. It is a Manual task (always unique instance)
-                        // 2. It has a signature match with an existing active/done task (Repeat Test)
-                        // 3. Or just always for safety when moving from Pool to Assignment to break link?
-                        //    SAFE MODE: Always regenerate ID when assigning from pool to ensure data separation.
+                        // SAFE MODE: Always regenerate ID when assigning from pool to ensure data separation.
                         clean._id = Math.random().toString(36).substring(2) + Date.now().toString(36);
                         
+                        // INJECT OVER PLAN FLAG IF IN OVER PLAN MODE
+                        if (isOverPlanAssignment) {
+                            clean.isOverPlan = true;
+                        }
+
                         if (!assignments[original.id]) assignments[original.id] = []; 
                         assignments[original.id].push(clean);
                     });
 
                     // Prepare pool cleanup (remove selected items from source doc)
-                    // NEW CHANGE: Only update pool if category is NOT Manual
                     if (original.category !== TaskCategory.Manual) {
                         const remainingTasks = original.tasks.filter(t => !ids.has(t._id!));
                         if (remainingTasks.length === 0) {
@@ -902,7 +904,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
             setSelectedItems({}); 
             setExpandedCell(null); 
             fetchData(); 
-            setNotification({ message: "Assignment Complete." });
+            setNotification({ message: isOverPlanAssignment ? "Over Plan Assignment Complete." : "Assignment Complete." });
         } catch (e) { 
             console.error(e);
             setNotification({ message: "Error in assignment", isError: true }); 
@@ -955,7 +957,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     return (
         <div className="flex flex-col h-[calc(100vh-120px)] space-y-2 animate-slide-in-up relative overflow-hidden bg-white/50 dark:bg-base-955">
             {notification && <Toast message={notification.message} isError={notification.isError} onDismiss={() => setNotification(null)} />}
-            <AssignmentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAssign={handleConfirmAssignment} personnel={{ testers: testers.filter(t => t.team !== 'assistants_4_2'), assistants: testers.filter(t => t.team === 'assistants_4_2') }} schedule={schedule} shift={selectedShift} isPreparation={isAssigningToPrepare} selectedItemCount={selectedItemCount} isProcessing={isAssigning}/>
+            <AssignmentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAssign={handleConfirmAssignment} personnel={{ testers: testers.filter(t => t.team !== 'assistants_4_2'), assistants: testers.filter(t => t.team === 'assistants_4_2') }} schedule={schedule} shift={selectedShift} isPreparation={isAssigningToPrepare} isOverPlan={isOverPlanAssignment} selectedItemCount={selectedItemCount} isProcessing={isAssigning}/>
             <DeleteConfirmationModal isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} onConfirm={handleDeleteConfirm} label={deleteConfirm?.label || ''} isProcessing={isAssigning} />
             <EditManualTaskModal isOpen={!!editTask} onClose={() => setEditTask(null)} onSave={handleSaveTaskEdit} task={editTask?.task || null} isProcessing={isAssigning} />
             <AddManualTaskModal isOpen={isAddManualModalOpen} onClose={() => setIsAddManualModalOpen(false)} onSave={handleAddManualMission} isProcessing={isAssigning} />
@@ -1017,10 +1019,14 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                         
                         {selectedItemCount > 0 ? (
                             <div className="flex gap-1 animate-fade-in shrink-0 items-center">
-                                <button onClick={() => { setIsAssigningToPrepare(true); setIsModalOpen(true); }} className="px-4 py-2.5 bg-amber-500 text-white text-[9px] font-black rounded-lg hover:bg-amber-600 uppercase shadow-sm transition-all border-b-2 border-amber-700 active:scale-95">Assign Prep</button>
-                                <button onClick={() => { setIsAssigningToPrepare(false); setIsModalOpen(true); }} className="px-4 py-2.5 bg-indigo-600 text-white text-[9px] font-black rounded-lg hover:bg-indigo-700 uppercase shadow-sm transition-all border-b-2 border-indigo-800 active:scale-95">Assign Test</button>
+                                <button onClick={() => { setIsAssigningToPrepare(true); setIsOverPlanAssignment(false); setIsModalOpen(true); }} className="px-4 py-2.5 bg-amber-500 text-white text-[9px] font-black rounded-lg hover:bg-amber-600 uppercase shadow-sm transition-all border-b-2 border-amber-700 active:scale-95">Assign Prep</button>
+                                <button onClick={() => { setIsAssigningToPrepare(false); setIsOverPlanAssignment(false); setIsModalOpen(true); }} className="px-4 py-2.5 bg-indigo-600 text-white text-[9px] font-black rounded-lg hover:bg-indigo-700 uppercase shadow-sm transition-all border-b-2 border-indigo-800 active:scale-95">Assign Test</button>
                                 
-                                {/* NEW MARK DONE BUTTON FOR GHOST TASKS */}
+                                {/* NEW OVER PLAN BUTTON */}
+                                <button onClick={() => { setIsAssigningToPrepare(false); setIsOverPlanAssignment(true); setIsModalOpen(true); }} className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-indigo-600 text-white text-[9px] font-black rounded-lg hover:brightness-110 uppercase shadow-md transition-all border-b-2 border-indigo-800 active:scale-95 flex items-center gap-1.5">
+                                    <SparklesIcon className="h-3.5 w-3.5" /> Over Plan
+                                </button>
+                                
                                 <button 
                                     onClick={handleBatchForceDone}
                                     className="px-4 py-2.5 bg-emerald-600 text-white text-[9px] font-black rounded-lg hover:bg-emerald-700 uppercase shadow-sm transition-all border-b-2 border-emerald-800 active:scale-95 flex items-center gap-1"
@@ -1080,7 +1086,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                         <div className="p-8">
                             <div className="overflow-hidden rounded-2xl border border-indigo-100 dark:border-indigo-900/30 shadow-md">
                                 <table className="w-full text-left border-collapse">
-                                    {/* Manual Task Table Implementation... (same as before) */}
                                     <thead className="bg-indigo-600 text-white">
                                         <tr>
                                             <th className="p-4 w-16 text-center border-r border-white/10"><input type="checkbox" className="h-5 w-5 rounded" onChange={e => {

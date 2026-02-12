@@ -23,6 +23,7 @@ export interface RawTask {
     returnReason?: string | null;
     returnedBy?: string | null;
     plannerNote?: string | null; 
+    isOverPlan?: boolean;
 }
 
 export interface Tester {
