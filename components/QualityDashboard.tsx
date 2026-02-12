@@ -333,7 +333,13 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
             setAllPrepared(prepared || []);
             setDistLogs(dist || []);
             setHistoryLogs(history || []);
-            if (!selectedChemical && dist.length > 0) setSelectedChemical(dist[0].chemicalName);
+            
+            // Auto-select first chemical if none selected
+            if (!selectedChemical && dist.length > 0) {
+                setSelectedChemical(dist[0].chemicalName);
+            } else if (!selectedChemical && dist.length === 0) {
+                setSelectedChemical(CHEMICAL_OPTIONS[0]);
+            }
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
     }, [selectedChemical]);
 
@@ -352,6 +358,25 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
         start.setHours(0, 0, 0, 0); today.setHours(0, 0, 0, 0);
         return Math.max(1, Math.ceil(Math.abs(today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
     };
+
+    // --- RECOVERY ANALYTICS ---
+    const filteredDistLogsByTime = useMemo(() => {
+        if (distDateFilter === 'all') return distLogs;
+        if (distDateFilter === 'specific') return distLogs.filter(log => log.date.startsWith(specificMonth));
+        const now = new Date(); const threshold = new Date();
+        if (distDateFilter === 'week') threshold.setDate(now.getDate() - 7);
+        if (distDateFilter === 'month') threshold.setMonth(now.getMonth() - 1);
+        return distLogs.filter(log => new Date(log.date) >= threshold);
+    }, [distLogs, distDateFilter, specificMonth]);
+
+    // NEW: Recovery Statistics scoped to SELECTED CHEMICAL only
+    const recoveryStats = useMemo(() => {
+        const scopedLogs = filteredDistLogsByTime.filter(log => log.chemicalName === selectedChemical);
+        const totalIn = scopedLogs.reduce((acc, log) => acc + log.inputAmount, 0);
+        const totalOut = scopedLogs.reduce((acc, log) => acc + log.outputAmount, 0);
+        const avgYield = scopedLogs.length > 0 ? (totalOut / totalIn) * 100 : 0;
+        return { totalIn, totalOut, avgYield, count: scopedLogs.length };
+    }, [filteredDistLogsByTime, selectedChemical]);
 
     // --- OVER PLAN ANALYTICS ---
     const overPlanData = useMemo(() => {
@@ -473,15 +498,6 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
         return Object.values(groups).sort((a, b) => a.earliestDate.localeCompare(b.earliestDate));
     }, [allAssigned, searchAnalyst]);
 
-    const filteredDistLogsByTime = useMemo(() => {
-        if (distDateFilter === 'all') return distLogs;
-        if (distDateFilter === 'specific') return distLogs.filter(log => log.date.startsWith(specificMonth));
-        const now = new Date(); const threshold = new Date();
-        if (distDateFilter === 'week') threshold.setDate(now.getDate() - 7);
-        if (distDateFilter === 'month') threshold.setMonth(now.getMonth() - 1);
-        return distLogs.filter(log => new Date(log.date) >= threshold);
-    }, [distLogs, distDateFilter, specificMonth]);
-
     const handleBatchResolve = async (targets: FlattenedNotOkTask[]) => {
         setIsResolving(true);
         try {
@@ -499,7 +515,6 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
             
             await logResolutionEntries(historyEntries);
             
-            // Group targets by docId to minimize DB calls
             const docGroups: Record<string, { originalDoc: AssignedTask, items: FlattenedNotOkTask[] }> = {};
             targets.forEach(t => {
                 if (!docGroups[t.docId]) docGroups[t.docId] = { originalDoc: t.originalDoc, items: [] };
@@ -541,7 +556,6 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
         try { await deleteDistillationLog(distDeleteConfirm.id); setNotification({ message: "Record removed." }); setDistDeleteConfirm(null); fetchData(); } catch (e) { setNotification({ message: "Failed to delete", isError: true }); }
     };
 
-    // --- NEW MASTER EXPORT FUNCTION ---
     const handleExportComprehensiveReport = () => {
         try {
             const wb = XLSX.utils.book_new();
@@ -587,7 +601,6 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
             const wsOver = XLSX.utils.json_to_sheet(overPlanMaster);
             XLSX.utils.book_append_sheet(wb, wsOver, "Over Plan Achievement");
 
-            // Save Workbook
             XLSX.writeFile(wb, `Intelligence_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
             setNotification({ message: "Master Report Downloaded Successfully" });
         } catch (error) {
@@ -643,6 +656,27 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
                             >
                                 Keep Active
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CONFIRM DELETE DISTILLATION MODAL */}
+            {distDeleteConfirm && (
+                <div className="fixed inset-0 bg-base-900/90 backdrop-blur-md flex items-center justify-center z-[220] p-4 animate-fade-in" onClick={() => setDistDeleteConfirm(null)}>
+                    <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-md overflow-hidden border border-white/20 p-10 text-center space-y-6" onClick={e => e.stopPropagation()}>
+                        <div className="w-20 h-20 bg-rose-50 dark:bg-rose-900/20 rounded-[2rem] flex items-center justify-center mx-auto text-rose-600 shadow-inner">
+                            <TrashIcon className="h-10 w-10" />
+                        </div>
+                        <div>
+                            <h3 className="text-2xl font-black text-base-955 dark:text-white uppercase tracking-tighter">Wipe Record?</h3>
+                            <p className="text-base-500 mt-4 text-[15px] font-bold leading-relaxed px-2">
+                                Permanent removal of <span className="text-rose-600">"{distDeleteConfirm.chemicalName}"</span> log on <span className="font-bold">{distDeleteConfirm.date}</span>.
+                            </p>
+                        </div>
+                        <div className="flex flex-col gap-2 pt-4">
+                            <button onClick={handleDeleteDist} className="w-full py-5 bg-rose-600 border-rose-800 text-white font-black rounded-2xl shadow-xl uppercase text-[11px] tracking-widest border-b-4 hover:bg-rose-700 transition-all">Destroy Forever</button>
+                            <button onClick={() => setDistDeleteConfirm(null)} className="w-full py-3 text-[10px] font-black text-base-400 hover:text-base-800 uppercase tracking-widest">Abort</button>
                         </div>
                     </div>
                 </div>
@@ -754,6 +788,88 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
                                         <tbody className="divide-y divide-slate-50">{historyLogs.map((log, i) => <tr key={i} className="hover:bg-slate-50"><td className="px-6 py-4 font-black text-slate-800 text-[11px]">{log.testerName}</td><td className="px-6 py-4 text-[12px] font-bold text-indigo-600">{log.requestId}</td><td className="px-6 py-4 text-[12px]">{log.sampleName}</td><td className="px-6 py-4"><span className="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-black border border-emerald-100">{log.daysToResolve} Days</span></td><td className="px-6 py-4 text-[11px] text-rose-600 italic">{log.failureReason}</td></tr>)}</tbody>
                                     </table>
                                 )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeSubTab === 'distillation' && (
+                    <div className="h-full flex flex-col gap-6 animate-fade-in overflow-hidden">
+                        {/* NEW: Chemical Selection Bar for scoped stats */}
+                        <div className="flex gap-2 items-center p-2 bg-slate-100 dark:bg-base-900 rounded-[2rem] border border-slate-200 dark:border-base-800 shadow-inner overflow-x-auto no-scrollbar shrink-0">
+                            {allChemicals.map(chem => (
+                                <button 
+                                    key={chem}
+                                    onClick={() => setSelectedChemical(chem)}
+                                    className={`px-6 py-2.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all shrink-0 ${selectedChemical === chem ? 'bg-white dark:bg-base-800 text-indigo-600 shadow-md ring-2 ring-indigo-500/20' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+                                >
+                                    {chem}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 shrink-0">
+                            <div className="bg-indigo-600 rounded-[2.5rem] p-8 text-white shadow-xl relative overflow-hidden flex flex-col justify-center border-b-8 border-indigo-800">
+                                <div className="absolute top-0 right-0 p-6 opacity-20"><BeakerIcon className="w-24 h-24" /></div>
+                                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-200 mb-2">Resource Input ({selectedChemical})</span>
+                                <span className="text-5xl font-black tracking-tighter italic">{recoveryStats.totalIn.toLocaleString()} <span className="text-sm font-bold opacity-60">ML</span></span>
+                            </div>
+                            <div className="bg-cyan-600 rounded-[2.5rem] p-8 text-white shadow-xl relative overflow-hidden flex flex-col justify-center border-b-8 border-cyan-800">
+                                <div className="absolute top-0 right-0 p-6 opacity-20"><ArrowUpIcon className="w-24 h-24" /></div>
+                                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-cyan-200 mb-2">Purified Output ({selectedChemical})</span>
+                                <span className="text-5xl font-black tracking-tighter italic">{recoveryStats.totalOut.toLocaleString()} <span className="text-sm font-bold opacity-60">ML</span></span>
+                            </div>
+                            <div className={`rounded-[2.5rem] p-8 text-white shadow-xl relative overflow-hidden flex flex-col justify-center border-b-8 ${recoveryStats.avgYield >= 95 ? 'bg-emerald-600 border-emerald-800' : 'bg-amber-500 border-amber-700'}`}>
+                                <div className="absolute top-0 right-0 p-6 opacity-20"><RefreshIcon className="w-24 h-24" /></div>
+                                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/50 mb-2">Recovery Efficiency ({selectedChemical})</span>
+                                <span className="text-5xl font-black tracking-tighter italic">{recoveryStats.avgYield.toFixed(1)} <span className="text-sm font-bold opacity-60">%</span></span>
+                            </div>
+                        </div>
+
+                        <div className="flex-grow bg-white dark:bg-base-900 rounded-[3rem] border-2 border-slate-100 dark:border-base-800 shadow-xl overflow-hidden flex flex-col">
+                            <div className="px-10 py-6 border-b border-slate-100 dark:border-base-800 bg-slate-50/50 dark:bg-base-955 flex justify-between items-center shrink-0">
+                                <h3 className="text-[12px] font-black uppercase tracking-[0.5em] text-slate-400 flex items-center gap-3 italic"><DatabaseIcon className="h-5 w-5" /> Chemical Recovery Ledger</h3>
+                                <div className="flex items-center gap-4">
+                                    <span className="px-4 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest">{filteredDistLogsByTime.length} Batches Processed</span>
+                                </div>
+                            </div>
+                            <div className="flex-grow overflow-y-auto custom-scrollbar">
+                                <table className="min-w-full text-left">
+                                    <thead className="sticky top-0 bg-white/95 dark:bg-base-900/95 backdrop-blur-md text-[11px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-base-800 z-10">
+                                        <tr>
+                                            <th className="px-10 py-5">Assigned Date</th>
+                                            <th className="px-10 py-5">Species</th>
+                                            <th className="px-10 py-5">Input/Output</th>
+                                            <th className="px-10 py-5">Yield</th>
+                                            <th className="px-10 py-5">Personnel</th>
+                                            <th className="px-10 py-5 text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50 dark:divide-base-800">
+                                        {filteredDistLogsByTime.length > 0 ? filteredDistLogsByTime.map((log) => (
+                                            <tr key={log.id} className="hover:bg-slate-50/80 dark:hover:bg-base-800 transition-all group">
+                                                <td className="px-10 py-5"><span className="text-[13px] font-black text-slate-400">{log.date}</span></td>
+                                                <td className="px-10 py-5"><span className="px-4 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-xl text-[12px] font-black uppercase tracking-tighter border border-indigo-100 dark:border-indigo-800">{log.chemicalName}</span></td>
+                                                <td className="px-10 py-5">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[14px] font-bold text-slate-800 dark:text-base-100 italic">In: {log.inputAmount} ml</span>
+                                                        <span className="text-[14px] font-bold text-indigo-600 dark:text-indigo-400 italic">Out: {log.outputAmount} ml</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-10 py-5"><span className={`text-xl font-black tracking-tighter ${log.yieldPercent >= 95 ? 'text-emerald-600' : 'text-amber-500'}`}>{log.yieldPercent}%</span></td>
+                                                <td className="px-10 py-5"><span className="text-[12px] font-black text-slate-500 uppercase">{log.recorderName}</span></td>
+                                                <td className="px-10 py-5 text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button onClick={() => handleEditStart(log)} className="p-3 bg-white dark:bg-base-800 border border-slate-100 dark:border-base-700 rounded-xl text-slate-300 hover:text-indigo-600 hover:border-indigo-100 transition-all shadow-sm"><PencilIcon className="h-5 w-5" /></button>
+                                                        <button onClick={() => setDistDeleteConfirm(log)} className="p-3 bg-white dark:bg-base-800 border border-slate-100 dark:border-base-700 rounded-xl text-slate-300 hover:text-rose-600 hover:border-rose-100 transition-all shadow-sm"><TrashIcon className="h-5 w-5" /></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )) : (
+                                            <tr><td colSpan={6} className="py-32 text-center opacity-10 flex flex-col items-center"><BeakerIcon className="h-24 w-24 mb-4" /><span className="text-2xl font-black uppercase tracking-[0.5em]">No Recovery Cycles Logged</span></td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
