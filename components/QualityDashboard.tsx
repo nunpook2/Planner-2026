@@ -772,7 +772,24 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
                                                         {Object.entries(reqGroup.tasksByDescription).map(([key, items]) => (
                                                             items.map((it, idx) => (
                                                                 <div key={idx} className="flex items-center gap-4 bg-white p-4 rounded-[1.5rem] border-2 border-slate-100 hover:border-indigo-100 transition-all shadow-sm">
-                                                                    <div className="flex-grow min-w-0"><span className="text-[16px] font-black text-slate-900 uppercase truncate block tracking-tighter">{String(getTaskValue(it.task, 'Sample Name') || 'N/A')}</span><p className="text-[10px] font-bold text-rose-600 italic">ERR: "{it.task.notOkReason}"</p></div>
+                                                                    <div className="flex-grow min-w-0">
+                                                                        <div className="flex items-baseline gap-2">
+                                                                            <span className="text-[16px] font-black text-slate-900 uppercase truncate block tracking-tighter">
+                                                                                {String(getTaskValue(it.task, 'Sample Name') || 'N/A')}
+                                                                            </span>
+                                                                            <span className="text-[10px] font-bold text-indigo-600 uppercase">
+                                                                                {String(getTaskValue(it.task, 'Description') || '-')}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic">
+                                                                                {String(getTaskValue(it.task, 'Variant') || '-')}
+                                                                            </span>
+                                                                            <span className="text-[9px] font-bold text-rose-600">
+                                                                                ERR: "{it.task.notOkReason}"
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
                                                                     <button onClick={() => setConfirmModal({ isOpen: true, targetItems: [it], title: 'Resolve Mission?', description: String(getTaskValue(it.task, 'Sample Name')) })} className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all shadow-md active:scale-90"><CheckCircleIcon className="h-6 w-6"/></button>
                                                                 </div>
                                                             ))
