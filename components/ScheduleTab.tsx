@@ -556,6 +556,19 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     };
 
     const handlePrepReturn = async (group: AssignedPrepareTask, itemIndex: number) => {
+        const item = group.tasks[itemIndex];
+        if (!item._id) return;
+
+        // If Planner is authorized, do a silent recall
+        if (isPlannerAuthorized) {
+            await forceRecallTask(item._id, undefined, undefined, selectedDate, selectedShift);
+            fetchData(); 
+            onTasksUpdated();
+            setNotification({ message: "Item Recalled to Pool", isError: false });
+            return;
+        }
+
+        // Staff return: ask for reason
         setModalConfig({
             isOpen: true, 
             title: "Abort Preparation", 
@@ -568,9 +581,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             preventOutsideClick: true,
             onConfirm: async (reason) => {
                 if (!reason) return;
-                const item = group.tasks[itemIndex];
-                if (!item._id) return;
-                await forceRecallTask(item._id, reason, group.assistantName, selectedDate, selectedShift);
+                await forceRecallTask(item._id!, reason, group.assistantName, selectedDate, selectedShift);
                 fetchData(); 
                 onTasksUpdated(); 
                 setModalConfig(p => ({ ...p, isOpen: false }));
@@ -580,6 +591,19 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
     };
 
     const handleTesterReturn = async (group: AssignedTask, itemIndex: number) => {
+        const item = group.tasks[itemIndex];
+        if (!item._id) return;
+
+        // If Planner is authorized, do a silent recall
+        if (isPlannerAuthorized) {
+            await forceRecallTask(item._id, undefined, undefined, selectedDate, selectedShift);
+            fetchData(); 
+            onTasksUpdated();
+            setNotification({ message: "Task Recalled (Quick)", isError: false });
+            return;
+        }
+
+        // Staff return: ask for reason
         setModalConfig({
             isOpen: true, 
             title: "Abort Mission", 
@@ -592,9 +616,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             preventOutsideClick: true,
             onConfirm: async (reason) => {
                 if (!reason) return;
-                const item = group.tasks[itemIndex];
-                if (!item._id) return;
-                await forceRecallTask(item._id, reason, group.testerName, selectedDate, selectedShift);
+                await forceRecallTask(item._id!, reason, group.testerName, selectedDate, selectedShift);
                 fetchData(); 
                 onTasksUpdated(); 
                 setModalConfig(p => ({ ...p, isOpen: false }));

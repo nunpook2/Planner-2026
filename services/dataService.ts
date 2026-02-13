@@ -387,14 +387,21 @@ export const forceRecallTask = async (taskId: string, reason?: string, returnedB
     let foundInPrep = false;
 
     // Helper to clean task object and remove undefined fields
-    const createCleanTask = (original: RawTask, rReason: string, rBy: string) => {
+    const createCleanTask = (original: RawTask, rReason?: string, rBy?: string) => {
         const t = { ...original };
         delete t.status;
         delete t.preparationStatus;
         delete t.notOkReason;
-        t.isReturned = true;
-        t.returnReason = rReason;
-        t.returnedBy = rBy;
+        if (rReason) {
+            t.isReturned = true;
+            t.returnReason = rReason;
+            t.returnedBy = rBy || "Staff";
+        } else {
+            // Planner silent recall: remove all return-related flags
+            delete t.isReturned;
+            delete t.returnReason;
+            delete t.returnedBy;
+        }
         return t;
     };
 
@@ -410,13 +417,14 @@ export const forceRecallTask = async (taskId: string, reason?: string, returnedB
             if (remaining.length === 0) batch.delete(doc.ref);
             else batch.update(doc.ref, { tasks: remaining });
 
-            const cleanTask = createCleanTask(task, reason || "Recalled", returnedBy || "System");
+            const cleanTask = createCleanTask(task, reason, returnedBy);
             const poolDocRef = getCollection('categorizedTasks').doc();
             batch.set(poolDocRef, {
                 id: data.requestId,
                 category: data.category,
                 tasks: [cleanTask],
-                isReturnedPool: true,
+                // Only mark as returned pool if there is a reason (Staff rejection)
+                isReturnedPool: !!reason,
                 returnedDate: date || new Date().toISOString().split('T')[0],
                 shift: shift || 'day',
                 returnedBy: returnedBy || 'System',
@@ -449,40 +457,37 @@ export const forceRecallTask = async (taskId: string, reason?: string, returnedB
                         const poolTaskIndex = updatedTasks.findIndex(t => t._id === taskId);
                         
                         if (poolTaskIndex !== -1) {
-                            const t = { ...updatedTasks[poolTaskIndex] };
-                            delete t.preparationStatus;
-                            t.isReturned = true;
-                            t.returnReason = reason || "Recalled from Prep";
-                            t.returnedBy = returnedBy || "System";
-                            updatedTasks[poolTaskIndex] = t;
+                            const t = updatedTasks[poolTaskIndex];
+                            const cleanedTaskInPool = createCleanTask(t, reason, returnedBy);
+                            updatedTasks[poolTaskIndex] = cleanedTaskInPool;
 
                             batch.update(poolDocRef, { 
                                 tasks: updatedTasks,
-                                isReturnedPool: true,
+                                isReturnedPool: !!reason, // Only mark if reason exists
                                 returnedDate: date || new Date().toISOString().split('T')[0],
                                 shift: shift || 'day'
                             });
                         } else {
-                            const cleanTask = createCleanTask(task, reason || "Recalled from Prep", returnedBy || "System");
+                            const cleanTask = createCleanTask(task, reason, returnedBy);
                             const newPoolRef = getCollection('categorizedTasks').doc();
                             batch.set(newPoolRef, {
                                 id: data.requestId,
                                 category: data.category,
                                 tasks: [cleanTask],
-                                isReturnedPool: true,
+                                isReturnedPool: !!reason,
                                 returnedDate: date || new Date().toISOString().split('T')[0],
                                 shift: shift || 'day',
                                 isPrep: true
                             });
                         }
                     } else {
-                        const cleanTask = createCleanTask(task, reason || "Recalled from Prep", returnedBy || "System");
+                        const cleanTask = createCleanTask(task, reason, returnedBy);
                         const newPoolRef = getCollection('categorizedTasks').doc();
                         batch.set(newPoolRef, {
                             id: data.requestId,
                             category: data.category,
                             tasks: [cleanTask],
-                            isReturnedPool: true,
+                            isReturnedPool: !!reason,
                             returnedDate: date || new Date().toISOString().split('T')[0],
                             shift: shift || 'day',
                             isPrep: true
@@ -502,17 +507,13 @@ export const forceRecallTask = async (taskId: string, reason?: string, returnedB
             const taskIdx = data.tasks.findIndex(t => t._id === taskId);
             if (taskIdx !== -1) {
                 const updated = [...data.tasks];
-                const t = { ...updated[taskIdx] };
-                delete t.status;
-                delete t.preparationStatus;
-                t.isReturned = true;
-                t.returnReason = reason || null;
-                t.returnedBy = returnedBy || null;
-                updated[taskIdx] = t;
+                const t = updated[taskIdx];
+                const cleaned = createCleanTask(t, reason, returnedBy);
+                updated[taskIdx] = cleaned;
 
                 batch.update(doc.ref, { 
                     tasks: updated,
-                    isReturnedPool: true, 
+                    isReturnedPool: !!reason, 
                     returnedDate: date || new Date().toISOString().split('T')[0],
                     shift: shift || 'day',
                     returnedBy: returnedBy || 'Staff'
