@@ -636,11 +636,12 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             });
         });
 
-        const hierarchy: Record<string, Record<string, Record<string, Record<string, Record<string, Record<string, Record<string, { count: number; remark: string }>>>>>>> = {};
+        const hierarchy: Record<string, Record<string, Record<string, Record<string, Record<string, Record<string, Record<string, { count: number; remark: string; samples: Set<string> }>>>>>>> = {};
 
         combinedRawAssignments.forEach(({ personnel, requestId, task, taskType, priority }) => {
             const desc = String(getTaskValue(task, 'Description') || 'General Task').trim();
             const variant = String(getTaskValue(task, 'Variant') || '-').trim();
+            const sampleName = String(getTaskValue(task, 'Sample Name') || '').trim();
             const isOverPlan = task.isOverPlan === true;
             const remark = (task.plannerNote || '') + (isOverPlan ? ' [OVER PLAN]' : '');
             const qVal = getTaskValue(task, 'Quantity');
@@ -654,12 +655,13 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             if (!hierarchy[personnel][exportDate][requestId][priority][taskType][desc]) hierarchy[personnel][exportDate][requestId][priority][taskType][desc] = {};
             
             if (!hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant]) {
-                hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant] = { count: 0, remark: remark };
+                hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant] = { count: 0, remark: remark, samples: new Set<string>() };
             }
             
-            hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant].count += taskQty;
-            
             const currentObj = hierarchy[personnel][exportDate][requestId][priority][taskType][desc][variant];
+            currentObj.count += taskQty;
+            if (sampleName) currentObj.samples.add(sampleName);
+            
             if (remark && !currentObj.remark) {
                 currentObj.remark = remark;
             } else if (remark && currentObj.remark && !currentObj.remark.includes(remark)) {
@@ -668,7 +670,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
         });
 
         const rows: any[][] = [];
-        rows.push(["Tester", "Plantodate", "Request ID", "ลำดับความสำคัญ", "ประเภทงาน", "รายการทดสอบ", "Variant", "Remark", "Total"]);
+        rows.push(["Tester", "Plantodate", "Request ID", "ลำดับความสำคัญ", "ประเภทงาน", "รายการทดสอบ", "Variant", "Sample Name", "Remark", "Total"]);
 
         let grandTotal = 0;
         const sortedTesters = Object.keys(hierarchy).sort();
@@ -696,7 +698,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                 const sortedVariants = Object.keys(variants).sort();
 
                                 sortedVariants.forEach((variant, vIdx) => {
-                                    const { count, remark } = variants[variant];
+                                    const { count, remark, samples } = variants[variant];
                                     grandTotal += count;
 
                                     const row: any[] = [];
@@ -707,8 +709,9 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                     row[4] = (dsIdx === 0 && vIdx === 0) ? taskType : "";
                                     row[5] = (vIdx === 0) ? desc : "";
                                     row[6] = variant;
-                                    row[7] = remark;
-                                    row[8] = count;
+                                    row[7] = Array.from(samples).join(', '); // Show unique sample names
+                                    row[8] = remark;
+                                    row[9] = count;
 
                                     rows.push(row);
                                 });
@@ -720,10 +723,10 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             rows.push([]);
         });
 
-        rows.push(["Grand Total", "", "", "", "", "", "", "", grandTotal]);
+        rows.push(["Grand Total", "", "", "", "", "", "", "", "", grandTotal]);
 
         const ws = XLSX.utils.aoa_to_sheet(rows);
-        ws['!cols'] = [ { wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 25 }, { wch: 35 }, { wch: 25 }, { wch: 45 }, { wch: 8 } ];
+        ws['!cols'] = [ { wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 25 }, { wch: 35 }, { wch: 25 }, { wch: 35 }, { wch: 45 }, { wch: 8 } ];
         const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Mission Summary"); XLSX.writeFile(wb, `ShiftMissionSummary_${exportDate}_${selectedShift}.xlsx`);
     };
 

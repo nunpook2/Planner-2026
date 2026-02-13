@@ -149,6 +149,45 @@ const Toast: React.FC<{ message: string; isError?: boolean; onDismiss: () => voi
     );
 };
 
+const NoteEditorModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (text: string) => void;
+    initialValue: string;
+    isProcessing: boolean;
+}> = ({ isOpen, onClose, onSave, initialValue, isProcessing }) => {
+    const [note, setNote] = useState(initialValue);
+    useEffect(() => { if (isOpen) setNote(initialValue); }, [isOpen, initialValue]);
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-base-900/80 backdrop-blur-md flex items-center justify-center z-[200] animate-fade-in" onClick={onClose}>
+            <div className="bg-white dark:bg-base-900 rounded-[2.5rem] shadow-2xl p-8 w-full max-w-lg m-4 space-y-6 border border-white/20" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                        <ChatBubbleLeftEllipsisIcon className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-2xl font-black text-base-900 dark:text-base-100 tracking-tighter">Mission Briefing</h3>
+                </div>
+                <p className="text-sm font-medium text-base-500">Add instructions or customer notes for the analyst:</p>
+                <textarea 
+                    autoFocus
+                    value={note}
+                    onChange={e => setNote(e.target.value)}
+                    placeholder="Enter special requirements, customer feedback, or instructions..."
+                    rows={5}
+                    className="w-full p-6 bg-base-50 dark:bg-base-955 border-2 border-base-100 dark:border-base-800 rounded-[2rem] outline-none font-bold text-[15px] focus:border-indigo-500 transition-all resize-none"
+                />
+                <div className="flex justify-end gap-3 pt-2">
+                    <button onClick={onClose} disabled={isProcessing} className="px-6 py-3 text-[11px] font-black text-base-400 hover:text-base-800 uppercase tracking-widest transition-colors">Discard</button>
+                    <button onClick={() => onSave(note)} disabled={isProcessing} className="px-8 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl uppercase text-[11px] tracking-widest hover:bg-indigo-700 transition-all">
+                        {isProcessing ? 'Updating...' : 'Save Instruction'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const CustomerRemarkModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -410,7 +449,7 @@ const ExpandableCell: React.FC<{
                                                     </div>
                                                     <div className="flex items-center gap-2 shrink-0">
                                                         {onInitiateEdit && <button onClick={() => onInitiateEdit(sourceDocId, originalIndex, task)} className="p-2 bg-base-50 dark:bg-base-955 border-base-200 rounded-lg text-base-400 hover:text-indigo-600 transition-all"><PencilIcon className="h-4.5 w-4.5"/></button>}
-                                                        <button onClick={() => setNoteEditor({ docId: sourceDocId, index: originalIndex, text: task.plannerNote || '' })} className={`p-2 rounded-lg border ${task.plannerNote ? 'bg-indigo-600 border-indigo-400 text-white shadow-md' : 'bg-base-50 dark:bg-base-955 border-base-200 text-base-400'}`}><ChatBubbleLeftEllipsisIcon className="h-4.5 w-4.5" /></button>
+                                                        <button onClick={() => setNoteEditor({ docId: sourceDocId, index: originalIndex, text: task.plannerNote || '' })} className={`p-2 rounded-lg border transition-all ${task.plannerNote ? 'bg-indigo-600 border-indigo-400 text-white shadow-md scale-105' : 'bg-base-50 dark:bg-base-955 border-base-200 text-base-400 hover:text-indigo-600'}`} title={task.plannerNote ? "Modify Instruction" : "Add Instruction"}><ChatBubbleLeftEllipsisIcon className="h-4.5 w-4.5" /></button>
                                                         
                                                         {/* 2-CLICK DELETE FOR INDIVIDUAL ITEM */}
                                                         <button 
@@ -490,6 +529,21 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     }, [selectedDate]);
 
     useEffect(() => { fetchData(); }, [fetchData, refreshKey]);
+
+    const handleSaveNote = async (text: string) => {
+        if (!noteEditor) return;
+        setIsAssigning(true);
+        try {
+            const doc = categorizedTasks.find(d => d.docId === noteEditor.docId);
+            if (!doc) throw new Error("Mission not found in pool.");
+            const updatedTasks = [...doc.tasks];
+            updatedTasks[noteEditor.index] = { ...updatedTasks[noteEditor.index], plannerNote: text.trim() || null };
+            await updateCategorizedTask(noteEditor.docId, { tasks: updatedTasks });
+            setNotification({ message: "Instruction synchronized with mission." });
+            setNoteEditor(null);
+            fetchData();
+        } catch (e) { setNotification({ message: "Failed to update instruction.", isError: true }); } finally { setIsAssigning(false); }
+    };
 
     const handleSelectItem = useCallback((docId: string, taskId: string, isChecked: boolean) => {
         setSelectedItems(prev => {
@@ -962,6 +1016,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
             <EditManualTaskModal isOpen={!!editTask} onClose={() => setEditTask(null)} onSave={handleSaveTaskEdit} task={editTask?.task || null} isProcessing={isAssigning} />
             <AddManualTaskModal isOpen={isAddManualModalOpen} onClose={() => setIsAddManualModalOpen(false)} onSave={handleAddManualMission} isProcessing={isAssigning} />
             <CustomerRemarkModal isOpen={!!activeRemarks} onClose={() => setActiveRemarks(null)} requestId={activeRemarks?.id || ''} remarks={activeRemarks?.list || []} />
+            <NoteEditorModal isOpen={!!noteEditor} onClose={() => setNoteEditor(null)} onSave={handleSaveNote} initialValue={noteEditor?.text || ''} isProcessing={isAssigning} />
 
             {/* REFINED LIGHT SUMMARY SECTION */}
             <div className="px-6 space-y-2 shrink-0 mt-4">
