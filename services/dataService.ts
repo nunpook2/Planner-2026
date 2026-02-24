@@ -78,6 +78,23 @@ export const deleteEquipment = async (id: string): Promise<void> => {
     await getCollection('equipments').doc(id).delete();
 };
 
+export const batchImportEquipments = async (equipments: Omit<Equipment, 'id'>[]): Promise<void> => {
+    const batch = firestore.batch();
+    const collection = getCollection('equipments');
+    
+    // 1. Delete all existing
+    const snapshot = await collection.get();
+    snapshot.forEach((doc: any) => batch.delete(doc.ref));
+    
+    // 2. Add new
+    equipments.forEach(eq => {
+        const docRef = collection.doc();
+        batch.set(docRef, eq);
+    });
+    
+    await batch.commit();
+};
+
 // --- Tester Management ---
 export const getTesters = async (): Promise<Tester[]> => {
     if (!firestore) throw new Error("Database not initialized");

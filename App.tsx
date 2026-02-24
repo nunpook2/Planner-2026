@@ -122,7 +122,7 @@ const App: React.FC = () => {
                 />
             );
             case 'booking': return <BookingTab testers={testers} />; // New Booking Tab
-            case 'equipment': return <EquipmentTab />;
+            case 'equipment': return <EquipmentTab testers={testers} />;
             case 'roster': return (
                 <RosterTab 
                     testers={testers} 

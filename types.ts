@@ -58,17 +58,76 @@ export interface EquipmentHistory {
     technician: string;
 }
 
+export interface MaintenanceItem {
+    id: string;
+    name: string; // e.g., "Internal Cal", "External Cal", "Filter PM"
+    type: 'PM' | 'Cal';
+    dueDate: string; // YYYY-MM-DD
+    cycleMonths?: number; // e.g., 6, 12
+    provider?: string; // e.g., "External Lab A", "Internal"
+    
+    // Service Appointment Logic
+    status: 'pending' | 'scheduled' | 'done';
+    serviceDate?: string; // Confirm date technician is coming
+    technicianName?: string;
+}
+
+export interface EquipmentComponent {
+    name: string;
+    code?: string; // Added for Component Code
+    serialNo?: string;
+    model?: string;
+    type: 'Component';
+    calDueDate?: string; // Legacy/Quick View
+    
+    // Detailed Excel Props
+    pmBy?: string;
+    pmFreq?: string;
+    calBy?: string;
+    calFreq?: string;
+    pmMonth?: string;
+    calMonth?: string;
+    vendor?: string;
+    vendorTel?: string;
+}
+
 export interface Equipment {
     id: string;
+    code?: string; // Equipment Code for linking
     name: string;
     group: string; 
+    type?: 'Primary' | 'Accessory' | 'Component'; // New Type Logic
     status: 'ready' | 'issue' | 'maintenance';
     actionStatus: 'none' | 'notified' | 'ordered' | 'repairing';
-    details: string;
+    details: string; // Model / Serial No can go here for Primary
+    serialNo?: string;
+    model?: string;
+    
+    // Detailed Excel Props (Primary)
+    pmBy?: string;
+    pmFreq?: string;
+    calBy?: string;
+    calFreq?: string;
+    pmMonth?: string;
+    calMonth?: string;
+    vendor?: string;
+    vendorTel?: string;
+    
+    // Hierarchy
+    components?: EquipmentComponent[]; // List of sub-components
+
     methods?: string[]; 
     lastUpdated: string;
     updatedBy: string;
     history?: EquipmentHistory[];
+    
+    // Updated Logic: Multiple Maintenance Items
+    maintenanceItems?: MaintenanceItem[];
+
+    // Legacy Fields (kept for compatibility or simple view)
+    custodian?: string; 
+    custodianName?: string;
+    contactInfo?: string; 
 }
 
 export interface DailySchedule {

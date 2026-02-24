@@ -819,7 +819,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
 
             const isDuplicateRow = duplicateRequestIds.has(group.rid.trim().toUpperCase());
 
-            const row = { requestId: group.rid, cells: {} as any, unmappedItems: [] as any, minDueDate: Infinity, itemCount: 0, availableItems: 0, isPoCat: false, isUrgent: false, isManual: false, isDuplicateRow: isDuplicateRow, customerRemarks: [] as {source: string, text: string}[] };
+            const row = { requestId: group.rid, cells: {} as any, unmappedItems: [] as any, minDueDate: Infinity, itemCount: 0, availableItems: 0, isPoCat: false, isUrgent: false, isSprint: false, isLSP: false, isManual: false, isDuplicateRow: isDuplicateRow, customerRemarks: [] as {source: string, text: string}[] };
             
             const seenTaskIdsInRow = new Set<string>();
             const uniqueRemarkTexts = new Set<string>();
@@ -829,6 +829,11 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                 if (doc.category === 'urgent') row.isUrgent = true;
                 
                 doc.tasks.forEach((task: any, index: number) => {
+                    // Detect specific urgency types from content
+                    const allContent = Object.values(task).map(v => String(v).toLowerCase()).join(' ');
+                    if (allContent.includes('sprint')) row.isSprint = true;
+                    if (allContent.includes('lsp')) row.isLSP = true;
+
                     if (task._id && seenTaskIdsInRow.has(task._id)) return;
                     if (task._id) seenTaskIdsInRow.add(task._id);
 
@@ -1196,8 +1201,8 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                         <tr key={row.requestId} className={`group transition-colors ${row.isDuplicateRow ? 'bg-red-50 hover:bg-red-100 border-l-4 border-red-500' : 'hover:bg-indigo-50/20'}`}>
                                             <td className="p-0.5 border-r border-base-200 bg-white dark:bg-base-955 sticky left-0 z-40 text-center font-black text-slate-800 text-[9px] leading-tight">{`${(new Date(row.minDueDate)).getDate()}/${(new Date(row.minDueDate)).getMonth()+1}`}</td>
                                             <td className={`px-2 py-2 border-r-2 border-indigo-400 bg-white dark:bg-base-900 sticky left-[42px] z-40 shadow-sm`}>
-                                                <div className="flex flex-col gap-0.5">
-                                                    <div className="flex items-center justify-between">
+                                                <div className="flex items-center justify-between gap-2 h-full">
+                                                    <div className="flex flex-col gap-0.5 min-w-0">
                                                         <div className="flex items-center gap-1 min-w-0">
                                                             <span className={`text-[13px] font-black uppercase leading-none tracking-tighter truncate ${row.isDuplicateRow ? 'text-red-600' : 'text-base-955 dark:text-base-50'}`}>{row.requestId.replace(/^RS1-/, '')}</span>
                                                             {row.customerRemarks.length > 0 && (
@@ -1211,18 +1216,20 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                                             )}
                                                         </div>
                                                         <span className="text-[8px] font-black text-slate-400 shrink-0">#{row.availableItems}/{row.itemCount}</span>
-                                                    </div>
-                                                    <div className="flex gap-1 flex-wrap">
                                                         {row.isDuplicateRow && (
                                                             <div className="flex items-center gap-2 mt-1">
-                                                                <span className="px-1 py-0.5 bg-red-600 text-white text-[6px] rounded-sm font-black animate-pulse">DUPLICATE SOURCE</span>
+                                                                <span className="px-1 py-0.5 bg-red-600 text-white text-[6px] rounded-sm font-black animate-pulse">DUPLICATE</span>
                                                                 <button onClick={(e) => { e.stopPropagation(); handleMergeDuplicates(row.requestId); }} className="px-2 py-0.5 bg-white border border-red-200 text-red-600 text-[8px] font-bold rounded hover:bg-red-50 shadow-sm flex items-center gap-1">
-                                                                    <SparklesIcon className="h-3 w-3"/> Fix / Merge
+                                                                    <SparklesIcon className="h-3 w-3"/> Fix
                                                                 </button>
                                                             </div>
                                                         )}
-                                                        {row.isPoCat && <span className="px-1 py-0.5 bg-orange-600 text-white text-[6px] rounded-sm font-black">PO</span>}
-                                                        {row.isUrgent && <span className="px-1 py-0.5 bg-red-600 text-white text-[6px] rounded-sm font-black">URG</span>}
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-1 shrink-0">
+                                                        {row.isPoCat && <span className="px-1.5 py-0.5 bg-orange-600 text-white text-[9px] rounded font-black tracking-wide shadow-sm">PO CAT</span>}
+                                                        {row.isSprint && <span className="px-1.5 py-0.5 bg-rose-600 text-white text-[9px] rounded font-black tracking-wide shadow-sm border border-rose-400">SPRINT</span>}
+                                                        {row.isLSP && <span className="px-1.5 py-0.5 bg-cyan-600 text-white text-[9px] rounded font-black tracking-wide shadow-sm border border-cyan-400">LSP</span>}
+                                                        {row.isUrgent && !row.isSprint && !row.isLSP && <span className="px-1.5 py-0.5 bg-red-600 text-white text-[9px] rounded font-black tracking-wide shadow-sm">URGENT</span>}
                                                     </div>
                                                 </div>
                                             </td>
