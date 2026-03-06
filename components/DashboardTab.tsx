@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { GoogleGenAI, Modality } from "@google/genai";
 import type { Tester, AssignedTask, RawTask, ShiftReport, DailySchedule, AssignedPrepareTask, CategorizedTask } from '../types';
 import { TaskStatus, TaskCategory } from '../types';
 import { 
@@ -11,7 +12,7 @@ import {
     BeakerIcon, CalendarIcon,
     SunIcon, MoonIcon, DownloadIcon,
     XCircleIcon, SparklesIcon,
-    TrashIcon
+    TrashIcon, ChatAlt2Icon, SpeakerWaveIcon
 } from './common/Icons';
 
 declare const XLSX: any;
@@ -142,6 +143,113 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [notification, setNotification] = useState<{message: string, isError: boolean} | null>(null);
     const [selectedPersonId, setSelectedPersonId] = useState<string | null>(ALL_PERSONNEL_ID);
+    const [aiSummary, setAiSummary] = useState<string | null>(null);
+    const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+    const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+
+    const handleAudioSummary = async () => {
+        setIsGeneratingAudio(true);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            
+            // Step 1: Generate the script
+            let prompt = `Create a concise, professional summary script for a 1-minute audio briefing in Thai for the following shift data. Focus on key metrics, special tasks, and any issues. Do not include markdown formatting or bullet points, just the spoken text.
+            
+            Date: ${selectedDate}, Shift: ${selectedShift}
+            Global Stats: Total ${globalStats.total}, Done ${globalStats.done}, Urgent ${globalStats.urgent}, Sprint ${globalStats.sprint}, LSP ${globalStats.lsp}.
+            Waste Level: ${shiftReport?.wasteLevel || 'Not set'}.
+            `;
+
+            processedPersonnel.forEach(p => {
+                const total = Object.values(p.summary).reduce((acc: number, s: any) => acc + s.total, 0);
+                const done = Object.values(p.summary).reduce((acc: number, s: any) => acc + s.done, 0);
+                if (total > 0) prompt += `\n- ${p.name}: ${done}/${total} tasks.`;
+            });
+
+            const scriptResponse = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: prompt,
+            });
+            const scriptText = scriptResponse.text || "No script generated.";
+
+            // Step 2: Convert to Audio
+            const audioResponse = await ai.models.generateContent({
+                model: "gemini-2.5-flash-preview-tts",
+                contents: [{ parts: [{ text: scriptText }] }],
+                config: {
+                    responseModalities: [Modality.AUDIO],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: 'Kore' },
+                        },
+                    },
+                },
+            });
+
+            const base64Audio = audioResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+            if (base64Audio) {
+                const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
+                audio.play();
+                setNotification({ message: "Playing Audio Summary...", isError: false });
+            } else {
+                throw new Error("No audio data received");
+            }
+
+        } catch (error) {
+            console.error("Audio Summary failed", error);
+            setNotification({ message: "Failed to generate audio summary", isError: true });
+        } finally {
+            setIsGeneratingAudio(false);
+        }
+    };
+
+    const handleAiSummary = async () => {
+        setIsGeneratingSummary(true);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            
+            let prompt = `Summarize the shift work for ${selectedDate} ${selectedShift} shift in Thai language.
+            
+            Global Stats:
+            - Total Tasks: ${globalStats.total}
+            - Done: ${globalStats.done}
+            - Urgent: ${globalStats.urgent}
+            - Sprint: ${globalStats.sprint}
+            - LSP: ${globalStats.lsp}
+            - PoCat: ${globalStats.poCat}
+            
+            Waste Level: ${shiftReport?.wasteLevel || 'Not set'}
+            
+            Personnel Activity:
+            `;
+
+            processedPersonnel.forEach(p => {
+                prompt += `\n- ${p.name} (${p.role}):\n`;
+                Object.values(p.summary).forEach((s: any) => {
+                    prompt += `  - ${s.desc}: ${s.done}/${s.total} (Status: ${s.priorityStatus})\n`;
+                    if (s.hasOverPlanItems) prompt += `    * Over Plan items present\n`;
+                });
+            });
+
+            prompt += `\nPlease provide a concise summary in Thai covering:
+            1. Who worked and what they did.
+            2. Overall performance (met plan or not).
+            3. Special tasks summary (Urgent/Sprint/LSP).
+            4. Waste level status.
+            5. Any pending issues.`;
+
+            const response = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: prompt,
+            });
+            setAiSummary(response.text || "No summary generated.");
+        } catch (error) {
+            console.error("AI Summary failed", error);
+            setNotification({ message: "Failed to generate AI summary", isError: true });
+        } finally {
+            setIsGeneratingSummary(false);
+        }
+    };
 
     const fetchData = useCallback(async () => {
         setIsFetching(true);
@@ -370,6 +478,30 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
             `}</style>
 
             <ReportEditorModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} report={shiftReport} onSave={handleSaveReport} date={selectedDate} shift={selectedShift} />
+            {aiSummary && (
+                <div className="fixed inset-0 bg-base-900/80 backdrop-blur-md flex items-center justify-center z-[120] p-4 animate-fade-in" onClick={() => setAiSummary(null)}>
+                    <div className="bg-white dark:bg-base-900 rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col border border-white/20 max-h-[80vh]" onClick={e => e.stopPropagation()}>
+                        <div className="p-8 border-b border-base-100 dark:border-base-800 flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl"><SparklesIcon className="h-6 w-6"/></div>
+                                <div>
+                                    <h3 className="text-2xl font-black text-base-955 dark:text-white tracking-tighter">AI Shift Summary</h3>
+                                    <p className="text-[10px] font-bold text-base-400 uppercase tracking-widest">Generated Intelligence Report</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setAiSummary(null)} className="p-2 hover:bg-base-200 dark:hover:bg-base-700 rounded-full transition-colors"><XCircleIcon className="h-6 w-6 text-base-400"/></button>
+                        </div>
+                        <div className="p-8 overflow-y-auto custom-scrollbar">
+                            <div className="prose prose-indigo dark:prose-invert max-w-none">
+                                <p className="whitespace-pre-wrap text-base-700 dark:text-base-300 font-medium leading-relaxed">{aiSummary}</p>
+                            </div>
+                        </div>
+                        <div className="p-6 border-t border-base-100 dark:border-base-800 bg-base-50 dark:bg-base-800/50 flex justify-end">
+                            <button onClick={() => setAiSummary(null)} className="px-8 py-3 bg-base-900 dark:bg-white text-white dark:text-base-900 font-black rounded-xl uppercase tracking-widest text-xs hover:scale-105 transition-transform">Close Report</button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {notification && ( <div className={`fixed bottom-10 right-10 z-[110] px-6 py-4 rounded-2xl shadow-2xl animate-slide-in-up flex items-center gap-3 font-black text-xs uppercase tracking-widest ${notification.isError ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'}`}> <CheckCircleIcon className="h-5 w-5" /> {notification.message} </div> )}
 
             <div className="flex-grow grid grid-cols-12 gap-5 h-full relative overflow-hidden">
@@ -389,6 +521,12 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
                             <div className="flex items-center gap-4">
                                 <div className="flex items-center gap-4 bg-white dark:bg-base-800 p-2 rounded-[2rem] border-2 border-base-100 dark:border-base-700 shadow-inner"><div className="relative group px-4 border-r dark:border-base-700"><CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-primary-600" /><input type="date" value={selectedDate} onChange={e => onDateChange(e.target.value)} className="bg-transparent border-none text-[13px] font-black focus:ring-0 cursor-pointer pl-6 py-2 dark:text-white" /></div><div className="flex gap-2 p-1"><button onClick={() => onShiftChange('day')} className={`flex items-center gap-2.5 px-6 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedShift === 'day' ? 'bg-amber-500 text-white shadow-lg' : 'text-base-400 hover:text-amber-600'}`}><SunIcon className="h-4 w-4" /> Day</button><button onClick={() => onShiftChange('night')} className={`flex items-center gap-2.5 px-6 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedShift === 'night' ? 'bg-indigo-700 text-white shadow-lg' : 'text-base-400 hover:text-indigo-700'}`}><MoonIcon className="h-4 w-4" /> Night</button></div></div>
                                 <button onClick={handleExport} className="p-4 bg-white dark:bg-base-800 hover:bg-base-50 rounded-2xl border-2 border-base-100 dark:border-base-700 shadow-sm text-base-500"><DownloadIcon className="h-6 w-6"/></button>
+                                <button onClick={handleAiSummary} disabled={isGeneratingSummary} className="p-4 bg-white dark:bg-base-800 hover:bg-base-50 rounded-2xl border-2 border-base-100 dark:border-base-700 shadow-sm text-primary-600 disabled:opacity-50 transition-all active:scale-95" title="Generate AI Summary">
+                                    <ChatAlt2Icon className={`h-6 w-6 ${isGeneratingSummary ? 'animate-bounce' : ''}`}/>
+                                </button>
+                                <button onClick={handleAudioSummary} disabled={isGeneratingAudio} className="p-4 bg-white dark:bg-base-800 hover:bg-base-50 rounded-2xl border-2 border-base-100 dark:border-base-700 shadow-sm text-rose-600 disabled:opacity-50 transition-all active:scale-95" title="Generate Audio Briefing">
+                                    <SpeakerWaveIcon className={`h-6 w-6 ${isGeneratingAudio ? 'animate-pulse' : ''}`}/>
+                                </button>
                             </div>
                         </div>
                         <div className="grid grid-cols-6 gap-4">

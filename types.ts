@@ -202,6 +202,25 @@ export interface DistillationLog {
     createdAt: string;
 }
 
+// --- Environment Monitoring ---
+export interface LabRoom {
+    id: string;
+    name: string;
+    monitorTimeSlots: string[]; // e.g. ["09:00", "13:00"]
+    description?: string;
+}
+
+export interface EnvironmentLog {
+    id: string;
+    roomId: string;
+    roomName: string;
+    temperature: number;
+    humidity: number;
+    timestamp: string; // ISO string
+    recorderName: string;
+    note?: string;
+}
+
 // --- Special Booking System ---
 export interface Booking {
     id: string;

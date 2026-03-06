@@ -632,3 +632,59 @@ export const updateBooking = async (id: string, updates: Partial<Booking>): Prom
 export const deleteBooking = async (id: string): Promise<void> => {
     await getCollection('bookings').doc(id).delete();
 };
+
+// --- Environment Monitoring Logic ---
+import type { LabRoom, EnvironmentLog } from '../types';
+
+export const getLabRooms = async (): Promise<LabRoom[]> => {
+    if (!firestore) return [];
+    const snapshot = await safeGet(getCollection('labRooms'));
+    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as LabRoom));
+};
+
+export const addLabRoom = async (room: Omit<LabRoom, 'id'>): Promise<LabRoom> => {
+    const docRef = await getCollection('labRooms').add(room);
+    return { id: docRef.id, ...room };
+};
+
+export const updateLabRoom = async (id: string, updates: Partial<LabRoom>): Promise<void> => {
+    await getCollection('labRooms').doc(id).update(updates);
+};
+
+export const deleteLabRoom = async (id: string): Promise<void> => {
+    await getCollection('labRooms').doc(id).delete();
+};
+
+export const getEnvironmentLogs = async (roomId?: string, startDate?: string, endDate?: string): Promise<EnvironmentLog[]> => {
+    if (!firestore) return [];
+    let query: any = getCollection('environmentLogs').orderBy('timestamp', 'desc');
+    
+    if (roomId) {
+        query = query.where('roomId', '==', roomId);
+    }
+    
+    // Note: Firestore requires composite indexes for multiple fields filtering/sorting
+    // For simplicity in this environment, we might filter dates client-side if index issues arise,
+    // but let's try standard query first. If startDate/endDate are provided, we filter.
+    
+    const snapshot = await safeGet(query);
+    let logs = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as EnvironmentLog));
+
+    if (startDate) {
+        logs = logs.filter((log: EnvironmentLog) => log.timestamp >= startDate);
+    }
+    if (endDate) {
+        logs = logs.filter((log: EnvironmentLog) => log.timestamp <= endDate);
+    }
+    
+    return logs;
+};
+
+export const addEnvironmentLog = async (log: Omit<EnvironmentLog, 'id'>): Promise<EnvironmentLog> => {
+    const docRef = await getCollection('environmentLogs').add(log);
+    return { id: docRef.id, ...log };
+};
+
+export const deleteEnvironmentLog = async (id: string): Promise<void> => {
+    await getCollection('environmentLogs').doc(id).delete();
+};

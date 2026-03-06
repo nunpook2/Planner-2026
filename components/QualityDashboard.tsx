@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { AssignedTask, RawTask, DistillationLog, Tester, AssignedPrepareTask } from '../types';
+import type { AssignedTask, RawTask, DistillationLog, Tester, AssignedPrepareTask, LabRoom, EnvironmentLog } from '../types';
 import { TaskStatus, TaskCategory } from '../types';
 import { 
     getAssignedTasks, 
@@ -11,7 +11,14 @@ import {
     getDistillationLogs,
     addDistillationLog,
     updateDistillationLog,
-    deleteDistillationLog
+    deleteDistillationLog,
+    getLabRooms,
+    addLabRoom,
+    updateLabRoom,
+    deleteLabRoom,
+    getEnvironmentLogs,
+    addEnvironmentLog,
+    deleteEnvironmentLog
 } from '../services/dataService';
 import { 
     AlertTriangleIcon, CheckCircleIcon, 
@@ -19,12 +26,55 @@ import {
     XCircleIcon, UserGroupIcon, DownloadIcon,
     SparklesIcon, PlusIcon, TrashIcon, ArrowUpIcon,
     ClipboardListIcon, PencilIcon, ChevronDownIcon,
-    DatabaseIcon, SearchIcon, ClockIcon
+    DatabaseIcon, SearchIcon, ClockIcon, ThermometerIcon
 } from './common/Icons';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 declare const XLSX: any;
 
 const CHEMICAL_OPTIONS = ['Methanol', 'Ethanol', 'Hexane', 'Acetone', 'Acetonitrile', 'Isopropanol', 'Xylene', 'Toluene'];
+
+const DoubleConfirmDeleteButton = ({ 
+    onDelete, 
+    baseClass, 
+    confirmClass, 
+    iconClass = "h-3 w-3" 
+}: { 
+    onDelete: () => void, 
+    baseClass: string, 
+    confirmClass: string,
+    iconClass?: string
+}) => {
+    const [isConfirming, setIsConfirming] = useState(false);
+
+    useEffect(() => {
+        if (isConfirming) {
+            const timer = setTimeout(() => setIsConfirming(false), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [isConfirming]);
+
+    const handleClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (isConfirming) {
+            onDelete();
+            setIsConfirming(false);
+        } else {
+            setIsConfirming(true);
+        }
+    };
+
+    return (
+        <button 
+            onClick={handleClick} 
+            className={`${baseClass} ${isConfirming ? confirmClass : ''} transition-all duration-200`}
+            title={isConfirming ? "Click again to confirm" : "Delete"}
+        >
+            {isConfirming ? <CheckCircleIcon className={iconClass} /> : <TrashIcon className={iconClass} />}
+        </button>
+    );
+};
 
 interface FlattenedNotOkTask {
     docId: string;
@@ -296,13 +346,296 @@ const DistillationFormModal: React.FC<{
     );
 };
 
+const RoomConfigModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (room: Omit<LabRoom, 'id'>, id?: string) => void;
+    editTarget: LabRoom | null;
+}> = ({ isOpen, onClose, onSave, editTarget }) => {
+    const [name, setName] = useState('');
+    const [timeSlots, setTimeSlots] = useState<string[]>(['09:00', '13:00']);
+    const [desc, setDesc] = useState('');
+    const [newTime, setNewTime] = useState('');
+
+    useEffect(() => {
+        if (isOpen) {
+            if (editTarget) {
+                setName(editTarget.name);
+                setTimeSlots(editTarget.monitorTimeSlots || []);
+                setDesc(editTarget.description || '');
+            } else {
+                setName('');
+                setTimeSlots(['09:00', '13:00']);
+                setDesc('');
+            }
+        }
+    }, [isOpen, editTarget]);
+
+    const PREDEFINED_TIMES = [
+        '08:00', '09:00', '10:00', '11:00', '12:00', 
+        '13:00', '14:00', '15:00', '16:00', '17:00', 
+        '18:00', '19:00', '20:00'
+    ];
+
+    const toggleTimeSlot = (time: string) => {
+        if (timeSlots.includes(time)) {
+            setTimeSlots(timeSlots.filter(t => t !== time));
+        } else {
+            setTimeSlots([...timeSlots, time].sort());
+        }
+    };
+
+    const addTimeSlot = () => {
+        if (newTime && !timeSlots.includes(newTime)) {
+            const updated = [...timeSlots, newTime].sort();
+            setTimeSlots(updated);
+            setNewTime('');
+        }
+    };
+
+    const removeTimeSlot = (time: string) => {
+        setTimeSlots(timeSlots.filter(t => t !== time));
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-fade-in">
+            <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-md overflow-hidden border border-white" onClick={e => e.stopPropagation()}>
+                <div className="px-8 py-7 border-b border-slate-100 flex justify-between items-center bg-slate-50 dark:bg-base-800">
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none italic">
+                        {editTarget ? 'Edit Room' : 'New Lab Room'}
+                    </h3>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-base-700 rounded-xl transition-all"><XCircleIcon className="h-6 w-6 text-slate-400" /></button>
+                </div>
+                <div className="p-10 space-y-6">
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Room Name</label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-4 bg-slate-50 dark:bg-base-800 border-2 border-slate-100 dark:border-base-700 rounded-2xl font-black text-lg outline-none focus:border-indigo-500 dark:text-white" placeholder="e.g. Lab 101" />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Monitor Schedule (Times)</label>
+                        
+                        {/* Predefined Times Grid */}
+                        <div className="grid grid-cols-4 gap-2 mb-4">
+                            {PREDEFINED_TIMES.map(time => (
+                                <button
+                                    key={time}
+                                    onClick={() => toggleTimeSlot(time)}
+                                    className={`py-2 rounded-xl text-xs font-black transition-all ${
+                                        timeSlots.includes(time) 
+                                        ? 'bg-indigo-600 text-white shadow-md scale-105' 
+                                        : 'bg-slate-100 dark:bg-base-800 text-slate-400 hover:bg-slate-200 dark:hover:bg-base-700'
+                                    }`}
+                                >
+                                    {time}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="flex gap-2 mb-3 items-center">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase mr-2">Custom:</span>
+                            <input 
+                                type="time" 
+                                value={newTime} 
+                                onChange={e => setNewTime(e.target.value)} 
+                                className="flex-1 p-2 bg-slate-50 dark:bg-base-800 border-2 border-slate-100 dark:border-base-700 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 dark:text-white" 
+                            />
+                            <button onClick={addTimeSlot} disabled={!newTime} className="px-3 py-2 bg-indigo-100 text-indigo-600 rounded-xl font-black hover:bg-indigo-600 hover:text-white transition-all disabled:opacity-50"><PlusIcon className="h-4 w-4" /></button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 min-h-[40px] p-3 bg-slate-50 dark:bg-base-800 rounded-2xl border border-slate-100 dark:border-base-700">
+                            {timeSlots.length > 0 ? timeSlots.map(t => (
+                                <span key={t} className="px-3 py-1 bg-white dark:bg-base-900 text-indigo-600 border border-indigo-100 dark:border-base-700 rounded-lg text-xs font-black flex items-center gap-2 shadow-sm">
+                                    {t}
+                                    <button onClick={() => removeTimeSlot(t)} className="hover:text-rose-500"><XCircleIcon className="h-3 w-3" /></button>
+                                </span>
+                            )) : (
+                                <span className="text-xs text-slate-400 italic w-full text-center py-1">No times selected</span>
+                            )}
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Description</label>
+                        <input type="text" value={desc} onChange={e => setDesc(e.target.value)} className="w-full p-4 bg-slate-50 dark:bg-base-800 border-2 border-slate-100 dark:border-base-700 rounded-2xl font-bold text-sm outline-none focus:border-indigo-500 dark:text-white" />
+                    </div>
+                </div>
+                <div className="px-10 py-8 border-t border-slate-100 dark:border-base-700 flex gap-4 bg-slate-50/50 dark:bg-base-900">
+                    <button 
+                        onClick={() => onSave({ name, monitorTimeSlots: timeSlots, description: desc }, editTarget?.id)} 
+                        disabled={!name}
+                        className="flex-1 py-5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl hover:bg-indigo-700 transition-all uppercase tracking-widest text-xs disabled:opacity-50"
+                    >
+                        Save Configuration
+                    </button>
+                    <button onClick={onClose} className="px-8 py-5 text-xs font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest">Cancel</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const EnvironmentLogModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (log: Omit<EnvironmentLog, 'id'>, id?: string) => void;
+    testers: Tester[];
+    roomId: string;
+    roomName: string;
+    editTarget: EnvironmentLog | null;
+    timeSlots: string[];
+    labRooms: LabRoom[];
+}> = ({ isOpen, onClose, onSave, testers, roomId, roomName, editTarget, timeSlots, labRooms }) => {
+    const [temp, setTemp] = useState('');
+    const [hum, setHum] = useState('');
+    const [user, setUser] = useState('');
+    const [note, setNote] = useState('');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [time, setTime] = useState('');
+    const [selectedRoom, setSelectedRoom] = useState(roomId);
+
+    useEffect(() => {
+        if (isOpen) {
+            if (editTarget) {
+                setTemp(editTarget.temperature.toString());
+                setHum(editTarget.humidity.toString());
+                setUser(editTarget.recorderName);
+                setNote(editTarget.note || '');
+                const d = new Date(editTarget.timestamp);
+                setDate(d.toISOString().split('T')[0]);
+                const h = d.getHours().toString().padStart(2, '0');
+                const m = d.getMinutes().toString().padStart(2, '0');
+                setTime(`${h}:${m}`);
+                setSelectedRoom(editTarget.roomId);
+            } else {
+                setTemp('');
+                setHum('');
+                setUser('');
+                setNote('');
+                setDate(new Date().toISOString().split('T')[0]);
+                setSelectedRoom(roomId);
+                
+                // Determine time slots based on selected room
+                const currentRoom = labRooms.find(r => r.id === (editTarget ? editTarget.roomId : roomId));
+                const slots = currentRoom?.monitorTimeSlots || timeSlots;
+
+                if (slots && slots.length > 0) {
+                    setTime(slots[0]);
+                } else {
+                    const now = new Date();
+                    const h = now.getHours().toString().padStart(2, '0');
+                    const m = now.getMinutes().toString().padStart(2, '0');
+                    setTime(`${h}:${m}`);
+                }
+            }
+        }
+    }, [isOpen, editTarget, roomId, labRooms]);
+
+    // Update time slots when room changes
+    const currentRoomObj = labRooms.find(r => r.id === selectedRoom);
+    const availableTimeSlots = currentRoomObj?.monitorTimeSlots || [];
+
+    useEffect(() => {
+        if (!editTarget && availableTimeSlots.length > 0 && !availableTimeSlots.includes(time)) {
+             setTime(availableTimeSlots[0]);
+        }
+    }, [selectedRoom, availableTimeSlots]);
+
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-fade-in">
+            <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-md overflow-hidden border border-white" onClick={e => e.stopPropagation()}>
+                <div className="px-8 py-7 border-b border-slate-100 flex justify-between items-center bg-slate-50 dark:bg-base-800">
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none italic">
+                        {editTarget ? 'Edit Reading' : 'Log Environment'}
+                    </h3>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-base-700 rounded-xl transition-all"><XCircleIcon className="h-6 w-6 text-slate-400" /></button>
+                </div>
+                <div className="p-10 space-y-6">
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Target Location</label>
+                        <select 
+                            value={selectedRoom} 
+                            onChange={e => setSelectedRoom(e.target.value)} 
+                            className="w-full p-4 bg-slate-50 dark:bg-base-800 border-2 border-slate-100 dark:border-base-700 rounded-2xl font-black text-lg outline-none focus:border-indigo-500 shadow-inner appearance-none dark:text-white text-center text-indigo-600 uppercase tracking-tight"
+                            disabled={!!editTarget}
+                        >
+                            <option value="" disabled>-- Select Room --</option>
+                            {labRooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                        </select>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-5">
+                        <div className="space-y-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Date</label>
+                            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-4 bg-slate-50 dark:bg-base-800 border-2 border-slate-100 dark:border-base-700 rounded-2xl font-bold text-sm outline-none focus:border-indigo-500 dark:text-white text-center" />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Time Slot</label>
+                            {availableTimeSlots && availableTimeSlots.length > 0 ? (
+                                <select value={time} onChange={e => setTime(e.target.value)} className="w-full p-4 bg-slate-50 dark:bg-base-800 border-2 border-slate-100 dark:border-base-700 rounded-2xl font-bold text-sm outline-none focus:border-indigo-500 dark:text-white appearance-none text-center">
+                                    {availableTimeSlots.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                            ) : (
+                                <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full p-4 bg-slate-50 dark:bg-base-800 border-2 border-slate-100 dark:border-base-700 rounded-2xl font-bold text-sm outline-none focus:border-indigo-500 dark:text-white text-center" />
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-5">
+                        <div className="space-y-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Temp (°C)</label>
+                            <input type="number" step="0.1" value={temp} onChange={e => setTemp(e.target.value)} className="w-full p-5 bg-rose-50 dark:bg-rose-900/20 border-2 border-rose-100 dark:border-rose-800 rounded-2xl font-black text-2xl text-rose-600 outline-none focus:border-rose-500 text-center" />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Humidity (%)</label>
+                            <input type="number" step="0.1" value={hum} onChange={e => setHum(e.target.value)} className="w-full p-5 bg-cyan-50 dark:bg-cyan-900/20 border-2 border-cyan-100 dark:border-cyan-800 rounded-2xl font-black text-2xl text-cyan-600 outline-none focus:border-cyan-500 text-center" />
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Recorder</label>
+                        <select 
+                            value={user} 
+                            onChange={e => setUser(e.target.value)} 
+                            className="w-full p-4 bg-slate-50 dark:bg-base-800 border-2 border-slate-100 dark:border-base-700 rounded-2xl font-black text-base outline-none focus:border-indigo-500 shadow-inner appearance-none dark:text-white"
+                        >
+                            <option value="">-- Select Personnel --</option>
+                            {testers.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                        </select>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Note (Optional)</label>
+                        <input type="text" value={note} onChange={e => setNote(e.target.value)} className="w-full p-4 bg-slate-50 dark:bg-base-800 border-2 border-slate-100 dark:border-base-700 rounded-2xl font-bold text-sm outline-none focus:border-indigo-500 dark:text-white" />
+                    </div>
+                </div>
+                <div className="px-10 py-8 border-t border-slate-100 dark:border-base-700 flex gap-4 bg-slate-50/50 dark:bg-base-900">
+                    <button 
+                        onClick={() => onSave({ 
+                            roomId: selectedRoom, roomName: currentRoomObj?.name || roomName, temperature: parseFloat(temp), humidity: parseFloat(hum), timestamp: `${date}T${time}:00`, recorderName: user, note 
+                        }, editTarget?.id)} 
+                        disabled={!user || !temp || !hum || !date || !time || !selectedRoom}
+                        className="flex-1 py-5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl hover:bg-indigo-700 transition-all uppercase tracking-widest text-xs disabled:opacity-50"
+                    >
+                        {editTarget ? 'Update Reading' : 'Log Reading'}
+                    </button>
+                    <button onClick={onClose} className="px-8 py-5 text-xs font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest">Discard</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> = ({ onResolve, testers }) => {
-    const [activeSubTab, setActiveSubTab] = useState<'issues' | 'distillation' | 'overplan'>('issues');
+    const [activeSubTab, setActiveSubTab] = useState<'issues' | 'distillation' | 'overplan' | 'environment'>('issues');
     const [issuesMode, setIssuesMode] = useState<'active' | 'history'>('active');
     const [allAssigned, setAllAssigned] = useState<AssignedTask[]>([]);
     const [allPrepared, setAllPrepared] = useState<AssignedPrepareTask[]>([]);
     const [distLogs, setDistLogs] = useState<DistillationLog[]>([]);
     const [historyLogs, setHistoryLogs] = useState<any[]>([]);
+    const [labRooms, setLabRooms] = useState<LabRoom[]>([]);
+    const [envLogs, setEnvLogs] = useState<EnvironmentLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isResolving, setIsResolving] = useState(false);
     const [searchAnalyst, setSearchAnalyst] = useState('');
@@ -312,6 +645,13 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
     const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, targetItems: FlattenedNotOkTask[] | null, title: string, description: string }>({ isOpen: false, targetItems: null, title: '', description: '' });
     const [distDeleteConfirm, setDistDeleteConfirm] = useState<DistillationLog | null>(null);
     const [editTarget, setEditTarget] = useState<DistillationLog | null>(null);
+    
+    // ENVIRONMENT STATE
+    const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+    const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+    const [isEnvLogModalOpen, setIsEnvLogModalOpen] = useState(false);
+    const [envEditTarget, setEnvEditTarget] = useState<EnvironmentLog | null>(null);
+    const [roomEditTarget, setRoomEditTarget] = useState<LabRoom | null>(null);
     
     // OVER PLAN INTERACTIVE STATE
     const [selectedOverPlanAnalyst, setSelectedOverPlanAnalyst] = useState<string | null>(null);
@@ -323,16 +663,20 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [assigned, prepared, dist, history] = await Promise.all([ 
+            const [assigned, prepared, dist, history, rooms, envs] = await Promise.all([ 
                 getAssignedTasks(), 
                 getAssignedPrepareTasks(),
                 getDistillationLogs(),
-                getResolutionHistory()
+                getResolutionHistory(),
+                getLabRooms(),
+                getEnvironmentLogs()
             ]);
             setAllAssigned(assigned || []);
             setAllPrepared(prepared || []);
             setDistLogs(dist || []);
             setHistoryLogs(history || []);
+            setLabRooms(rooms || []);
+            setEnvLogs(envs || []);
             
             // Auto-select first chemical if none selected
             if (!selectedChemical && dist.length > 0) {
@@ -340,8 +684,13 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
             } else if (!selectedChemical && dist.length === 0) {
                 setSelectedChemical(CHEMICAL_OPTIONS[0]);
             }
+
+            // Auto-select first room
+            if (!selectedRoomId && rooms && rooms.length > 0) {
+                setSelectedRoomId(rooms[0].id);
+            }
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
-    }, [selectedChemical]);
+    }, [selectedChemical, selectedRoomId]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -601,6 +950,18 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
             const wsOver = XLSX.utils.json_to_sheet(overPlanMaster);
             XLSX.utils.book_append_sheet(wb, wsOver, "Over Plan Achievement");
 
+            // 4. Environment Logs Sheet
+            const envData = envLogs.map(log => ({
+                'Timestamp': new Date(log.timestamp).toLocaleString(),
+                'Room': log.roomName,
+                'Temperature (°C)': log.temperature,
+                'Humidity (%)': log.humidity,
+                'Recorder': log.recorderName,
+                'Note': log.note
+            }));
+            const wsEnv = XLSX.utils.json_to_sheet(envData);
+            XLSX.utils.book_append_sheet(wb, wsEnv, "Environment Logs");
+
             XLSX.writeFile(wb, `Intelligence_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
             setNotification({ message: "Master Report Downloaded Successfully" });
         } catch (error) {
@@ -608,6 +969,58 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
             setNotification({ message: "Export Failed", isError: true });
         }
     };
+
+    // ENVIRONMENT HANDLERS
+    const handleSaveRoom = async (room: Omit<LabRoom, 'id'>, id?: string) => {
+        try {
+            if (id) { await updateLabRoom(id, room); setNotification({ message: "Room config updated." }); }
+            else { await addLabRoom(room); setNotification({ message: "New room added." }); }
+            setIsRoomModalOpen(false); setRoomEditTarget(null); fetchData();
+        } catch (e) { setNotification({ message: "Action failed", isError: true }); }
+    };
+
+    const handleDeleteRoom = async (id: string) => {
+        try { await deleteLabRoom(id); setNotification({ message: "Room deleted." }); setSelectedRoomId(null); fetchData(); } 
+        catch (e) { setNotification({ message: "Failed to delete", isError: true }); }
+    };
+
+    const handleSaveEnvLog = async (log: Omit<EnvironmentLog, 'id'>, id?: string) => {
+        try {
+            if (id) {
+                 await deleteEnvironmentLog(id);
+            }
+            await addEnvironmentLog(log);
+            
+            setNotification({ message: "Reading logged." });
+            setIsEnvLogModalOpen(false); setEnvEditTarget(null); fetchData();
+        } catch (e) { setNotification({ message: "Action failed", isError: true }); }
+    };
+
+    const handleDeleteEnvLog = async (id: string) => {
+        try { await deleteEnvironmentLog(id); setNotification({ message: "Reading deleted." }); fetchData(); } 
+        catch (e) { setNotification({ message: "Failed to delete", isError: true }); }
+    };
+
+    const filteredEnvLogs = useMemo(() => {
+        if (!selectedRoomId) return [];
+        return envLogs.filter(l => l.roomId === selectedRoomId).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    }, [envLogs, selectedRoomId]);
+
+    const chartData = useMemo(() => {
+        const dataMap: Record<string, any> = {};
+        envLogs.forEach(log => {
+            const key = log.timestamp;
+            if (!dataMap[key]) dataMap[key] = { timestamp: key };
+            const room = labRooms.find(r => r.id === log.roomId);
+            if (room) {
+                dataMap[key][`${room.name}_temp`] = log.temperature;
+                dataMap[key][`${room.name}_hum`] = log.humidity;
+            }
+        });
+        return Object.values(dataMap).sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    }, [envLogs, labRooms]);
+
+    const currentRoom = useMemo(() => labRooms.find(r => r.id === selectedRoomId), [labRooms, selectedRoomId]);
 
     const totalIssuesCount = groupedIssuesData.reduce((acc, g) => acc + g.allTasks.length, 0);
 
@@ -694,6 +1107,7 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
                         <button onClick={() => setActiveSubTab('issues')} className={`flex items-center gap-3 px-8 py-3 rounded-[1.4rem] text-[11px] font-black uppercase tracking-widest transition-all duration-300 ${activeSubTab === 'issues' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-800'}`}><AlertTriangleIcon className="h-5 w-5" /> Issues</button>
                         <button onClick={() => setActiveSubTab('distillation')} className={`flex items-center gap-3 px-8 py-3 rounded-[1.4rem] text-[11px] font-black uppercase tracking-widest transition-all duration-300 ${activeSubTab === 'distillation' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-800'}`}><BeakerIcon className="h-5 w-5" /> Recovery</button>
                         <button onClick={() => setActiveSubTab('overplan')} className={`flex items-center gap-3 px-8 py-3 rounded-[1.4rem] text-[11px] font-black uppercase tracking-widest transition-all duration-300 ${activeSubTab === 'overplan' ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-800'}`}><SparklesIcon className="h-5 w-5" /> Over Plan</button>
+                        <button onClick={() => setActiveSubTab('environment')} className={`flex items-center gap-3 px-8 py-3 rounded-[1.4rem] text-[11px] font-black uppercase tracking-widest transition-all duration-300 ${activeSubTab === 'environment' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-800'}`}><ThermometerIcon className="h-5 w-5" /> Environment</button>
                     </div>
                 </div>
                 
@@ -717,6 +1131,9 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
                         
                         {activeSubTab === 'distillation' && (
                             <button onClick={() => setIsDistModalOpen(true)} className="flex items-center gap-3 px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all border-b-4 border-indigo-800"><PlusIcon className="h-5 w-5" /> New Batch Log</button>
+                        )}
+                        {activeSubTab === 'environment' && (
+                            <button onClick={() => setIsEnvLogModalOpen(true)} disabled={!selectedRoomId} className="flex items-center gap-3 px-8 py-4 bg-emerald-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all border-b-4 border-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed"><PlusIcon className="h-5 w-5" /> Log Reading</button>
                         )}
                     </div>
                 </div>
@@ -1010,6 +1427,168 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
                                 </div>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {activeSubTab === 'environment' && (
+                    <div className="h-full flex flex-col gap-6 animate-fade-in overflow-hidden">
+                        {/* Room Selection Bar */}
+                        <div className="flex gap-2 items-center p-2 bg-slate-100 dark:bg-base-900 rounded-[2rem] border border-slate-200 dark:border-base-800 shadow-inner overflow-x-auto no-scrollbar shrink-0">
+                            {labRooms.map(room => (
+                                <div 
+                                    key={room.id}
+                                    onClick={() => setSelectedRoomId(room.id)}
+                                    title={`Schedule: ${room.monitorTimeSlots?.join(', ') || 'None'}`}
+                                    className={`px-6 py-2.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all shrink-0 flex items-center gap-2 cursor-pointer ${selectedRoomId === room.id ? 'bg-white dark:bg-base-800 text-emerald-600 shadow-md ring-2 ring-emerald-500/20' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+                                >
+                                    {room.name}
+                                    {selectedRoomId === room.id && (
+                                        <div className="flex gap-1 ml-2 border-l pl-2 border-slate-200">
+                                            <div onClick={(e) => { e.stopPropagation(); setRoomEditTarget(room); setIsRoomModalOpen(true); }} className="p-1 hover:bg-slate-100 rounded-full cursor-pointer"><PencilIcon className="h-3 w-3" /></div>
+                                            <DoubleConfirmDeleteButton 
+                                                onDelete={() => handleDeleteRoom(room.id)} 
+                                                baseClass="p-1 hover:bg-rose-100 text-rose-500 rounded-full cursor-pointer flex items-center justify-center" 
+                                                confirmClass="bg-rose-500 text-white hover:bg-rose-600 hover:text-white"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                            <button onClick={() => { setRoomEditTarget(null); setIsRoomModalOpen(true); }} className="px-4 py-2.5 rounded-full bg-slate-200 dark:bg-base-800 text-slate-500 hover:bg-emerald-600 hover:text-white transition-all shrink-0 flex items-center justify-center shadow-sm">
+                                <PlusIcon className="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        {/* Charts Section - ALWAYS VISIBLE NOW (Combined) */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 shrink-0 h-[300px]">
+                            <div className="bg-white dark:bg-base-900 rounded-[2.5rem] p-6 border-2 border-slate-100 dark:border-base-800 shadow-xl flex flex-col relative overflow-hidden">
+                                <div className="flex justify-between items-center mb-4 px-2">
+                                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rose-400 flex items-center gap-2"><ThermometerIcon className="h-4 w-4" /> Temperature Overview (°C)</h3>
+                                    <span className="text-[9px] font-black bg-rose-50 text-rose-600 px-2 py-1 rounded-lg uppercase">Target: 20-25°C</span>
+                                </div>
+                                <div className="flex-grow w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={chartData}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                                            <XAxis dataKey="timestamp" tickFormatter={(t) => new Date(t).toLocaleDateString(undefined, {month:'short', day:'numeric'})} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                                            <YAxis domain={['auto', 'auto']} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                                            <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'}} labelFormatter={(t) => new Date(t).toLocaleString()} />
+                                            <ReferenceLine y={25} stroke="#f43f5e" strokeDasharray="3 3" label={{ value: 'Max (25°C)', position: 'insideTopRight', fill: '#f43f5e', fontSize: 10, fontWeight: 'bold' }} />
+                                            <ReferenceLine y={20} stroke="#10b981" strokeDasharray="3 3" label={{ value: 'Min (20°C)', position: 'insideBottomRight', fill: '#10b981', fontSize: 10, fontWeight: 'bold' }} />
+                                            {labRooms.map((room, i) => (
+                                                <Line 
+                                                    key={room.id}
+                                                    type="monotone" 
+                                                    dataKey={`${room.name}_temp`}
+                                                    name={room.name}
+                                                    stroke={`hsl(${i * 60}, 70%, 50%)`} 
+                                                    strokeWidth={3} 
+                                                    dot={{r: 3}} 
+                                                    activeDot={{r: 6}} 
+                                                    connectNulls
+                                                />
+                                            ))}
+                                            <Legend />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                            <div className="bg-white dark:bg-base-900 rounded-[2.5rem] p-6 border-2 border-slate-100 dark:border-base-800 shadow-xl flex flex-col relative overflow-hidden">
+                                <div className="flex justify-between items-center mb-4 px-2">
+                                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-400 flex items-center gap-2"><BeakerIcon className="h-4 w-4" /> Humidity Overview (%)</h3>
+                                    <span className="text-[9px] font-black bg-cyan-50 text-cyan-600 px-2 py-1 rounded-lg uppercase">Target: 40-60%</span>
+                                </div>
+                                <div className="flex-grow w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={chartData}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                                            <XAxis dataKey="timestamp" tickFormatter={(t) => new Date(t).toLocaleDateString(undefined, {month:'short', day:'numeric'})} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                                            <YAxis domain={[0, 100]} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                                            <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'}} labelFormatter={(t) => new Date(t).toLocaleString()} />
+                                            <ReferenceLine y={60} stroke="#06b6d4" strokeDasharray="3 3" label={{ value: 'Max (60%)', position: 'insideTopRight', fill: '#06b6d4', fontSize: 10, fontWeight: 'bold' }} />
+                                            <ReferenceLine y={40} stroke="#06b6d4" strokeDasharray="3 3" label={{ value: 'Min (40%)', position: 'insideBottomRight', fill: '#06b6d4', fontSize: 10, fontWeight: 'bold' }} />
+                                            {labRooms.map((room, i) => (
+                                                <Line 
+                                                    key={room.id}
+                                                    type="monotone" 
+                                                    dataKey={`${room.name}_hum`}
+                                                    name={room.name}
+                                                    stroke={`hsl(${i * 60 + 180}, 70%, 50%)`} 
+                                                    strokeWidth={3} 
+                                                    dot={{r: 3}} 
+                                                    activeDot={{r: 6}} 
+                                                    connectNulls
+                                                />
+                                            ))}
+                                            <Legend />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        </div>
+
+                        {selectedRoomId && currentRoom ? (
+                            <>
+                                {/* Data Table */}
+                                <div className="flex-grow bg-white dark:bg-base-900 rounded-[3rem] border-2 border-slate-100 dark:border-base-800 shadow-xl overflow-hidden flex flex-col">
+                                    <div className="px-10 py-6 border-b border-slate-100 dark:border-base-800 bg-slate-50/50 dark:bg-base-955 flex justify-between items-center shrink-0">
+                                        <div className="flex flex-col">
+                                            <h3 className="text-[12px] font-black uppercase tracking-[0.5em] text-slate-400 flex items-center gap-3 italic"><DatabaseIcon className="h-5 w-5" /> Environment Log: {currentRoom.name}</h3>
+                                            <span className="text-[10px] font-bold text-slate-400 ml-8 mt-1">Schedule: {currentRoom.monitorTimeSlots?.join(', ') || 'None'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <span className="px-4 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest">{filteredEnvLogs.length} Readings</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex-grow overflow-y-auto custom-scrollbar">
+                                        <table className="min-w-full text-left">
+                                            <thead className="sticky top-0 bg-white/95 dark:bg-base-900/95 backdrop-blur-md text-[11px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-base-800 z-10">
+                                                <tr>
+                                                    <th className="px-10 py-5">Timestamp</th>
+                                                    <th className="px-10 py-5">Temp (°C)</th>
+                                                    <th className="px-10 py-5">Humidity (%)</th>
+                                                    <th className="px-10 py-5">Recorder</th>
+                                                    <th className="px-10 py-5">Note</th>
+                                                    <th className="px-10 py-5 text-right">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50 dark:divide-base-800">
+                                                {filteredEnvLogs.length > 0 ? filteredEnvLogs.map((log) => (
+                                                    <tr key={log.id} className="hover:bg-slate-50/80 dark:hover:bg-base-800 transition-all group">
+                                                        <td className="px-10 py-5"><span className="text-[13px] font-black text-slate-400">{new Date(log.timestamp).toLocaleString()}</span></td>
+                                                        <td className="px-10 py-5"><span className="text-[14px] font-bold text-rose-500">{log.temperature}°C</span></td>
+                                                        <td className="px-10 py-5"><span className="text-[14px] font-bold text-cyan-500">{log.humidity}%</span></td>
+                                                        <td className="px-10 py-5"><span className="text-[12px] font-black text-slate-500 uppercase">{log.recorderName}</span></td>
+                                                        <td className="px-10 py-5"><span className="text-[12px] text-slate-400 italic">{log.note || '-'}</span></td>
+                                                        <td className="px-10 py-5 text-right">
+                                                            <div className="flex justify-end gap-2">
+                                                                <button onClick={() => { setEnvEditTarget(log); setIsEnvLogModalOpen(true); }} className="p-3 bg-white dark:bg-base-800 border border-slate-100 dark:border-base-700 rounded-xl text-slate-300 hover:text-indigo-600 hover:border-indigo-100 transition-all shadow-sm"><PencilIcon className="h-5 w-5" /></button>
+                                                                <DoubleConfirmDeleteButton 
+                                                                    onDelete={() => handleDeleteEnvLog(log.id)} 
+                                                                    baseClass="p-3 bg-white dark:bg-base-800 border border-slate-100 dark:border-base-700 rounded-xl text-slate-300 hover:text-rose-600 hover:border-rose-100 transition-all shadow-sm flex items-center justify-center" 
+                                                                    confirmClass="bg-rose-500 text-white border-rose-500 hover:bg-rose-600 hover:border-rose-600 hover:text-white"
+                                                                    iconClass="h-5 w-5"
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )) : (
+                                                    <tr><td colSpan={6} className="py-32 text-center opacity-10 flex flex-col items-center"><ThermometerIcon className="h-24 w-24 mb-4" /><span className="text-2xl font-black uppercase tracking-[0.5em]">No Readings Logged</span></td></tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex-grow flex flex-col items-center justify-center opacity-20">
+                                <ThermometerIcon className="h-32 w-32 mb-6 text-slate-400" />
+                                <span className="text-2xl font-black uppercase tracking-[0.5em] text-slate-400">Select or Create a Room</span>
+                            </div>
+                        )}
+                        
+                        <RoomConfigModal isOpen={isRoomModalOpen} onClose={() => setIsRoomModalOpen(false)} onSave={handleSaveRoom} editTarget={roomEditTarget} />
+                        <EnvironmentLogModal isOpen={isEnvLogModalOpen} onClose={() => setIsEnvLogModalOpen(false)} onSave={handleSaveEnvLog} testers={testers} roomId={selectedRoomId || ''} roomName={currentRoom?.name || ''} editTarget={envEditTarget} timeSlots={currentRoom?.monitorTimeSlots || []} labRooms={labRooms} />
                     </div>
                 )}
             </div>
