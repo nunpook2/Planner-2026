@@ -12,10 +12,6 @@ interface BookingTabProps {
     testers: Tester[];
 }
 
-const HOURS = Array.from({ length: 11 }, (_, i) => i + 8); // 08:00 to 18:00
-const HOUR_WIDTH = 160; // Increased width for better visibility
-const ROW_HEIGHT = 100;  // Increased height to fit details
-
 // --- Helper Functions ---
 const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
 const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
@@ -38,7 +34,7 @@ const formatTime = (time: string) => {
 const BookingModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
-    onSave: (booking: Omit<Booking, 'id'>) => void;
+    onSave: (bookings: Omit<Booking, 'id'>[]) => void;
     testers: Tester[];
     initialDate: string;
     initialTesterId?: string;
@@ -49,6 +45,8 @@ const BookingModal: React.FC<{
     const [resourceId, setResourceId] = useState(initialTesterId || '');
     const [customerName, setCustomerName] = useState('');
     const [description, setDescription] = useState('');
+    const [startDate, setStartDate] = useState(initialDate);
+    const [endDate, setEndDate] = useState(initialDate);
     const [startTime, setStartTime] = useState(initialStartTime || '09:00');
     const [duration, setDuration] = useState('60'); // Minutes
     const [error, setError] = useState<string | null>(null);
@@ -59,34 +57,50 @@ const BookingModal: React.FC<{
                 setResourceId(editingBooking.resourceId);
                 setCustomerName(editingBooking.customerName);
                 setDescription(editingBooking.description);
+                setStartDate(editingBooking.date);
+                setEndDate(editingBooking.date);
                 setStartTime(editingBooking.startTime);
                 setDuration(editingBooking.durationMinutes.toString());
             } else {
                 setResourceId(initialTesterId || (testers.length > 0 ? testers[0].id : ''));
                 setCustomerName('');
                 setDescription('');
+                setStartDate(initialDate);
+                setEndDate(initialDate);
                 setStartTime(initialStartTime || '09:00');
                 setDuration('60');
             }
             setError(null);
         }
-    }, [isOpen, initialTesterId, initialStartTime, testers, editingBooking]);
+    }, [isOpen, initialDate, initialTesterId, initialStartTime, testers, editingBooking]);
 
     const handleSubmit = () => {
-        if (!resourceId || !customerName || !startTime) {
+        if (!resourceId || !customerName || !startTime || !startDate || !endDate) {
             setError("Please fill in all required fields.");
             return;
         }
 
-        // Conflict Detection (Simple)
+        if (new Date(endDate) < new Date(startDate)) {
+            setError("End date cannot be before start date.");
+            return;
+        }
+
         const startMinutes = parseInt(startTime.split(':')[0]) * 60 + parseInt(startTime.split(':')[1]);
         const endMinutes = startMinutes + parseInt(duration);
         
+        // Generate array of dates
+        const dates: string[] = [];
+        let currDate = new Date(startDate);
+        const lastDate = new Date(endDate);
+        while (currDate <= lastDate) {
+            dates.push(currDate.toISOString().split('T')[0]);
+            currDate.setDate(currDate.getDate() + 1);
+        }
+
         const hasConflict = existingBookings.some(b => {
             if (editingBooking && b.id === editingBooking.id) return false; // Ignore self when editing
             if (b.resourceId !== resourceId) return false;
-            const targetDate = editingBooking ? editingBooking.date : initialDate; // Use editing date or initial
-            if (b.date !== targetDate) return false;
+            if (!dates.includes(b.date)) return false;
 
             const bStart = parseInt(b.startTime.split(':')[0]) * 60 + parseInt(b.startTime.split(':')[1]);
             const bEnd = bStart + b.durationMinutes;
@@ -94,20 +108,23 @@ const BookingModal: React.FC<{
         });
 
         if (hasConflict) {
-            setError("This time slot overlaps with an existing booking.");
+            setError("This time slot overlaps with an existing booking on one or more selected dates.");
             return;
         }
 
         const tester = testers.find(t => t.id === resourceId);
-        onSave({
+        
+        const newBookings = dates.map(date => ({
             resourceId,
             resourceName: tester?.name || 'Unknown',
-            date: editingBooking ? editingBooking.date : initialDate, // Preserve date on edit
+            date,
             startTime,
             durationMinutes: parseInt(duration),
             customerName,
             description
-        });
+        }));
+
+        onSave(newBookings);
         onClose();
     };
 
@@ -124,7 +141,7 @@ const BookingModal: React.FC<{
                     <button onClick={onClose} className="p-2 hover:bg-indigo-100 dark:hover:bg-indigo-800 rounded-xl transition-colors"><XCircleIcon className="h-6 w-6 text-indigo-400"/></button>
                 </div>
                 
-                <div className="p-8 space-y-5">
+                <div className="p-8 space-y-5 max-h-[70vh] overflow-y-auto custom-scrollbar">
                     {error && <div className="p-3 bg-red-50 text-red-600 text-xs font-bold rounded-xl border border-red-100 flex items-center gap-2"><div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>{error}</div>}
                     
                     <div className="space-y-1">
@@ -137,6 +154,17 @@ const BookingModal: React.FC<{
                     <div className="space-y-1">
                         <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">Customer Name</label>
                         <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Who is booking?" className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">Start Date</label>
+                            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} disabled={!!editingBooking} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed" />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">End Date</label>
+                            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} min={startDate} disabled={!!editingBooking} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed" />
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -164,7 +192,7 @@ const BookingModal: React.FC<{
                     </div>
                 </div>
 
-                <div className="p-8 border-t border-base-100 dark:border-base-800 flex gap-3 bg-base-50/30">
+                <div className="p-8 border-t border-base-100 dark:border-base-800 flex gap-3 bg-base-50/30 shrink-0">
                     <button onClick={handleSubmit} className="flex-1 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl hover:bg-indigo-700 uppercase text-[11px] tracking-widest transition-all">{editingBooking ? 'Update Booking' : 'Confirm Booking'}</button>
                     <button onClick={onClose} className="px-8 py-4 text-[11px] font-black text-base-400 uppercase tracking-widest hover:text-base-800">Cancel</button>
                 </div>
@@ -315,12 +343,15 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
         else fetchMonthBookings();
     }, [fetchDayBookings, fetchMonthBookings, viewMode]);
 
-    const handleSaveBooking = async (bookingData: Omit<Booking, 'id'>) => {
+    const handleSaveBooking = async (bookingsData: Omit<Booking, 'id'>[]) => {
         try {
-            if (editingBooking) {
-                await updateBooking(editingBooking.id, bookingData);
+            if (editingBooking && bookingsData.length > 0) {
+                // When editing, we only update the first one (since edit doesn't support multi-day changes yet)
+                await updateBooking(editingBooking.id, bookingsData[0]);
             } else {
-                await addBooking(bookingData);
+                for (const bookingData of bookingsData) {
+                    await addBooking(bookingData);
+                }
             }
             if (viewMode === 'day') fetchDayBookings(); else fetchMonthBookings();
         } catch (e) { console.error(e); }
@@ -357,18 +388,6 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
         setViewMode('day');
     };
 
-    // Calculate position and width for a booking block
-    const getBlockStyle = (startTime: string, durationMinutes: number) => {
-        const [h, m] = startTime.split(':').map(Number);
-        const startMinute = (h - 8) * 60 + m; // Minutes from 08:00
-        const pixelsPerMinute = HOUR_WIDTH / 60;
-        
-        const left = startMinute * pixelsPerMinute;
-        const width = durationMinutes * pixelsPerMinute;
-        
-        return { left: `${left}px`, width: `${width}px` };
-    };
-
     const formatTime = (time: string) => {
         const [h, m] = time.split(':');
         return `${h}:${m}`;
@@ -381,107 +400,6 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
         const newM = totalMinutes % 60;
         return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
     };
-
-    // Group testers by team
-    const analysts = useMemo(() => testers.filter(t => t.team !== 'assistants_4_2').sort((a, b) => a.name.localeCompare(b.name)), [testers]);
-    const assistants = useMemo(() => testers.filter(t => t.team === 'assistants_4_2').sort((a, b) => a.name.localeCompare(b.name)), [testers]);
-
-    const renderTesterRow = (tester: Tester, index: number) => (
-        <div key={tester.id} className={`flex border-b border-slate-200 dark:border-base-700 hover:bg-indigo-50/10 transition-colors group/row ${index % 2 === 0 ? 'bg-white dark:bg-base-900' : 'bg-slate-50/50 dark:bg-base-800/20'}`} style={{ height: `${ROW_HEIGHT}px` }}>
-            {/* Tester Info Column (Sticky Left) */}
-            <div className="w-56 shrink-0 p-4 border-r-2 border-slate-200 dark:border-base-700 bg-white dark:bg-base-900 sticky left-0 z-30 flex items-center gap-4 shadow-[4px_0_15px_-5px_rgba(0,0,0,0.05)]">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-black text-white shadow-md ${tester.team === 'assistants_4_2' ? 'bg-gradient-to-br from-amber-400 to-orange-500' : 'bg-gradient-to-br from-indigo-500 to-purple-600'}`}>
-                    {tester.name.substring(0, 2).toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                    <span className="block text-[13px] font-black text-slate-800 dark:text-base-100 truncate">{tester.name}</span>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{tester.team === 'assistants_4_2' ? 'Assistant' : 'Analyst'}</span>
-                </div>
-            </div>
-
-            {/* Timeline Grid Cells */}
-            <div className="relative flex-grow h-full">
-                {/* Grid Lines */}
-                {HOURS.map((_, i) => (
-                    <div 
-                        key={i} 
-                        className="absolute top-0 bottom-0 border-l border-slate-200 dark:border-base-700/50 hover:bg-indigo-500/5 transition-colors cursor-pointer group-hover/row:border-slate-300" 
-                        style={{ left: `${i * HOUR_WIDTH}px`, width: `${HOUR_WIDTH}px` }}
-                        onClick={() => openModal(tester.id, `${String(i + 8).padStart(2, '0')}:00`)}
-                        title={`Click to book ${tester.name} at ${String(i + 8).padStart(2, '0')}:00`}
-                    ></div>
-                ))}
-
-                {/* Bookings */}
-                {bookings.filter(b => b.resourceId === tester.id).map(booking => {
-                    const style = getBlockStyle(booking.startTime, booking.durationMinutes);
-                    const isConfirmingDelete = deleteConfirmId === booking.id;
-                    const isAssistant = tester.team === 'assistants_4_2';
-                    const iconColor = isAssistant ? 'text-amber-500' : 'text-indigo-500';
-                    
-                    return (
-                        <div 
-                            key={booking.id}
-                            className={`absolute top-2 bottom-2 rounded-xl p-3 shadow-md flex flex-col justify-between transition-all overflow-hidden cursor-default group/block z-20 hover:z-30 hover:shadow-xl hover:scale-[1.02] border-l-[6px] border-t border-b border-r
-                                ${isConfirmingDelete 
-                                    ? 'bg-red-600 text-white animate-pulse border-red-700' 
-                                    : 'bg-slate-100 dark:bg-zinc-800 border-l-amber-400 border-y-slate-200 border-r-slate-200 dark:border-zinc-700 text-slate-900 shadow-sm'
-                                }
-                            `}
-                            style={style}
-                            title={`${booking.customerName} - ${booking.description} (${formatTime(booking.startTime)} - ${calculateEndTime(booking.startTime, booking.durationMinutes)})`}
-                        >
-                            <div className="flex justify-between items-start">
-                                <span className={`text-[14px] font-black uppercase tracking-tight leading-none truncate pr-2 ${isConfirmingDelete ? 'text-white' : 'text-slate-800 dark:text-white'}`}>{booking.customerName}</span>
-                                <div className="flex gap-1 shrink-0 opacity-0 group-hover/block:opacity-100 transition-opacity">
-                                    {!isConfirmingDelete && (
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); handleEditBooking(booking); }}
-                                            className="p-1 rounded-full bg-white hover:bg-indigo-100 text-slate-400 hover:text-indigo-600 transition-colors shadow-sm"
-                                            title="Edit Booking"
-                                        >
-                                            <PencilIcon className="h-3.5 w-3.5" />
-                                        </button>
-                                    )}
-                                    <button 
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (isConfirmingDelete) handleDeleteBooking(booking.id);
-                                            else setDeleteConfirmId(booking.id);
-                                        }}
-                                        className={`p-1 rounded-full shadow-sm transition-colors ${isConfirmingDelete ? 'bg-white/20 text-white hover:bg-white/40 opacity-100' : 'bg-white hover:bg-red-100 text-slate-400 hover:text-red-500'}`}
-                                        title="Delete Booking"
-                                    >
-                                        {isConfirmingDelete ? <CheckCircleIcon className="h-3.5 w-3.5" /> : <TrashIcon className="h-3.5 w-3.5" />}
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            {booking.description && (
-                                <div className={`text-[11px] font-medium truncate leading-tight ${isConfirmingDelete ? 'text-white/80' : 'text-slate-500'}`}>
-                                    {booking.description}
-                                </div>
-                            )}
-
-                            <div className={`flex items-center gap-1.5 mt-auto pt-1 border-t ${isConfirmingDelete ? 'border-white/20 text-white/90' : 'border-slate-200 dark:border-zinc-700 text-slate-500'}`}>
-                                <ClockIcon className={`h-3 w-3 ${isConfirmingDelete ? 'text-white' : 'text-amber-500'}`} />
-                                <span className="text-[10px] font-bold">{formatTime(booking.startTime)} - {calculateEndTime(booking.startTime, booking.durationMinutes)}</span>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
-    );
-
-    const renderSectionHeader = (title: string, colorClass: string, bgClass: string) => (
-        <div className="flex sticky left-0 z-30">
-            <div className={`w-56 shrink-0 p-3 border-r-2 border-slate-200 dark:border-base-700 ${bgClass} flex items-center justify-center`}>
-                <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${colorClass}`}>{title}</span>
-            </div>
-            <div className={`flex-grow h-10 ${bgClass} border-b border-slate-200 dark:border-base-700 opacity-50`}></div>
-        </div>
-    );
 
     return (
         <div className="h-full flex flex-col space-y-6 p-6 animate-fade-in bg-base-50/20 dark:bg-transparent overflow-hidden">
@@ -547,31 +465,79 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
 
             {/* Content Area */}
             {viewMode === 'day' ? (
-                <div className="flex-grow bg-white dark:bg-base-900 rounded-[2.5rem] border border-base-200 dark:border-base-800 shadow-xl overflow-auto flex flex-col relative animate-fade-in">
-                    <div className="relative min-w-full">
-                        {/* Time Header (Sticky Top) */}
-                        <div className="sticky top-0 z-40 flex border-b-2 border-slate-200 dark:border-base-700 bg-white dark:bg-base-900 shadow-md">
-                            <div className="w-56 shrink-0 p-4 border-r-2 border-slate-200 dark:border-base-700 flex items-center justify-center bg-slate-50 dark:bg-base-800 sticky left-0 z-50">
-                                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Resource Name</span>
-                            </div>
-                            <div className="flex-grow relative h-14 bg-slate-50 dark:bg-base-800">
-                                {HOURS.map((hour, i) => (
-                                    <div key={hour} className="absolute bottom-0 top-0 border-l border-slate-200 dark:border-base-700 flex items-center pl-3" style={{ left: `${i * HOUR_WIDTH}px`, width: `${HOUR_WIDTH}px` }}>
-                                        <span className="text-[12px] font-bold text-slate-400">{String(hour).padStart(2, '0')}:00</span>
+                <div className="flex-grow bg-white dark:bg-base-900 rounded-[2.5rem] border border-base-200 dark:border-base-800 shadow-xl overflow-auto p-6 animate-fade-in">
+                    {bookings.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                            <CalendarIcon className="h-12 w-12 mb-4 opacity-20" />
+                            <p className="text-sm font-bold uppercase tracking-widest">No bookings for this day</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {bookings.map(booking => {
+                                const isConfirmingDelete = deleteConfirmId === booking.id;
+                                const tester = testers.find(t => t.id === booking.resourceId);
+                                const isAssistant = tester?.team === 'assistants_4_2';
+                                
+                                return (
+                                    <div 
+                                        key={booking.id}
+                                        className={`rounded-2xl p-5 shadow-sm flex flex-col justify-between transition-all cursor-pointer group border-l-[6px] border-t border-b border-r hover:shadow-md hover:-translate-y-1
+                                            ${isConfirmingDelete 
+                                                ? 'bg-red-50 dark:bg-red-900/20 border-red-500' 
+                                                : isAssistant 
+                                                    ? 'bg-white dark:bg-base-800 border-l-amber-400 border-y-slate-200 border-r-slate-200 dark:border-base-700' 
+                                                    : 'bg-white dark:bg-base-800 border-l-indigo-500 border-y-slate-200 border-r-slate-200 dark:border-base-700'
+                                            }
+                                        `}
+                                        onClick={() => handleEditBooking(booking)}
+                                    >
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div className="flex-grow pr-2">
+                                                <h3 className={`text-lg font-black uppercase tracking-tight leading-tight ${isConfirmingDelete ? 'text-red-700 dark:text-red-400' : 'text-slate-800 dark:text-white'}`}>
+                                                    {booking.description || booking.customerName}
+                                                </h3>
+                                                {booking.description && (
+                                                    <p className="text-xs font-bold text-slate-500 mt-1 uppercase tracking-wider">
+                                                        {booking.customerName}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (isConfirmingDelete) handleDeleteBooking(booking.id);
+                                                        else setDeleteConfirmId(booking.id);
+                                                    }}
+                                                    className={`p-1.5 rounded-full shadow-sm transition-colors ${isConfirmingDelete ? 'bg-red-500 text-white hover:bg-red-600 opacity-100' : 'bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-500 dark:bg-base-700'}`}
+                                                    title="Delete Booking"
+                                                >
+                                                    {isConfirmingDelete ? <CheckCircleIcon className="h-4 w-4" /> : <TrashIcon className="h-4 w-4" />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="mt-auto pt-4 border-t border-slate-100 dark:border-base-700/50 flex flex-col gap-2">
+                                            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                                                <ClockIcon className="h-4 w-4 text-slate-400" />
+                                                <span className="text-xs font-bold">
+                                                    {formatTime(booking.startTime)} - {calculateEndTime(booking.startTime, booking.durationMinutes)}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                                                <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black text-white ${isAssistant ? 'bg-amber-500' : 'bg-indigo-500'}`}>
+                                                    {booking.resourceName.substring(0, 1).toUpperCase()}
+                                                </div>
+                                                <span className="text-xs font-bold truncate">
+                                                    {booking.resourceName}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
-                                ))}
-                            </div>
+                                );
+                            })}
                         </div>
-
-                        {/* Resource Rows - Grouped */}
-                        <div style={{ minWidth: `${HOURS.length * HOUR_WIDTH + 224}px` }}>
-                            {analysts.length > 0 && renderSectionHeader("Analysts", "text-indigo-600", "bg-indigo-50/50")}
-                            {analysts.map((tester, index) => renderTesterRow(tester, index))}
-                            
-                            {assistants.length > 0 && renderSectionHeader("Assistants", "text-amber-600", "bg-amber-50/50")}
-                            {assistants.map((tester, index) => renderTesterRow(tester, index))}
-                        </div>
-                    </div>
+                    )}
                 </div>
             ) : (
                 <div className="flex-grow animate-fade-in">

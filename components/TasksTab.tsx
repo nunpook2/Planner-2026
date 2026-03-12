@@ -656,14 +656,32 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
     }, [testMappings]);
 
     const manualTasksFlattened = useMemo(() => {
+        const search = filterRequestId.toLowerCase().trim();
         const flat: { docId: string; id: string; task: RawTask; index: number }[] = [];
         categorizedTasks.forEach(doc => {
             if (doc.category === TaskCategory.Manual) {
-                doc.tasks.forEach((task, index) => flat.push({ docId: doc.docId!, id: doc.id, task, index }));
+                doc.tasks.forEach((task, index) => {
+                    if (search) {
+                        const matchId = doc.id.toLowerCase().includes(search);
+                        const matchDesc = task.Description?.toLowerCase().includes(search);
+                        if (!matchId && !matchDesc) return;
+                    }
+                    flat.push({ docId: doc.docId!, id: doc.id, task, index });
+                });
             }
         });
         return flat;
-    }, [categorizedTasks]);
+    }, [categorizedTasks, filterRequestId]);
+
+    const groupedManualTasks = useMemo(() => {
+        const groups: Record<string, typeof manualTasksFlattened> = {};
+        manualTasksFlattened.forEach(item => {
+            const key = item.id || 'NO ID';
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(item);
+        });
+        return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+    }, [manualTasksFlattened]);
 
     const selectedItemCount = useMemo(() => Object.values(selectedItems).reduce((acc: number, s: Set<string>) => acc + s.size, 0), [selectedItems]);
 
@@ -1120,13 +1138,13 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
 
                     <div className="flex items-center gap-2 shrink-0 pr-1">
                         <div className="relative group w-40">
-                            <input 
-                                type="text" 
-                                placeholder="Search ID..." 
-                                value={filterRequestId} 
-                                onChange={e => setFilterRequestId(e.target.value)} 
-                                className="w-full pl-8 pr-2 py-2 bg-indigo-50/50 dark:bg-white/5 border border-indigo-100 dark:border-white/10 rounded-lg text-[10px] font-bold dark:text-white outline-none focus:border-indigo-500 transition-all shadow-inner"
-                            />
+                                <input 
+                                    type="text" 
+                                    placeholder={activeCategory === 'manual' ? "Search ID or Desc..." : "Search ID..."} 
+                                    value={filterRequestId} 
+                                    onChange={e => setFilterRequestId(e.target.value)} 
+                                    className="w-full pl-8 pr-2 py-2 bg-indigo-50/50 dark:bg-white/5 border border-indigo-100 dark:border-white/10 rounded-lg text-[10px] font-bold dark:text-white outline-none focus:border-indigo-500 transition-all shadow-inner"
+                                />
                             <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-indigo-300 group-focus-within:text-indigo-500"><SearchIcon className="h-3 w-3" /></div>
                         </div>
                         
@@ -1168,14 +1186,27 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-base-100 dark:divide-base-800 bg-white dark:bg-base-900">
-                                        {manualTasksFlattened.map(({ docId, id, task, index }) => (
-                                            <tr key={`${docId}_${task._id}`} className="hover:bg-indigo-50/20 transition-colors">
-                                                <td className="p-4 text-center border-r border-base-100 dark:border-base-800"><input type="checkbox" className="h-5 w-5 rounded border-2 border-indigo-200 text-indigo-600" checked={selectedItems[docId]?.has(task._id!) || false} onChange={e => handleSelectItem(docId, task._id!, e.target.checked)}/></td>
-                                                <td className="p-5 font-black text-indigo-700 dark:text-indigo-400 text-xl tracking-tighter uppercase border-r border-base-100 dark:border-base-800">{id}</td>
-                                                <td className="p-5"><div className="flex flex-col"><span className="font-black text-lg text-base-955 dark:text-base-50 uppercase leading-none tracking-tight">{task.Description}</span><span className="text-[10px] font-bold text-base-400 mt-2 uppercase italic">{task.Variant}</span></div></td>
-                                                <td className="p-5 text-center border-l border-base-100 dark:border-base-800"><span className="inline-block px-4 py-1.5 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-black rounded-lg text-lg shadow-inner">x{task.Quantity}</span></td>
-                                                <td className="p-5 text-center border-l border-base-100 dark:border-base-800"><div className="flex justify-center gap-2"><button onClick={() => setEditTask({ docId, index, task })} className="p-2.5 bg-base-50 dark:bg-base-800 border rounded-xl text-base-400 hover:text-indigo-600"><PencilIcon className="h-5 w-5" /></button><button onClick={() => setDeleteConfirm({ docId, index, label: task.Description! })} className="p-2.5 bg-base-50 dark:bg-base-800 border rounded-xl text-base-400 hover:text-red-600"><TrashIcon className="h-5 w-5" /></button></div></td>
-                                            </tr>
+                                        {groupedManualTasks.map(([groupId, tasks]) => (
+                                            <React.Fragment key={groupId}>
+                                                <tr className="bg-indigo-50/50 dark:bg-indigo-900/20">
+                                                    <td colSpan={5} className="p-3 font-black text-indigo-800 dark:text-indigo-300 text-sm tracking-widest uppercase border-y border-indigo-100 dark:border-indigo-800/50">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
+                                                            {groupId}
+                                                            <span className="ml-2 px-2 py-0.5 bg-indigo-100 dark:bg-indigo-800/50 text-indigo-600 dark:text-indigo-300 rounded-md text-[9px]">{tasks.length} items</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {tasks.map(({ docId, id, task, index }) => (
+                                                    <tr key={`${docId}_${task._id}`} className="hover:bg-indigo-50/20 transition-colors">
+                                                        <td className="p-4 text-center border-r border-base-100 dark:border-base-800"><input type="checkbox" className="h-5 w-5 rounded border-2 border-indigo-200 text-indigo-600" checked={selectedItems[docId]?.has(task._id!) || false} onChange={e => handleSelectItem(docId, task._id!, e.target.checked)}/></td>
+                                                        <td className="p-5 font-black text-indigo-700 dark:text-indigo-400 text-xl tracking-tighter uppercase border-r border-base-100 dark:border-base-800">{id}</td>
+                                                        <td className="p-5"><div className="flex flex-col"><span className="font-black text-lg text-base-955 dark:text-base-50 uppercase leading-none tracking-tight">{task.Description}</span><span className="text-[10px] font-bold text-base-400 mt-2 uppercase italic">{task.Variant}</span></div></td>
+                                                        <td className="p-5 text-center border-l border-base-100 dark:border-base-800"><span className="inline-block px-4 py-1.5 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-black rounded-lg text-lg shadow-inner">x{task.Quantity}</span></td>
+                                                        <td className="p-5 text-center border-l border-base-100 dark:border-base-800"><div className="flex justify-center gap-2"><button onClick={() => setEditTask({ docId, index, task })} className="p-2.5 bg-base-50 dark:bg-base-800 border rounded-xl text-base-400 hover:text-indigo-600"><PencilIcon className="h-5 w-5" /></button><button onClick={() => setDeleteConfirm({ docId, index, label: task.Description! })} className="p-2.5 bg-base-50 dark:bg-base-800 border rounded-xl text-base-400 hover:text-red-600"><TrashIcon className="h-5 w-5" /></button></div></td>
+                                                    </tr>
+                                                ))}
+                                            </React.Fragment>
                                         ))}
                                     </tbody>
                                 </table>

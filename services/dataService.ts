@@ -688,3 +688,24 @@ export const addEnvironmentLog = async (log: Omit<EnvironmentLog, 'id'>): Promis
 export const deleteEnvironmentLog = async (id: string): Promise<void> => {
     await getCollection('environmentLogs').doc(id).delete();
 };
+
+export const getChemicalPrices = async (): Promise<Record<string, number>> => {
+    try {
+        const docSnap = await getCollection('settings').doc('chemicalPrices').get();
+        if (docSnap.exists) {
+            return docSnap.data() as Record<string, number>;
+        }
+        return {};
+    } catch (error) {
+        console.error("Error fetching chemical prices:", error);
+        return {};
+    }
+};
+
+export const saveChemicalPrices = async (prices: Record<string, number>): Promise<void> => {
+    try {
+        await getCollection('settings').doc('chemicalPrices').set(prices, { merge: true });
+    } catch (error) {
+        console.error("Error saving chemical prices:", error);
+    }
+};

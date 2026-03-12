@@ -18,7 +18,9 @@ import {
     deleteLabRoom,
     getEnvironmentLogs,
     addEnvironmentLog,
-    deleteEnvironmentLog
+    deleteEnvironmentLog,
+    getChemicalPrices,
+    saveChemicalPrices
 } from '../services/dataService';
 import { 
     AlertTriangleIcon, CheckCircleIcon, 
@@ -26,7 +28,8 @@ import {
     XCircleIcon, UserGroupIcon, DownloadIcon,
     SparklesIcon, PlusIcon, TrashIcon, ArrowUpIcon,
     ClipboardListIcon, PencilIcon, ChevronDownIcon,
-    DatabaseIcon, SearchIcon, ClockIcon, ThermometerIcon
+    DatabaseIcon, SearchIcon, ClockIcon, ThermometerIcon,
+    CurrencyDollarIcon
 } from './common/Icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 
@@ -223,6 +226,64 @@ const PerformancePulseChart: React.FC<{ data: { date: string, value: number }[] 
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{sortedData[sortedData.length-1].date.split('-').slice(1).join('/')}</span>
                     </>
                 )}
+            </div>
+        </div>
+    );
+};
+
+const ChemicalPriceModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (prices: Record<string, number>) => void;
+    currentPrices: Record<string, number>;
+    chemicals: string[];
+}> = ({ isOpen, onClose, onSave, currentPrices, chemicals }) => {
+    const [prices, setPrices] = useState<Record<string, number>>(currentPrices);
+
+    useEffect(() => {
+        if (isOpen) setPrices(currentPrices);
+    }, [isOpen, currentPrices]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSave(prices);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-base-900/80 backdrop-blur-md flex items-center justify-center z-[200] p-4 animate-fade-in" onClick={onClose}>
+            <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-md overflow-hidden border border-white/20 flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                <div className="px-10 py-8 border-b border-slate-100 dark:border-base-800 bg-slate-50/50 dark:bg-base-950 shrink-0">
+                    <h2 className="text-2xl font-black tracking-tighter text-slate-800 dark:text-base-100 flex items-center gap-3"><DatabaseIcon className="h-8 w-8 text-emerald-500" /> Chemical Prices</h2>
+                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mt-2">Set price per liter (฿) for cost savings calculation</p>
+                </div>
+                <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
+                    <div className="p-10 space-y-6 overflow-y-auto custom-scrollbar">
+                        {chemicals.map(chem => (
+                            <div key={chem} className="flex flex-col gap-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2">{chem}</label>
+                                <div className="relative">
+                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 font-black">฿</span>
+                                    <input 
+                                        type="number" 
+                                        step="0.01"
+                                        min="0"
+                                        value={prices[chem] || ''} 
+                                        onChange={e => setPrices({...prices, [chem]: parseFloat(e.target.value) || 0})}
+                                        className="w-full pl-10 pr-6 py-4 bg-slate-50 dark:bg-base-800 border-2 border-slate-100 dark:border-base-700 rounded-2xl text-[14px] font-bold focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                                        placeholder="0.00"
+                                    />
+                                    <span className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-black uppercase tracking-widest">/ L</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="p-8 border-t border-slate-100 dark:border-base-800 bg-slate-50/50 dark:bg-base-950 flex justify-end gap-4 shrink-0">
+                        <button type="button" onClick={onClose} className="px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-200 dark:hover:bg-base-800 transition-all">Cancel</button>
+                        <button type="submit" className="px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest bg-emerald-600 text-white hover:bg-emerald-700 shadow-xl shadow-emerald-500/20 transition-all">Save Prices</button>
+                    </div>
+                </form>
             </div>
         </div>
     );
@@ -633,6 +694,7 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
     const [allAssigned, setAllAssigned] = useState<AssignedTask[]>([]);
     const [allPrepared, setAllPrepared] = useState<AssignedPrepareTask[]>([]);
     const [distLogs, setDistLogs] = useState<DistillationLog[]>([]);
+    const [chemicalPrices, setChemicalPrices] = useState<Record<string, number>>({});
     const [historyLogs, setHistoryLogs] = useState<any[]>([]);
     const [labRooms, setLabRooms] = useState<LabRoom[]>([]);
     const [envLogs, setEnvLogs] = useState<EnvironmentLog[]>([]);
@@ -640,6 +702,7 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
     const [isResolving, setIsResolving] = useState(false);
     const [searchAnalyst, setSearchAnalyst] = useState('');
     const [isDistModalOpen, setIsDistModalOpen] = useState(false);
+    const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
     const [selectedChemical, setSelectedChemical] = useState<string | null>(null);
     const [notification, setNotification] = useState<{message: string, isError?: boolean} | null>(null);
     const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, targetItems: FlattenedNotOkTask[] | null, title: string, description: string }>({ isOpen: false, targetItems: null, title: '', description: '' });
@@ -663,13 +726,14 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [assigned, prepared, dist, history, rooms, envs] = await Promise.all([ 
+            const [assigned, prepared, dist, history, rooms, envs, prices] = await Promise.all([ 
                 getAssignedTasks(), 
                 getAssignedPrepareTasks(),
                 getDistillationLogs(),
                 getResolutionHistory(),
                 getLabRooms(),
-                getEnvironmentLogs()
+                getEnvironmentLogs(),
+                getChemicalPrices()
             ]);
             setAllAssigned(assigned || []);
             setAllPrepared(prepared || []);
@@ -677,6 +741,7 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
             setHistoryLogs(history || []);
             setLabRooms(rooms || []);
             setEnvLogs(envs || []);
+            setChemicalPrices(prices || {});
             
             // Auto-select first chemical if none selected
             if (!selectedChemical && dist.length > 0) {
@@ -724,8 +789,10 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
         const totalIn = scopedLogs.reduce((acc, log) => acc + log.inputAmount, 0);
         const totalOut = scopedLogs.reduce((acc, log) => acc + log.outputAmount, 0);
         const avgYield = scopedLogs.length > 0 ? (totalOut / totalIn) * 100 : 0;
-        return { totalIn, totalOut, avgYield, count: scopedLogs.length };
-    }, [filteredDistLogsByTime, selectedChemical]);
+        const pricePerLiter = selectedChemical ? (chemicalPrices[selectedChemical] || 0) : 0;
+        const costSaved = (totalOut / 1000) * pricePerLiter; // Assuming outputAmount is in mL
+        return { totalIn, totalOut, avgYield, count: scopedLogs.length, pricePerLiter, costSaved };
+    }, [filteredDistLogsByTime, selectedChemical, chemicalPrices]);
 
     // --- OVER PLAN ANALYTICS ---
     const overPlanData = useMemo(() => {
@@ -899,6 +966,17 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
         } catch (e) { setNotification({ message: "Action failed", isError: true }); }
     };
 
+    const handleSavePrices = async (prices: Record<string, number>) => {
+        try {
+            await saveChemicalPrices(prices);
+            setNotification({ message: "Chemical prices updated." });
+            setIsPriceModalOpen(false);
+            fetchData();
+        } catch (e) {
+            setNotification({ message: "Failed to save prices", isError: true });
+        }
+    };
+
     const handleEditStart = (log: DistillationLog) => { setEditTarget(log); setIsDistModalOpen(true); };
     const handleDeleteDist = async () => {
         if (!distDeleteConfirm?.id) return;
@@ -1022,6 +1100,28 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
 
     const currentRoom = useMemo(() => labRooms.find(r => r.id === selectedRoomId), [labRooms, selectedRoomId]);
 
+    const roomAverages = useMemo(() => {
+        return labRooms.map(room => {
+            const roomLogs = envLogs.filter(l => l.roomId === room.id);
+            if (roomLogs.length === 0) return { ...room, avgTemp: null, avgHum: null, latestTemp: null, latestHum: null, lastUpdated: null };
+            
+            const sumTemp = roomLogs.reduce((acc, l) => acc + l.temperature, 0);
+            const sumHum = roomLogs.reduce((acc, l) => acc + l.humidity, 0);
+            
+            const sorted = [...roomLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            const latest = sorted[0];
+
+            return {
+                ...room,
+                avgTemp: (sumTemp / roomLogs.length).toFixed(1),
+                avgHum: (sumHum / roomLogs.length).toFixed(1),
+                latestTemp: latest.temperature,
+                latestHum: latest.humidity,
+                lastUpdated: latest.timestamp
+            };
+        });
+    }, [labRooms, envLogs]);
+
     const totalIssuesCount = groupedIssuesData.reduce((acc, g) => acc + g.allTasks.length, 0);
 
     return (
@@ -1096,6 +1196,7 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
             )}
 
             <DistillationFormModal isOpen={isDistModalOpen} onClose={() => { setIsDistModalOpen(false); setEditTarget(null); }} onSave={handleSaveDistLog} testers={testers} defaultChemical={selectedChemical} editTarget={editTarget} allChemicals={allChemicals} />
+            <ChemicalPriceModal isOpen={isPriceModalOpen} onClose={() => setIsPriceModalOpen(false)} onSave={handleSavePrices} currentPrices={chemicalPrices} chemicals={allChemicals} />
 
             <div className="flex justify-between items-center px-10 py-6 shrink-0 bg-white border-b border-slate-100 z-10">
                 <div className="flex items-center gap-12">
@@ -1230,19 +1331,27 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
                 {activeSubTab === 'distillation' && (
                     <div className="h-full flex flex-col gap-6 animate-fade-in overflow-hidden">
                         {/* NEW: Chemical Selection Bar for scoped stats */}
-                        <div className="flex gap-2 items-center p-2 bg-slate-100 dark:bg-base-900 rounded-[2rem] border border-slate-200 dark:border-base-800 shadow-inner overflow-x-auto no-scrollbar shrink-0">
-                            {allChemicals.map(chem => (
-                                <button 
-                                    key={chem}
-                                    onClick={() => setSelectedChemical(chem)}
-                                    className={`px-6 py-2.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all shrink-0 ${selectedChemical === chem ? 'bg-white dark:bg-base-800 text-indigo-600 shadow-md ring-2 ring-indigo-500/20' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-                                >
-                                    {chem}
-                                </button>
-                            ))}
+                        <div className="flex gap-2 items-center justify-between p-2 bg-slate-100 dark:bg-base-900 rounded-[2rem] border border-slate-200 dark:border-base-800 shadow-inner overflow-x-auto no-scrollbar shrink-0">
+                            <div className="flex gap-2 items-center">
+                                {allChemicals.map(chem => (
+                                    <button 
+                                        key={chem}
+                                        onClick={() => setSelectedChemical(chem)}
+                                        className={`px-6 py-2.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all shrink-0 ${selectedChemical === chem ? 'bg-white dark:bg-base-800 text-indigo-600 shadow-md ring-2 ring-indigo-500/20' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+                                    >
+                                        {chem}
+                                    </button>
+                                ))}
+                            </div>
+                            <button 
+                                onClick={() => setIsPriceModalOpen(true)}
+                                className="px-6 py-2.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-full text-[11px] font-black uppercase tracking-widest hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-all shrink-0 flex items-center gap-2"
+                            >
+                                <CurrencyDollarIcon className="w-4 h-4" /> Set Prices
+                            </button>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 shrink-0">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 shrink-0">
                             <div className="bg-indigo-600 rounded-[2.5rem] p-8 text-white shadow-xl relative overflow-hidden flex flex-col justify-center border-b-8 border-indigo-800">
                                 <div className="absolute top-0 right-0 p-6 opacity-20"><BeakerIcon className="w-24 h-24" /></div>
                                 <span className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-200 mb-2">Resource Input ({selectedChemical})</span>
@@ -1257,6 +1366,11 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
                                 <div className="absolute top-0 right-0 p-6 opacity-20"><RefreshIcon className="w-24 h-24" /></div>
                                 <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/50 mb-2">Recovery Efficiency ({selectedChemical})</span>
                                 <span className="text-5xl font-black tracking-tighter italic">{recoveryStats.avgYield.toFixed(1)} <span className="text-sm font-bold opacity-60">%</span></span>
+                            </div>
+                            <div className="bg-emerald-500 rounded-[2.5rem] p-8 text-white shadow-xl relative overflow-hidden flex flex-col justify-center border-b-8 border-emerald-700">
+                                <div className="absolute top-0 right-0 p-6 opacity-20"><CurrencyDollarIcon className="w-24 h-24" /></div>
+                                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-200 mb-2">Cost Saved ({selectedChemical})</span>
+                                <span className="text-5xl font-black tracking-tighter italic">฿{recoveryStats.costSaved.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                             </div>
                         </div>
 
@@ -1432,31 +1546,70 @@ const QualityDashboard: React.FC<{ onResolve: () => void, testers: Tester[] }> =
 
                 {activeSubTab === 'environment' && (
                     <div className="h-full flex flex-col gap-6 animate-fade-in overflow-hidden">
-                        {/* Room Selection Bar */}
-                        <div className="flex gap-2 items-center p-2 bg-slate-100 dark:bg-base-900 rounded-[2rem] border border-slate-200 dark:border-base-800 shadow-inner overflow-x-auto no-scrollbar shrink-0">
-                            {labRooms.map(room => (
+                        {/* Real-time Averages & Room Selection */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 shrink-0 overflow-x-auto pb-2 px-1">
+                            {roomAverages.map(room => (
                                 <div 
                                     key={room.id}
                                     onClick={() => setSelectedRoomId(room.id)}
-                                    title={`Schedule: ${room.monitorTimeSlots?.join(', ') || 'None'}`}
-                                    className={`px-6 py-2.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all shrink-0 flex items-center gap-2 cursor-pointer ${selectedRoomId === room.id ? 'bg-white dark:bg-base-800 text-emerald-600 shadow-md ring-2 ring-emerald-500/20' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+                                    className={`relative overflow-hidden rounded-[2rem] p-5 cursor-pointer transition-all duration-300 border-2 ${selectedRoomId === room.id ? 'border-emerald-500 shadow-[0_8px_30px_-5px_rgba(16,185,129,0.3)] bg-white dark:bg-base-900 scale-[1.02] z-10' : 'border-slate-200 dark:border-base-800 bg-white dark:bg-base-900 shadow-sm hover:shadow-md hover:border-emerald-300'}`}
                                 >
-                                    {room.name}
-                                    {selectedRoomId === room.id && (
-                                        <div className="flex gap-1 ml-2 border-l pl-2 border-slate-200">
-                                            <div onClick={(e) => { e.stopPropagation(); setRoomEditTarget(room); setIsRoomModalOpen(true); }} className="p-1 hover:bg-slate-100 rounded-full cursor-pointer"><PencilIcon className="h-3 w-3" /></div>
-                                            <DoubleConfirmDeleteButton 
-                                                onDelete={() => handleDeleteRoom(room.id)} 
-                                                baseClass="p-1 hover:bg-rose-100 text-rose-500 rounded-full cursor-pointer flex items-center justify-center" 
-                                                confirmClass="bg-rose-500 text-white hover:bg-rose-600 hover:text-white"
-                                            />
+                                    {selectedRoomId === room.id && <div className="absolute -inset-4 bg-gradient-to-br from-emerald-500/5 to-transparent blur-xl z-0"></div>}
+                                    
+                                    <div className="relative z-10">
+                                        <div className="flex justify-between items-start mb-5">
+                                            <h4 className={`text-sm font-black uppercase tracking-widest ${selectedRoomId === room.id ? 'text-emerald-600' : 'text-slate-700 dark:text-slate-200'}`}>{room.name}</h4>
+                                            {selectedRoomId === room.id && (
+                                                <div className="flex gap-1">
+                                                    <div onClick={(e) => { e.stopPropagation(); setRoomEditTarget(room); setIsRoomModalOpen(true); }} className="p-1.5 bg-slate-100 dark:bg-base-800 hover:bg-slate-200 rounded-full cursor-pointer text-slate-400 hover:text-indigo-600 transition-colors"><PencilIcon className="h-3 w-3" /></div>
+                                                    <DoubleConfirmDeleteButton 
+                                                        onDelete={() => handleDeleteRoom(room.id)} 
+                                                        baseClass="p-1.5 bg-slate-100 dark:bg-base-800 hover:bg-rose-100 text-slate-400 hover:text-rose-500 rounded-full cursor-pointer flex items-center justify-center transition-colors" 
+                                                        confirmClass="bg-rose-500 text-white hover:bg-rose-600 hover:text-white"
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
+                                        
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-rose-50/50 dark:bg-rose-900/10 rounded-2xl p-3 border border-rose-100/50 dark:border-rose-800/30 flex flex-col items-center justify-center text-center">
+                                                <span className="text-[9px] font-black text-rose-400 uppercase tracking-[0.2em] mb-1 flex items-center gap-1"><ThermometerIcon className="h-3 w-3" /> Avg Temp</span>
+                                                <div className="flex items-baseline gap-1">
+                                                    <span className={`text-2xl font-black tracking-tighter ${room.avgTemp ? 'text-rose-600 dark:text-rose-400' : 'text-slate-300'}`}>{room.avgTemp || '--'}</span>
+                                                    <span className="text-xs font-bold text-slate-400">°C</span>
+                                                </div>
+                                            </div>
+                                            <div className="bg-cyan-50/50 dark:bg-cyan-900/10 rounded-2xl p-3 border border-cyan-100/50 dark:border-cyan-800/30 flex flex-col items-center justify-center text-center">
+                                                <span className="text-[9px] font-black text-cyan-400 uppercase tracking-[0.2em] mb-1 flex items-center gap-1"><BeakerIcon className="h-3 w-3" /> Avg Hum</span>
+                                                <div className="flex items-baseline gap-1">
+                                                    <span className={`text-2xl font-black tracking-tighter ${room.avgHum ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-300'}`}>{room.avgHum || '--'}</span>
+                                                    <span className="text-xs font-bold text-slate-400">%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="mt-5 pt-3 border-t border-slate-100 dark:border-base-800 flex justify-between items-center">
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                                                {room.lastUpdated ? `Last: ${new Date(room.lastUpdated).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'No data'}
+                                            </span>
+                                            <span className="text-[9px] font-black text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-md uppercase tracking-widest">
+                                                {room.monitorTimeSlots?.length || 0} Slots
+                                            </span>
+                                        </div>
+                                    </div>
                                 </div>
                             ))}
-                            <button onClick={() => { setRoomEditTarget(null); setIsRoomModalOpen(true); }} className="px-4 py-2.5 rounded-full bg-slate-200 dark:bg-base-800 text-slate-500 hover:bg-emerald-600 hover:text-white transition-all shrink-0 flex items-center justify-center shadow-sm">
-                                <PlusIcon className="h-4 w-4" />
-                            </button>
+                            
+                            {/* Add Room Button */}
+                            <div 
+                                onClick={() => { setRoomEditTarget(null); setIsRoomModalOpen(true); }}
+                                className="rounded-[2rem] p-5 cursor-pointer transition-all duration-300 border-2 border-dashed border-slate-200 dark:border-base-700 bg-white/50 dark:bg-base-900/30 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 flex flex-col items-center justify-center min-h-[160px]"
+                            >
+                                <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-base-800 shadow-sm flex items-center justify-center text-emerald-500 mb-2">
+                                    <PlusIcon className="h-5 w-5" />
+                                </div>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Add New Room</span>
+                            </div>
                         </div>
 
                         {/* Charts Section - ALWAYS VISIBLE NOW (Combined) */}
