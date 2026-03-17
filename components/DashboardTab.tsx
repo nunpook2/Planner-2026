@@ -269,6 +269,9 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
         let total = 0, done = 0, poCat = 0, lsp = 0, sprint = 0, urgent = 0;
         const processGroup = (groupTasks: RawTask[], category: TaskCategory) => {
              groupTasks.forEach(t => {
+                const isManual = t.ManualEntry === true || category === TaskCategory.Manual;
+                if (isManual) return; // Skip manual tasks
+                
                 const taskQty = parseTaskQty(t);
                 total += taskQty;
                 const priority = getPriorityStatus(t, category);
@@ -405,12 +408,12 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
     }, [shiftReport]);
 
     const renderPersonnelBoardCard = (person: PersonStats) => {
-        const missions = Object.entries(person.summary);
+        const missions = Object.entries(person.summary).filter(([_, sum]) => !sum.isManual);
         if (missions.length === 0) return null;
-        const totalDone = (Object.values(person.summary) as SummaryItemStats[]).reduce((acc: number, s: SummaryItemStats) => acc + s.done, 0);
-        const totalAll = (Object.values(person.summary) as SummaryItemStats[]).reduce((acc: number, s: SummaryItemStats) => acc + s.total, 0);
+        const totalDone = missions.reduce((acc: number, [_, s]) => acc + s.done, 0);
+        const totalAll = missions.reduce((acc: number, [_, s]) => acc + s.total, 0);
         const isCompleted = totalDone === totalAll && totalAll > 0;
-        const totalOverPlanCount = (Object.values(person.summary) as SummaryItemStats[]).reduce((acc: number, s: SummaryItemStats) => acc + (s.samples ? s.samples.filter(x => x.isOverPlan).length : 0), 0);
+        const totalOverPlanCount = missions.reduce((acc: number, [_, s]) => acc + (s.samples ? s.samples.filter(x => x.isOverPlan).length : 0), 0);
 
         return (
             <div key={person.id} className="bg-white dark:bg-base-900 rounded-[2.5rem] border-2 border-base-200 dark:border-base-800 shadow-xl overflow-hidden flex flex-col h-full hover:border-indigo-500 transition-all duration-300 animate-fade-in group relative">

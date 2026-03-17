@@ -62,16 +62,19 @@ const Toast: React.FC<{ message: string; isError?: boolean; onDismiss: () => voi
 const TesterManager: React.FC<{ testers: Tester[]; onRefreshTesters: () => void; setNotification: (n: any) => void }> = ({ testers, onRefreshTesters, setNotification }) => {
     const [newTesterName, setNewTesterName] = useState('');
     const [selectedTeam, setSelectedTeam] = useState<'testers_3_3' | 'assistants_4_2'>('testers_3_3');
+    const [requiresProficiencyCheck, setRequiresProficiencyCheck] = useState(false);
     const [editingTesterId, setEditingTesterId] = useState<string | null>(null);
     const [tempName, setTempName] = useState('');
+    const [tempRequiresProficiency, setTempRequiresProficiency] = useState(false);
     const [deleteId, setDeleteId] = useState<string | null>(null);
 
     const handleAdd = async () => {
         if (!newTesterName.trim()) return;
         try {
             const t = await addTester(newTesterName);
-            await updateTester(t.id, { team: selectedTeam });
+            await updateTester(t.id, { team: selectedTeam, requiresProficiencyCheck: selectedTeam === 'assistants_4_2' ? requiresProficiencyCheck : false });
             setNewTesterName('');
+            setRequiresProficiencyCheck(false);
             onRefreshTesters();
             setNotification({ message: "Personnel added successfully." });
         } catch (e) { setNotification({ message: "Failed to add personnel.", isError: true }); }
@@ -87,8 +90,8 @@ const TesterManager: React.FC<{ testers: Tester[]; onRefreshTesters: () => void;
         setDeleteId(null);
     };
 
-    const startEdit = (t: Tester) => { setEditingTesterId(t.id); setTempName(t.name); };
-    const saveEdit = async (id: string) => { await updateTester(id, { name: tempName }); setEditingTesterId(null); onRefreshTesters(); };
+    const startEdit = (t: Tester) => { setEditingTesterId(t.id); setTempName(t.name); setTempRequiresProficiency(t.requiresProficiencyCheck || false); };
+    const saveEdit = async (id: string) => { await updateTester(id, { name: tempName, requiresProficiencyCheck: tempRequiresProficiency }); setEditingTesterId(null); onRefreshTesters(); };
 
     const teamList = (team: 'testers_3_3' | 'assistants_4_2') => testers.filter(t => t.team === team);
 
@@ -113,6 +116,12 @@ const TesterManager: React.FC<{ testers: Tester[]; onRefreshTesters: () => void;
                             <option value="assistants_4_2">Assistants (4 days / 2 off)</option>
                         </select>
                     </div>
+                    {selectedTeam === 'assistants_4_2' && (
+                        <div className="flex items-center gap-2 mt-2">
+                            <input type="checkbox" id="requiresProficiency" checked={requiresProficiencyCheck} onChange={e => setRequiresProficiencyCheck(e.target.checked)} className="w-4 h-4 text-primary-600 rounded border-base-300 focus:ring-primary-500" />
+                            <label htmlFor="requiresProficiency" className="text-sm font-medium text-base-700 dark:text-base-300">New Employee (Requires Proficiency Evaluation)</label>
+                        </div>
+                    )}
                     <button onClick={handleAdd} disabled={!newTesterName.trim()} className="w-full py-3 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl shadow-md transition-all disabled:opacity-50">Add Person</button>
                 </div>
             </div>
@@ -126,13 +135,22 @@ const TesterManager: React.FC<{ testers: Tester[]; onRefreshTesters: () => void;
                                     {editingTesterId === t.id ? (
                                         <div className="flex items-center gap-2 flex-grow mr-2">
                                             <input type="text" value={tempName} onChange={e=>setTempName(e.target.value)} className="flex-grow p-2 text-sm border rounded-lg dark:bg-base-900 dark:border-base-600 dark:text-white"/>
+                                            {t.team === 'assistants_4_2' && (
+                                                <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                                                    <input type="checkbox" checked={tempRequiresProficiency} onChange={e => setTempRequiresProficiency(e.target.checked)} />
+                                                    Eval
+                                                </label>
+                                            )}
                                             <button onClick={()=>saveEdit(t.id)} className="text-emerald-500 hover:bg-emerald-50 p-1 rounded"><CheckCircleIcon/></button>
                                             <button onClick={()=>setEditingTesterId(null)} className="text-red-500 hover:bg-red-50 p-1 rounded"><XCircleIcon/></button>
                                         </div>
                                     ) : (
                                         <div className="flex items-center gap-3">
                                             <div className="w-8 h-8 rounded-full bg-base-100 dark:bg-base-700 flex items-center justify-center text-xs font-bold text-base-500 dark:text-base-400">{t.name.substring(0,2).toUpperCase()}</div>
-                                            <span className="font-medium text-base-700 dark:text-base-200">{t.name}</span>
+                                            <div className="flex flex-col">
+                                                <span className="font-medium text-base-700 dark:text-base-200">{t.name}</span>
+                                                {t.team === 'assistants_4_2' && t.requiresProficiencyCheck && <span className="text-[9px] font-bold text-amber-600 uppercase tracking-widest">Requires Evaluation</span>}
+                                            </div>
                                         </div>
                                     )}
                                     {!editingTesterId && (

@@ -1,6 +1,6 @@
 
 import { firestore } from './firebase';
-import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog, Booking } from '../types';
+import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog, Booking, ProficiencyTest, ProficiencyRecord } from '../types';
 import { TaskCategory } from '../types';
 
 // Export firestore for use in components
@@ -708,4 +708,39 @@ export const saveChemicalPrices = async (prices: Record<string, number>): Promis
     } catch (error) {
         console.error("Error saving chemical prices:", error);
     }
+};
+
+// --- Proficiency Testing System ---
+export const getProficiencyTests = async (): Promise<ProficiencyTest[]> => {
+    if (!firestore) throw new Error("Database not initialized");
+    const snapshot = await safeGet(getCollection('proficiencyTests').orderBy('order', 'asc'));
+    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }) as ProficiencyTest);
+};
+
+export const saveProficiencyTest = async (test: Omit<ProficiencyTest, 'id'>, id?: string): Promise<void> => {
+    if (id) {
+        await getCollection('proficiencyTests').doc(id).update(test);
+    } else {
+        await getCollection('proficiencyTests').add(test);
+    }
+};
+
+export const deleteProficiencyTest = async (id: string): Promise<void> => {
+    await getCollection('proficiencyTests').doc(id).delete();
+};
+
+export const getProficiencyRecords = async (): Promise<ProficiencyRecord[]> => {
+    if (!firestore) throw new Error("Database not initialized");
+    const snapshot = await safeGet(getCollection('proficiencyRecords'));
+    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }) as ProficiencyRecord);
+};
+
+export const saveProficiencyRecord = async (record: Omit<ProficiencyRecord, 'id'>, id: string): Promise<void> => {
+    // Remove undefined values to prevent Firestore errors
+    const cleanedRecord = Object.fromEntries(Object.entries(record).filter(([_, v]) => v !== undefined));
+    await getCollection('proficiencyRecords').doc(id).set({ ...cleanedRecord, id }, { merge: true });
+};
+
+export const deleteProficiencyRecord = async (id: string): Promise<void> => {
+    await getCollection('proficiencyRecords').doc(id).delete();
 };

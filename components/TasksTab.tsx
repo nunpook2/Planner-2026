@@ -13,7 +13,9 @@ import {
     addCategorizedTask as saveCategorizedTask,
     getAssignedTasks,
     getAssignedPrepareTasks,
-    firestore
+    firestore,
+    getProficiencyTests,
+    getProficiencyRecords
 } from '../services/dataService';
 import { CheckCircleIcon, ChevronDownIcon, TrashIcon, AlertTriangleIcon, RefreshIcon, PlusIcon, DownloadIcon, ChatBubbleLeftEllipsisIcon, BeakerIcon, XCircleIcon, SearchIcon, PencilIcon, ClipboardListIcon, SparklesIcon } from './common/Icons';
 
@@ -282,6 +284,37 @@ const EditManualTaskModal: React.FC<{ isOpen: boolean; onClose: () => void; onSa
 };
 
 const AssignmentModal: React.FC<{ isOpen: boolean; onClose: () => void; onAssign: (person: Tester) => void; personnel: { testers: Tester[]; assistants: Tester[] }; schedule: DailySchedule | null; shift: 'day' | 'night'; isPreparation: boolean; isOverPlan: boolean; selectedItemCount: number; isProcessing: boolean; }> = ({ isOpen, onClose, onAssign, personnel, schedule, shift, isPreparation, isOverPlan, selectedItemCount, isProcessing }) => {
+    const [certifiedAssistants, setCertifiedAssistants] = useState<Set<string>>(new Set());
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const checkProficiency = async () => {
+            try {
+                const [tests, records] = await Promise.all([getProficiencyTests(), getProficiencyRecords()]);
+                const testCount = tests.length;
+                if (testCount === 0) {
+                    // If no tests defined, assume all are certified
+                    setCertifiedAssistants(new Set(personnel.assistants.map(a => a.id)));
+                    return;
+                }
+                const certified = new Set<string>();
+                personnel.assistants.forEach(a => {
+                    const passedCount = tests.filter(t => {
+                        const r = records.find(rec => rec.testId === t.id && rec.assistantId === a.id);
+                        return r?.status === 'passed';
+                    }).length;
+                    if (passedCount === testCount) {
+                        certified.add(a.id);
+                    }
+                });
+                setCertifiedAssistants(certified);
+            } catch (error) {
+                console.error("Error checking proficiency:", error);
+            }
+        };
+        checkProficiency();
+    }, [isOpen, personnel.assistants]);
+
     const filteredPersonnelList = useMemo(() => {
         if (!schedule) return [];
         const scheduledIds = shift === 'day' ? [...(schedule.dayShiftTesters || []), ...(schedule.dayShiftAssistants || [])] : [...(schedule.nightShiftTesters || []), ...(schedule.nightShiftAssistants || [])];
@@ -306,12 +339,22 @@ const AssignmentModal: React.FC<{ isOpen: boolean; onClose: () => void; onAssign
                 <div className="border-2 border-base-100 dark:border-base-700 rounded-[2rem] bg-base-50 dark:bg-base-900/50 max-h-[50vh] overflow-y-auto custom-scrollbar">
                     {filteredPersonnelList.length > 0 ? (
                         <ul className="divide-y-2 divide-base-100 dark:divide-base-700">
-                            {filteredPersonnelList.map(p => (
-                                <li key={p.id} className="flex justify-between items-center p-4 hover:bg-white dark:hover:bg-base-800 transition-all group">
-                                    <div className="flex flex-col"><span className="font-black text-[15px] text-base-800 dark:text-base-100">{p.name}</span><span className={`text-[9px] uppercase font-black tracking-widest ${p.team === 'assistants_4_2' ? 'text-amber-600' : 'text-primary-600'}`}>{p.team === 'assistants_4_2' ? 'Assistant' : 'Analyst'}</span></div>
-                                    <button onClick={() => onAssign(p)} disabled={isProcessing} className="px-6 py-2.5 text-[10px] font-black bg-white dark:bg-base-900 border-2 border-base-200 dark:border-base-600 text-base-800 dark:text-white rounded-xl hover:bg-primary-600 hover:text-white hover:border-primary-600 transition-all uppercase tracking-widest shadow-sm active:scale-95">Select</button>
-                                </li>
-                            ))}
+                            {filteredPersonnelList.map(p => {
+                                const isAssistant = p.team === 'assistants_4_2';
+                                const isCertified = !isAssistant || !p.requiresProficiencyCheck || certifiedAssistants.has(p.id);
+                                return (
+                                    <li key={p.id} className={`flex justify-between items-center p-4 transition-all group hover:bg-white dark:hover:bg-base-800`}>
+                                        <div className="flex flex-col">
+                                            <span className="font-black text-[15px] text-base-800 dark:text-base-100">{p.name}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-[9px] uppercase font-black tracking-widest ${isAssistant ? 'text-amber-600' : 'text-primary-600'}`}>{isAssistant ? 'Assistant' : 'Analyst'}</span>
+                                                {!isCertified && <span className="text-[9px] uppercase font-black tracking-widest text-amber-500 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">In Training</span>}
+                                            </div>
+                                        </div>
+                                        <button onClick={() => onAssign(p)} disabled={isProcessing} className="px-6 py-2.5 text-[10px] font-black bg-white dark:bg-base-900 border-2 border-base-200 dark:border-base-600 text-base-800 dark:text-white rounded-xl hover:bg-primary-600 hover:text-white hover:border-primary-600 transition-all uppercase tracking-widest shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">Select</button>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     ) : (
                         <div className="p-12 text-center space-y-4"><AlertTriangleIcon className="h-10 w-10 text-base-300 mx-auto" /><p className="text-xs font-bold text-base-400 leading-relaxed px-4">No staff scheduled in the Roster for this date and shift.</p></div>

@@ -9,11 +9,12 @@ import SettingsTab from './components/SettingsTab';
 import EquipmentTab from './components/EquipmentTab';
 import QualityDashboard from './components/QualityDashboard';
 import BookingTab from './components/BookingTab'; // Import the new Booking Tab
+import ProficiencyTab from './components/ProficiencyTab';
 import { getTesters, getAssignedTasks } from './services/dataService';
 import type { Tester, AssignedTask } from './types';
 import { TaskStatus } from './types';
 // Import RefreshIcon from common icons to fix the 'Cannot find name' error
-import { DatabaseIcon, UploadIcon, ClipboardListIcon, CalendarIcon, CogIcon, BeakerIcon, AlertTriangleIcon, RefreshIcon, UserCircleIcon } from './components/common/Icons'; // Added UserCircleIcon for Booking
+import { DatabaseIcon, UploadIcon, ClipboardListIcon, CalendarIcon, CogIcon, BeakerIcon, AlertTriangleIcon, RefreshIcon, UserCircleIcon, DocumentTextIcon } from './components/common/Icons'; // Added UserCircleIcon for Booking
 
 const LoadingSpinner = () => (
     <div className="flex flex-col items-center justify-center h-full animate-fade-in">
@@ -150,6 +151,7 @@ const App: React.FC = () => {
                     onShiftChange={setGlobalSelectedShift}
                 />
             );
+            case 'proficiency': return <ProficiencyTab testers={testers} />;
             case 'settings': return <SettingsTab testers={testers} onRefreshTesters={fetchCoreData} onTasksUpdated={triggerTaskRefresh} />;
             default: return <ImportTab onTasksUpdated={triggerTaskRefresh} />;
         }
@@ -231,6 +233,7 @@ const App: React.FC = () => {
                             <TabButton tabName="dashboard" label="Shift Summary" icon={<BeakerIcon className="h-5 w-5"/>} />
                             <TabButton tabName="equipment" label="Equipment" icon={<CogIcon className="h-5 w-5"/>} />
                             <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
+                            <TabButton tabName="proficiency" label="Proficiency" icon={<DocumentTextIcon className="h-5 w-5"/>} />
                             <TabButton tabName="roster" label="Roster & Shifts" icon={<DatabaseIcon className="h-5 w-5"/>} />
                             <TabButton tabName="settings" label="Settings" icon={<CogIcon className="h-5 w-5"/>} />
                         </nav>

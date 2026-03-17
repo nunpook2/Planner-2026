@@ -50,6 +50,36 @@ const BookingModal: React.FC<{
     const [startTime, setStartTime] = useState(initialStartTime || '09:00');
     const [duration, setDuration] = useState('60'); // Minutes
     const [error, setError] = useState<string | null>(null);
+    const [certifiedAssistants, setCertifiedAssistants] = useState<Set<string>>(new Set());
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const checkProficiency = async () => {
+            try {
+                const { getProficiencyTests, getProficiencyRecords } = await import('../services/dataService');
+                const [tests, records] = await Promise.all([getProficiencyTests(), getProficiencyRecords()]);
+                const testCount = tests.length;
+                if (testCount === 0) {
+                    setCertifiedAssistants(new Set(testers.filter(t => t.team === 'assistants_4_2').map(a => a.id)));
+                    return;
+                }
+                const certified = new Set<string>();
+                testers.filter(t => t.team === 'assistants_4_2').forEach(a => {
+                    const passedCount = tests.filter(t => {
+                        const r = records.find(rec => rec.testId === t.id && rec.assistantId === a.id);
+                        return r?.status === 'passed';
+                    }).length;
+                    if (passedCount === testCount) {
+                        certified.add(a.id);
+                    }
+                });
+                setCertifiedAssistants(certified);
+            } catch (error) {
+                console.error("Error checking proficiency:", error);
+            }
+        };
+        checkProficiency();
+    }, [isOpen, testers]);
 
     useEffect(() => {
         if (isOpen) {
@@ -147,7 +177,15 @@ const BookingModal: React.FC<{
                     <div className="space-y-1">
                         <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">Staff Member</label>
                         <select value={resourceId} onChange={e => setResourceId(e.target.value)} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all">
-                            {testers.map(t => <option key={t.id} value={t.id}>{t.name} ({t.team === 'assistants_4_2' ? 'Assistant' : 'Tester'})</option>)}
+                            {testers.map(t => {
+                                const isAssistant = t.team === 'assistants_4_2';
+                                const isCertified = !isAssistant || !t.requiresProficiencyCheck || certifiedAssistants.has(t.id);
+                                return (
+                                    <option key={t.id} value={t.id}>
+                                        {t.name} ({isAssistant ? 'Assistant' : 'Tester'}) {!isCertified ? '- In Training' : ''}
+                                    </option>
+                                );
+                            })}
                         </select>
                     </div>
 

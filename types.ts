@@ -30,6 +30,7 @@ export interface Tester {
     id: string;
     name: string;
     team?: 'testers_3_3' | 'assistants_4_2' | null;
+    requiresProficiencyCheck?: boolean;
 }
 
 export interface CategorizedTask {
@@ -219,6 +220,26 @@ export interface EnvironmentLog {
     timestamp: string; // ISO string
     recorderName: string;
     note?: string;
+}
+
+// --- Proficiency Testing System ---
+export interface ProficiencyTest {
+    id: string;
+    title: string;
+    description: string;
+    type: ('written' | 'practical' | 'reading')[] | string;
+    order: number;
+}
+
+export interface ProficiencyRecord {
+    id: string; // usually `${assistantId}_${testId}`
+    assistantId: string;
+    testId: string;
+    status: 'pending' | 'passed' | 'failed';
+    evidenceImage?: string; // base64 string
+    evidences?: Record<string, string>; // Map of test type to base64 string
+    evaluatedBy?: string;
+    evaluatedAt?: string;
 }
 
 // --- Special Booking System ---
