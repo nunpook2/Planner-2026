@@ -279,8 +279,16 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
                 if (t.status === TaskStatus.Done || t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing') done += taskQty;
             });
         };
-        assignedTasks.forEach(g => processGroup(g.tasks, g.category));
-        prepareTasks.forEach(g => processGroup(g.tasks, g.category));
+        assignedTasks.forEach(g => {
+            if (g.testerId !== 'legacy_data_fix') {
+                processGroup(g.tasks, g.category);
+            }
+        });
+        prepareTasks.forEach(g => {
+            if (g.assistantId !== 'legacy_data_fix') {
+                processGroup(g.tasks, g.category);
+            }
+        });
         returnedPool.forEach(g => {
             const docDate = g.returnedDate;
             if (g.shift === selectedShift && docDate === selectedDate) {
@@ -305,8 +313,18 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
         }
         
         const addActivity = (targetPersonId: string, task: RawTask, cat: TaskCategory, isReady: boolean, isPrep: boolean = false) => {
-            if (!stats[targetPersonId]) return; 
-            const person = stats[targetPersonId];
+            const safeId = targetPersonId || 'Unknown';
+            if (!stats[safeId]) {
+                const testerObj = testers.find(t => t.id === safeId);
+                if (testerObj) {
+                    const isAssistant = testerObj.team === 'assistants_4_2';
+                    stats[testerObj.id] = { id: testerObj.id, name: testerObj.name, role: isAssistant ? 'ASST' : 'ANLST', pendingTasks: 0, summary: {} };
+                } else {
+                    const name = safeId === 'legacy_data_fix' ? 'Manual Done' : safeId;
+                    stats[safeId] = { id: safeId, name: name, role: 'SYSTEM', pendingTasks: 0, summary: {} };
+                }
+            }
+            const person = stats[safeId];
             const taskQty = parseTaskQty(task);
             const isOverPlan = task.isOverPlan === true;
             const priority = isPrep ? 'normal' : getPriorityStatus(task, cat);
@@ -330,16 +348,33 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
             }
             item.samples.push({ name: String(getTaskValue(task, 'Sample Name') || 'N/A'), qty: String(taskQty), detail: String(getTaskValue(task, 'Variant') || '-'), status: status, isManual: item.isManual, isPrep: isPrep, isOverPlan: isOverPlan, reason: task.notOkReason || task.returnReason || undefined });
         };
-        assignedTasks.forEach(g => (g.tasks || []).forEach(t => addActivity(g.testerId, t, g.category, t.status === TaskStatus.Done, false)));
-        prepareTasks.forEach(g => (g.tasks || []).forEach(t => { const isDone = t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing'; addActivity(g.assistantId, t, g.category, isDone, true); }));
+        assignedTasks.forEach(g => {
+            if (g.testerId === 'legacy_data_fix') return;
+            (g.tasks || []).forEach(t => {
+                const isDone = t.status === TaskStatus.Done || t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing';
+                addActivity(g.testerId, t, g.category, isDone, false);
+            });
+        });
+        prepareTasks.forEach(g => {
+            if (g.assistantId === 'legacy_data_fix') return;
+            (g.tasks || []).forEach(t => { 
+                const isDone = t.status === TaskStatus.Done || t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing'; 
+                addActivity(g.assistantId, t, g.category, isDone, true); 
+            });
+        });
         returnedPool.forEach(g => {
             const docDate = g.returnedDate;
             if (g.shift === selectedShift && docDate === selectedDate) {
-                const person = testers.find(t => t.name.trim().toLowerCase() === String(g.returnedBy || '').trim().toLowerCase());
-                if (person) {
-                    const isPrep = g.isPrep === true;
-                    (g.tasks || []).forEach(t => { if (t.isReturned && t.returnedBy === person.name) addActivity(person.id, t, g.category, false, isPrep); });
-                }
+                const isPrep = g.isPrep === true;
+                (g.tasks || []).forEach(t => { 
+                    if (t.isReturned) {
+                        const returnedByName = t.returnedBy || g.returnedBy || 'Unknown';
+                        const person = testers.find(tester => tester.name.trim().toLowerCase() === String(returnedByName).trim().toLowerCase());
+                        const targetId = person ? person.id : returnedByName;
+                        const isDone = t.status === TaskStatus.Done || t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing';
+                        addActivity(targetId, t, g.category, isDone, isPrep); 
+                    }
+                });
             }
         });
         return Object.values(stats).sort((a, b) => b.pendingTasks - a.pendingTasks);
