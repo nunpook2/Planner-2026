@@ -92,7 +92,7 @@ const BookingModal: React.FC<{
                 setStartTime(editingBooking.startTime);
                 setDuration(editingBooking.durationMinutes.toString());
             } else {
-                setResourceId(initialTesterId || (testers.length > 0 ? testers[0].id : ''));
+                setResourceId(initialTesterId || 'unassigned');
                 setCustomerName('');
                 setDescription('');
                 setStartDate(initialDate);
@@ -127,7 +127,7 @@ const BookingModal: React.FC<{
             currDate.setDate(currDate.getDate() + 1);
         }
 
-        const hasConflict = existingBookings.some(b => {
+        const hasConflict = resourceId !== 'unassigned' && existingBookings.some(b => {
             if (editingBooking && b.id === editingBooking.id) return false; // Ignore self when editing
             if (b.resourceId !== resourceId) return false;
             if (!dates.includes(b.date)) return false;
@@ -146,7 +146,7 @@ const BookingModal: React.FC<{
         
         const newBookings = dates.map(date => ({
             resourceId,
-            resourceName: tester?.name || 'Unknown',
+            resourceName: resourceId === 'unassigned' ? 'งานทั่วไป / แจ้งเพื่อทราบ' : (tester?.name || 'Unknown'),
             date,
             startTime,
             durationMinutes: parseInt(duration),
@@ -165,7 +165,7 @@ const BookingModal: React.FC<{
             <div className="bg-white dark:bg-base-900 rounded-[2.5rem] shadow-2xl w-full max-w-lg border border-white/20 overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="p-8 border-b border-base-100 dark:border-base-800 bg-indigo-50/50 dark:bg-indigo-900/20 flex justify-between items-center">
                     <div>
-                        <h3 className="text-xl font-black text-indigo-900 dark:text-indigo-100 tracking-tighter uppercase">{editingBooking ? 'Edit Reservation' : 'New Reservation'}</h3>
+                        <h3 className="text-xl font-black text-indigo-900 dark:text-indigo-100 tracking-tighter uppercase">{editingBooking ? 'แก้ไขการจอง (Edit)' : 'จองคิวใหม่ (New)'}</h3>
                         <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mt-1">Special Customer Booking</p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-indigo-100 dark:hover:bg-indigo-800 rounded-xl transition-colors"><XCircleIcon className="h-6 w-6 text-indigo-400"/></button>
@@ -175,8 +175,9 @@ const BookingModal: React.FC<{
                     {error && <div className="p-3 bg-red-50 text-red-600 text-xs font-bold rounded-xl border border-red-100 flex items-center gap-2"><div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>{error}</div>}
                     
                     <div className="space-y-1">
-                        <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">Staff Member</label>
+                        <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">พนักงาน (Staff Member)</label>
                         <select value={resourceId} onChange={e => setResourceId(e.target.value)} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all">
+                            <option value="unassigned">-- ไม่ระบุบุคคล (งานทั่วไป/แจ้งเพื่อทราบ) --</option>
                             {testers.map(t => {
                                 const isAssistant = t.team === 'assistants_4_2';
                                 const isCertified = !isAssistant || !t.requiresProficiencyCheck || certifiedAssistants.has(t.id);
@@ -190,49 +191,49 @@ const BookingModal: React.FC<{
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">Customer Name</label>
-                        <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Who is booking?" className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all" />
+                        <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">ชื่องาน / ลูกค้า (Task/Customer Name)</label>
+                        <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="ชื่องานหรือลูกค้า" className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                            <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">Start Date</label>
+                            <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">วันที่เริ่ม (Start Date)</label>
                             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} disabled={!!editingBooking} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed" />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">End Date</label>
+                            <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">วันที่สิ้นสุด (End Date)</label>
                             <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} min={startDate} disabled={!!editingBooking} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed" />
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                            <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">Start Time</label>
+                            <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">เวลาเริ่ม (Start Time)</label>
                             <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all" />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">Duration</label>
+                            <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">ระยะเวลา (Duration)</label>
                             <select value={duration} onChange={e => setDuration(e.target.value)} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all">
-                                <option value="30">30 Mins</option>
-                                <option value="60">1 Hour</option>
-                                <option value="90">1.5 Hours</option>
-                                <option value="120">2 Hours</option>
-                                <option value="180">3 Hours</option>
-                                <option value="240">4 Hours</option>
-                                <option value="480">Full Day (8h)</option>
+                                <option value="30">30 นาที (Mins)</option>
+                                <option value="60">1 ชั่วโมง (Hour)</option>
+                                <option value="90">1.5 ชั่วโมง (Hours)</option>
+                                <option value="120">2 ชั่วโมง (Hours)</option>
+                                <option value="180">3 ชั่วโมง (Hours)</option>
+                                <option value="240">4 ชั่วโมง (Hours)</option>
+                                <option value="480">เต็มวัน (Full Day - 8h)</option>
                             </select>
                         </div>
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">Task Description</label>
-                        <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="What needs to be done?" rows={3} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all resize-none" />
+                        <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">รายละเอียดงาน (Task Description)</label>
+                        <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="รายละเอียดงานที่ต้องทำ" rows={3} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all resize-none" />
                     </div>
                 </div>
 
                 <div className="p-8 border-t border-base-100 dark:border-base-800 flex gap-3 bg-base-50/30 shrink-0">
-                    <button onClick={handleSubmit} className="flex-1 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl hover:bg-indigo-700 uppercase text-[11px] tracking-widest transition-all">{editingBooking ? 'Update Booking' : 'Confirm Booking'}</button>
-                    <button onClick={onClose} className="px-8 py-4 text-[11px] font-black text-base-400 uppercase tracking-widest hover:text-base-800">Cancel</button>
+                    <button onClick={handleSubmit} className="flex-1 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl hover:bg-indigo-700 uppercase text-[11px] tracking-widest transition-all">{editingBooking ? 'อัปเดตการจอง (Update)' : 'ยืนยันการจอง (Confirm)'}</button>
+                    <button onClick={onClose} className="px-8 py-4 text-[11px] font-black text-base-400 uppercase tracking-widest hover:text-base-800">ยกเลิก (Cancel)</button>
                 </div>
             </div>
         </div>
@@ -242,9 +243,10 @@ const BookingModal: React.FC<{
 const MonthView: React.FC<{
     currentDate: Date;
     bookings: Booking[];
+    testers: Tester[];
     onDayClick: (date: string) => void;
     onMonthChange: (direction: 'prev' | 'next') => void;
-}> = ({ currentDate, bookings, onDayClick, onMonthChange }) => {
+}> = ({ currentDate, bookings, testers, onDayClick, onMonthChange }) => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const daysInMonth = getDaysInMonth(year, month);
@@ -284,32 +286,40 @@ const MonthView: React.FC<{
                     </div>
                     
                     <div className="flex-grow overflow-y-auto custom-scrollbar space-y-2">
-                        {dayBookings.map((b, i) => (
-                            <div 
-                                key={i} 
-                                className="relative flex flex-col p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 border-l-[4px] border-l-amber-400 border-y border-r border-slate-200 dark:border-zinc-700 shadow-sm hover:shadow-md hover:translate-x-0.5 transition-all duration-200 group/card"
-                            >
-                                <div className="flex items-center gap-1.5 mb-1.5">
-                                    <div className="px-2 py-1 rounded-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 flex items-center gap-1.5 shadow-sm">
-                                        <ClockIcon className="h-3.5 w-3.5 text-amber-500" />
-                                        <span className="font-mono text-[10px] font-black text-slate-700 dark:text-slate-200 tracking-tight">
-                                            {formatTime(b.startTime)} - {calculateEndTime(b.startTime, b.durationMinutes)}
+                        {dayBookings.map((b, i) => {
+                            const tester = testers.find(t => t.id === b.resourceId);
+                            const isAssistant = tester?.team === 'assistants_4_2';
+                            const isUnassigned = b.resourceId === 'unassigned';
+                            
+                            return (
+                                <div 
+                                    key={i} 
+                                    className={`relative flex flex-col p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 border-l-[4px] border-y border-r border-slate-200 dark:border-zinc-700 shadow-sm hover:shadow-md hover:translate-x-0.5 transition-all duration-200 group/card
+                                        ${isUnassigned ? 'border-l-emerald-500' : isAssistant ? 'border-l-amber-400' : 'border-l-indigo-500'}
+                                    `}
+                                >
+                                    <div className="flex items-center gap-1.5 mb-1.5">
+                                        <div className="px-2 py-1 rounded-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 flex items-center gap-1.5 shadow-sm">
+                                            <ClockIcon className={`h-3.5 w-3.5 ${isUnassigned ? 'text-emerald-500' : isAssistant ? 'text-amber-500' : 'text-indigo-500'}`} />
+                                            <span className="font-mono text-[10px] font-black text-slate-700 dark:text-slate-200 tracking-tight">
+                                                {formatTime(b.startTime)} - {calculateEndTime(b.startTime, b.durationMinutes)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="pl-0.5">
+                                        <span className="block truncate text-[12px] font-black text-slate-800 dark:text-white leading-tight">
+                                            {b.customerName}
                                         </span>
+                                        {b.description && (
+                                            <span className="block truncate text-[10px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
+                                                {b.description}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
-                                
-                                <div className="pl-0.5">
-                                    <span className="block truncate text-[12px] font-black text-slate-800 dark:text-white leading-tight">
-                                        {b.customerName}
-                                    </span>
-                                    {b.description && (
-                                        <span className="block truncate text-[10px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
-                                            {b.description}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             );
@@ -515,6 +525,7 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
                                 const isConfirmingDelete = deleteConfirmId === booking.id;
                                 const tester = testers.find(t => t.id === booking.resourceId);
                                 const isAssistant = tester?.team === 'assistants_4_2';
+                                const isUnassigned = booking.resourceId === 'unassigned';
                                 
                                 return (
                                     <div 
@@ -522,6 +533,8 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
                                         className={`rounded-2xl p-5 shadow-sm flex flex-col justify-between transition-all cursor-pointer group border-l-[6px] border-t border-b border-r hover:shadow-md hover:-translate-y-1
                                             ${isConfirmingDelete 
                                                 ? 'bg-red-50 dark:bg-red-900/20 border-red-500' 
+                                                : isUnassigned
+                                                    ? 'bg-white dark:bg-base-800 border-l-emerald-500 border-y-slate-200 border-r-slate-200 dark:border-base-700'
                                                 : isAssistant 
                                                     ? 'bg-white dark:bg-base-800 border-l-amber-400 border-y-slate-200 border-r-slate-200 dark:border-base-700' 
                                                     : 'bg-white dark:bg-base-800 border-l-indigo-500 border-y-slate-200 border-r-slate-200 dark:border-base-700'
@@ -563,7 +576,7 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                                                <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black text-white ${isAssistant ? 'bg-amber-500' : 'bg-indigo-500'}`}>
+                                                <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black text-white ${isUnassigned ? 'bg-emerald-500' : isAssistant ? 'bg-amber-500' : 'bg-indigo-500'}`}>
                                                     {booking.resourceName.substring(0, 1).toUpperCase()}
                                                 </div>
                                                 <span className="text-xs font-bold truncate">
@@ -582,6 +595,7 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
                     <MonthView 
                         currentDate={monthViewDate} 
                         bookings={monthBookings} 
+                        testers={testers}
                         onDayClick={handleDayClickFromMonth}
                         onMonthChange={handleMonthChange}
                     />

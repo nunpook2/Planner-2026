@@ -269,9 +269,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
         let total = 0, done = 0, poCat = 0, lsp = 0, sprint = 0, urgent = 0;
         const processGroup = (groupTasks: RawTask[], category: TaskCategory) => {
              groupTasks.forEach(t => {
-                const isManual = t.ManualEntry === true || category === TaskCategory.Manual;
-                if (isManual) return; // Skip manual tasks
-                
                 const taskQty = parseTaskQty(t);
                 total += taskQty;
                 const priority = getPriorityStatus(t, category);
@@ -283,14 +280,10 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
             });
         };
         assignedTasks.forEach(g => {
-            if (g.testerId !== 'legacy_data_fix') {
-                processGroup(g.tasks, g.category);
-            }
+            processGroup(g.tasks, g.category);
         });
         prepareTasks.forEach(g => {
-            if (g.assistantId !== 'legacy_data_fix') {
-                processGroup(g.tasks, g.category);
-            }
+            processGroup(g.tasks, g.category);
         });
         returnedPool.forEach(g => {
             const docDate = g.returnedDate;
@@ -323,7 +316,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
                     const isAssistant = testerObj.team === 'assistants_4_2';
                     stats[testerObj.id] = { id: testerObj.id, name: testerObj.name, role: isAssistant ? 'ASST' : 'ANLST', pendingTasks: 0, summary: {} };
                 } else {
-                    const name = safeId === 'legacy_data_fix' ? 'Manual Done' : safeId;
+                    const name = safeId === 'legacy_data_fix' ? 'งาน Manual' : safeId;
                     stats[safeId] = { id: safeId, name: name, role: 'SYSTEM', pendingTasks: 0, summary: {} };
                 }
             }
@@ -352,14 +345,12 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
             item.samples.push({ name: String(getTaskValue(task, 'Sample Name') || 'N/A'), qty: String(taskQty), detail: String(getTaskValue(task, 'Variant') || '-'), status: status, isManual: item.isManual, isPrep: isPrep, isOverPlan: isOverPlan, reason: task.notOkReason || task.returnReason || undefined });
         };
         assignedTasks.forEach(g => {
-            if (g.testerId === 'legacy_data_fix') return;
             (g.tasks || []).forEach(t => {
                 const isDone = t.status === TaskStatus.Done || t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing';
                 addActivity(g.testerId, t, g.category, isDone, false);
             });
         });
         prepareTasks.forEach(g => {
-            if (g.assistantId === 'legacy_data_fix') return;
             (g.tasks || []).forEach(t => { 
                 const isDone = t.status === TaskStatus.Done || t.preparationStatus === 'Prepared' || t.preparationStatus === 'Ready for Testing'; 
                 addActivity(g.assistantId, t, g.category, isDone, true); 
@@ -408,7 +399,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
     }, [shiftReport]);
 
     const renderPersonnelBoardCard = (person: PersonStats) => {
-        const missions = Object.entries(person.summary).filter(([_, sum]) => !sum.isManual);
+        const missions = Object.entries(person.summary);
         if (missions.length === 0) return null;
         const totalDone = missions.reduce((acc: number, [_, s]) => acc + s.done, 0);
         const totalAll = missions.reduce((acc: number, [_, s]) => acc + s.total, 0);
@@ -429,13 +420,13 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
 
                 <div className={`px-6 py-4 flex items-center justify-between border-b-2 border-base-50 dark:border-base-800 ${person.role === 'ASST' ? 'bg-amber-50/30 dark:bg-amber-900/10' : 'bg-primary-50/30 dark:bg-primary-900/10'}`}>
                     <div className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-black text-white shadow-lg ${person.role === 'ASST' ? 'person-avatar assistant' : 'person-avatar'}`}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-black text-white shadow-lg ${person.role === 'ASST' ? 'person-avatar assistant' : person.role === 'SYSTEM' ? 'person-avatar system' : 'person-avatar'}`}>
                             {person.name.substring(0, 2).toUpperCase()}
                         </div>
                         <div>
                             <h4 className="text-[16px] font-black text-base-955 dark:text-base-50 uppercase tracking-tighter leading-none">{person.name}</h4>
-                            <span className={`text-[8px] font-black uppercase tracking-[0.2em] mt-1 block ${person.role === 'ASST' ? 'text-amber-600' : 'text-primary-600'}`}>
-                                {person.role === 'ASST' ? 'Assistant' : 'Analyst'}
+                            <span className={`text-[8px] font-black uppercase tracking-[0.2em] mt-1 block ${person.role === 'ASST' ? 'text-amber-600' : person.role === 'SYSTEM' ? 'text-emerald-600' : 'text-primary-600'}`}>
+                                {person.role === 'ASST' ? 'Assistant' : person.role === 'SYSTEM' ? 'System' : 'Analyst'}
                             </span>
                         </div>
                     </div>
@@ -508,6 +499,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
                 .person-avatar { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); }
                 .person-avatar.assistant { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); }
                 .person-avatar.unified { background: linear-gradient(135deg, #0f172a 0%, #334155 100%); }
+                .person-avatar.system { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
                 .active-glow { box-shadow: 0 0 25px -5px rgba(99, 102, 241, 0.4); }
                 @keyframes achievement-pulse { 0% { text-shadow: 0 0 5px #4f46e5; transform: scale(1); } 50% { text-shadow: 0 0 15px #06b6d4; transform: scale(1.05); } 100% { text-shadow: 0 0 5px #4f46e5; transform: scale(1); } }
                 .neon-achievement-text { animation: achievement-pulse 2s ease-in-out infinite; font-weight: 900; letter-spacing: -0.05em; }
@@ -595,10 +587,10 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
                                             )}
 
                                             <div className="flex items-center gap-6">
-                                                <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-2xl font-black text-white shadow-2xl ${activePerson.role === 'ASST' ? 'person-avatar assistant' : 'person-avatar'}`}> {activePerson.name.substring(0, 2).toUpperCase()} </div>
+                                                <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-2xl font-black text-white shadow-2xl ${activePerson.role === 'ASST' ? 'person-avatar assistant' : activePerson.role === 'SYSTEM' ? 'person-avatar system' : 'person-avatar'}`}> {activePerson.name.substring(0, 2).toUpperCase()} </div>
                                                 <div>
                                                     <h3 className="text-4xl font-black text-base-955 dark:text-white tracking-tighter uppercase leading-none">{activePerson.name}</h3>
-                                                    <span className={`text-xs font-black uppercase tracking-[0.4em] mt-3 block ${activePerson.role === 'ASST' ? 'text-amber-600' : 'text-primary-600'}`}>Mission Integrity Analysis</span>
+                                                    <span className={`text-xs font-black uppercase tracking-[0.4em] mt-3 block ${activePerson.role === 'ASST' ? 'text-amber-600' : activePerson.role === 'SYSTEM' ? 'text-emerald-600' : 'text-primary-600'}`}>Mission Integrity Analysis</span>
                                                 </div>
                                             </div>
                                             <div className="flex flex-col items-end">

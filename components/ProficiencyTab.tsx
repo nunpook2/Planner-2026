@@ -220,9 +220,9 @@ const ProficiencyTab: React.FC<ProficiencyTabProps> = ({ testers }) => {
                                         <div className="flex items-center gap-2">
                                             <h3 className="text-base font-bold text-slate-900 dark:text-white">{test.title}</h3>
                                             <div className="flex gap-1">
-                                                {testTypes.includes('written') && <span className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Written</span>}
-                                                {testTypes.includes('practical') && <span className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">Practical</span>}
-                                                {testTypes.includes('reading') && <span className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Reading</span>}
+                                                {testTypes.includes('written') && <span className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">ข้อเขียน</span>}
+                                                {testTypes.includes('practical') && <span className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">ปฏิบัติ</span>}
+                                                {testTypes.includes('reading') && <span className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">การอ่าน</span>}
                                             </div>
                                         </div>
                                         <p className="text-sm text-base-500">{test.description}</p>
@@ -269,7 +269,7 @@ const ProficiencyTab: React.FC<ProficiencyTabProps> = ({ testers }) => {
                                         
                                         return (
                                             <button key={t} onClick={toggleType} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all capitalize ${isSelected ? `${colors} border-2` : 'bg-base-50 dark:bg-base-950 border-2 border-transparent text-base-500'}`}>
-                                                {t}
+                                                {t === 'written' ? 'ข้อเขียน' : t === 'practical' ? 'ปฏิบัติ' : 'การอ่าน'}
                                             </button>
                                         );
                                     })}
@@ -315,7 +315,7 @@ const ProficiencyTab: React.FC<ProficiencyTabProps> = ({ testers }) => {
                                                         <h3 className="text-base font-bold text-slate-900 dark:text-white">{test.title}</h3>
                                                         <div className="flex gap-1">
                                                             {testTypes.map(t => (
-                                                                <span key={t} className={`text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300 ${t === 'written' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : t === 'practical' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>{t}</span>
+                                                                <span key={t} className={`text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-base-100 text-base-700 dark:bg-base-800 dark:text-base-300 ${t === 'written' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : t === 'practical' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>{t === 'written' ? 'ข้อเขียน' : t === 'practical' ? 'ปฏิบัติ' : 'การอ่าน'}</span>
                                                             ))}
                                                         </div>
                                                     </div>
@@ -329,7 +329,7 @@ const ProficiencyTab: React.FC<ProficiencyTabProps> = ({ testers }) => {
                                                     
                                                     return (
                                                         <div key={t} className="flex items-center justify-between gap-4 bg-base-50 dark:bg-base-800/50 p-2 rounded-lg">
-                                                            <span className="text-[10px] font-bold uppercase tracking-widest text-base-500">{t}</span>
+                                                            <span className="text-[10px] font-bold uppercase tracking-widest text-base-500">{t === 'written' ? 'ข้อเขียน' : t === 'practical' ? 'ปฏิบัติ' : 'การอ่าน'}</span>
                                                             {isUploaded ? (
                                                                 <div className="flex items-center gap-2">
                                                                     <a href={evidence} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1">
