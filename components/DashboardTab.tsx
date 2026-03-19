@@ -280,12 +280,15 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
             });
         };
         assignedTasks.forEach(g => {
+            if (g.testerId === 'legacy_data_fix') return;
             processGroup(g.tasks, g.category);
         });
         prepareTasks.forEach(g => {
+            if (g.assistantId === 'legacy_data_fix') return;
             processGroup(g.tasks, g.category);
         });
         returnedPool.forEach(g => {
+            if (g.testerId === 'legacy_data_fix' || g.assistantId === 'legacy_data_fix') return;
             const docDate = g.returnedDate;
             if (g.shift === selectedShift && docDate === selectedDate) {
                 const returnedItemsOnly = g.tasks.filter(t => t.isReturned);
@@ -371,7 +374,9 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
                 });
             }
         });
-        return Object.values(stats).sort((a, b) => b.pendingTasks - a.pendingTasks);
+        return Object.values(stats)
+            .filter(p => p.id !== 'legacy_data_fix')
+            .sort((a, b) => b.pendingTasks - a.pendingTasks);
     }, [assignedTasks, prepareTasks, returnedPool, schedule, testers, selectedShift, selectedDate]);
 
     const activePerson = useMemo(() => {
