@@ -738,7 +738,7 @@ export const getProficiencyRecords = async (): Promise<ProficiencyRecord[]> => {
 export const saveProficiencyRecord = async (record: Omit<ProficiencyRecord, 'id'>, id: string): Promise<void> => {
     // Remove undefined values to prevent Firestore errors
     const cleanedRecord = Object.fromEntries(Object.entries(record).filter(([_, v]) => v !== undefined));
-    await getCollection('proficiencyRecords').doc(id).set({ ...cleanedRecord, id }, { merge: true });
+    await getCollection('proficiencyRecords').doc(id).set({ ...cleanedRecord, id });
 };
 
 export const deleteProficiencyRecord = async (id: string): Promise<void> => {

@@ -17,6 +17,7 @@ const ProficiencyTab: React.FC<ProficiencyTabProps> = ({ testers }) => {
     const [editingTest, setEditingTest] = useState<Partial<ProficiencyTest> | null>(null);
     const [isTestModalOpen, setIsTestModalOpen] = useState(false);
     const [testToDelete, setTestToDelete] = useState<string | null>(null);
+    const [viewingImage, setViewingImage] = useState<string | null>(null);
 
     // Record State
     const [selectedAssistant, setSelectedAssistant] = useState<Tester | null>(null);
@@ -81,8 +82,9 @@ const ProficiencyTab: React.FC<ProficiencyTabProps> = ({ testers }) => {
 
     const handleSaveRecord = async (testId: string, testTypes: string[], typeToUpdate: string, evidenceImage: string | null) => {
         if (!selectedAssistant) return;
-        const recordId = `${selectedAssistant.id}_${testId}`;
-        const existingRecord = records.find(r => r.id === recordId);
+        
+        const existingRecord = records.find(r => r.testId === testId && r.assistantId === selectedAssistant.id);
+        const recordId = existingRecord?.id || `${selectedAssistant.id}_${testId}`;
         
         try {
             let newEvidences = existingRecord?.evidences || {};
@@ -124,17 +126,49 @@ const ProficiencyTab: React.FC<ProficiencyTabProps> = ({ testers }) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        if (file.size > 1024 * 1024) {
-            setNotification({ message: "Image size must be less than 1MB.", isError: true });
-            return;
-        }
-
         const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64String = reader.result as string;
-            handleSaveRecord(testId, testTypes, typeToUpdate, base64String);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                
+                const MAX_WIDTH = 1000;
+                const MAX_HEIGHT = 1000;
+                
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width *= MAX_HEIGHT / height;
+                        height = MAX_HEIGHT;
+                    }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+                
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                
+                if (dataUrl.length > 800 * 1024) {
+                    setNotification({ message: "Image is too large even after compression. Please use a smaller image.", isError: true });
+                    return;
+                }
+                
+                handleSaveRecord(testId, testTypes, typeToUpdate, dataUrl);
+            };
+            img.src = event.target?.result as string;
         };
         reader.readAsDataURL(file);
+        
+        // Reset input so the same file can be selected again if needed
+        e.target.value = '';
     };
 
     const getAssistantProgress = (assistantId: string) => {
@@ -324,7 +358,12 @@ const ProficiencyTab: React.FC<ProficiencyTabProps> = ({ testers }) => {
                                             </div>
                                             <div className="flex flex-col gap-2 shrink-0 min-w-[200px]">
                                                 {testTypes.map(t => {
-                                                    const evidence = record?.evidences?.[t] || (testTypes.length === 1 ? record?.evidenceImage : null);
+                                                    let evidence = null;
+                                                    if (record?.evidences) {
+                                                        evidence = record.evidences[t] || null;
+                                                    } else if (testTypes.length === 1) {
+                                                        evidence = record?.evidenceImage || null;
+                                                    }
                                                     const isUploaded = !!evidence;
                                                     
                                                     return (
@@ -332,15 +371,15 @@ const ProficiencyTab: React.FC<ProficiencyTabProps> = ({ testers }) => {
                                                             <span className="text-[10px] font-bold uppercase tracking-widest text-base-500">{t === 'written' ? 'ข้อเขียน' : t === 'practical' ? 'ปฏิบัติ' : 'การอ่าน'}</span>
                                                             {isUploaded ? (
                                                                 <div className="flex items-center gap-2">
-                                                                    <a href={evidence} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1">
+                                                                    <button onClick={() => setViewingImage(evidence)} className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1">
                                                                         <DocumentTextIcon className="w-3 h-3" /> View
-                                                                    </a>
+                                                                    </button>
                                                                     <button onClick={() => handleSaveRecord(test.id, testTypes, t, null)} className="text-[10px] font-bold text-rose-500 hover:underline">Revoke</button>
                                                                 </div>
                                                             ) : (
                                                                 <label className="cursor-pointer flex items-center gap-1 px-2 py-1 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 font-bold rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-[10px]">
                                                                     <ArrowUpTrayIcon className="w-3 h-3" /> Upload
-                                                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, test.id, testTypes, t)} />
+                                                                    <input type="file" accept="image/*" className="sr-only" onChange={(e) => handleImageUpload(e, test.id, testTypes, t)} />
                                                                 </label>
                                                             )}
                                                         </div>
@@ -391,6 +430,16 @@ const ProficiencyTab: React.FC<ProficiencyTabProps> = ({ testers }) => {
                         {notification.message}
                         <button onClick={() => setNotification(null)} className="ml-4 opacity-70 hover:opacity-100"><XCircleIcon className="w-4 h-4" /></button>
                     </div>
+                </div>
+            )}
+
+            {/* Image Viewer Modal */}
+            {viewingImage && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4 animate-fade-in" onClick={() => setViewingImage(null)}>
+                    <img src={viewingImage} alt="Evidence" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()} />
+                    <button onClick={() => setViewingImage(null)} className="absolute top-6 right-6 text-white/70 hover:text-white bg-black/50 hover:bg-black/80 p-2 rounded-full transition-all">
+                        <XCircleIcon className="w-10 h-10" />
+                    </button>
                 </div>
             )}
         </div>
