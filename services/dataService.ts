@@ -1,6 +1,6 @@
 
 import { firestore } from './firebase';
-import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog, Booking, ProficiencyTest, ProficiencyRecord } from '../types';
+import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog, Booking, ProficiencyTest, ProficiencyRecord, SupportRequest } from '../types';
 import { TaskCategory } from '../types';
 
 // Export firestore for use in components
@@ -743,4 +743,34 @@ export const saveProficiencyRecord = async (record: Omit<ProficiencyRecord, 'id'
 
 export const deleteProficiencyRecord = async (id: string): Promise<void> => {
     await getCollection('proficiencyRecords').doc(id).delete();
+};
+
+export const getSupportRequests = async (): Promise<SupportRequest[]> => {
+    if (!firestore) throw new Error("Database not initialized");
+    const snapshot = await safeGet(getCollection('supportRequests').orderBy('createdAt', 'desc'));
+    return snapshot.docs.map((doc: any) => ({
+        id: doc.id,
+        ...doc.data()
+    })) as SupportRequest[];
+};
+
+export const saveSupportRequest = async (request: SupportRequest): Promise<void> => {
+    if (!firestore) throw new Error("Database not initialized");
+    const collection = getCollection('supportRequests');
+    
+    // Remove undefined values to prevent Firestore errors
+    const cleanedRequest = Object.fromEntries(Object.entries(request).filter(([_, v]) => v !== undefined));
+
+    if (cleanedRequest.id) {
+        await collection.doc(cleanedRequest.id as string).update(cleanedRequest);
+    } else {
+        await collection.add({
+            ...cleanedRequest,
+            createdAt: cleanedRequest.createdAt || new Date().toISOString()
+        });
+    }
+};
+
+export const deleteSupportRequest = async (id: string): Promise<void> => {
+    await getCollection('supportRequests').doc(id).delete();
 };

@@ -255,3 +255,18 @@ export interface Booking {
     contactInfo?: string;
     createdBy?: string;
 }
+
+// --- Support / Helpdesk System ---
+export type SupportRequestStatus = 'pending' | 'acknowledged' | 'in_progress' | 'done';
+
+export interface SupportRequest {
+    id?: string;
+    title: string;
+    description: string;
+    requesterName: string;
+    assigneeId?: string | null;
+    status: SupportRequestStatus;
+    createdAt: string;
+    updatedAt: string;
+    resolvedAt?: string | null;
+}
