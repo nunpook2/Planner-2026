@@ -812,15 +812,32 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         try {
             const targetDocs = categorizedTasks.filter(d => d.id === requestId && d.category !== TaskCategory.Manual);
             if (targetDocs.length < 2) { setNotification({ message: "No duplicates found to merge." }); return; }
-            const uniqueTasksMap = new Map<string, RawTask>();
-            targetDocs.forEach(doc => { doc.tasks.forEach(task => { const sig = getTaskSignature(requestId, task); if (!uniqueTasksMap.has(sig)) uniqueTasksMap.set(sig, task); }); });
-            const mergedTasks = Array.from(uniqueTasksMap.values());
+            
+            // Collect all tasks from all duplicate documents instead of deduplicating them by signature.
+            // This prevents legitimate items (like returning tasks) from disappearing.
+            const mergedTasks: RawTask[] = [];
+            targetDocs.forEach(doc => {
+                doc.tasks.forEach(task => {
+                    // Regenerate IDs just to ensure clean uniqueness in the merged array if needed,
+                    // but usually keeping the existing _id is better so we don't break existing references.
+                    mergedTasks.push({ ...task });
+                });
+            });
+
             const batch = firestore.batch();
             targetDocs.forEach(doc => batch.delete(firestore.collection('categorizedTasks').doc(doc.docId)));
             const newDocRef = firestore.collection('categorizedTasks').doc();
             batch.set(newDocRef, { id: requestId, category: targetDocs[0].category, tasks: mergedTasks, createdAt: new Date().toISOString() });
-            await batch.commit(); fetchData(); setNotification({ message: `Merged ${targetDocs.length} records into 1 clean record.` });
-        } catch (e) { console.error(e); setNotification({ message: "Merge failed.", isError: true }); } finally { setIsAssigning(false); }
+            
+            await batch.commit(); 
+            fetchData(); 
+            setNotification({ message: `Merged ${targetDocs.length} records back into 1 unified queue.` });
+        } catch (e) { 
+            console.error(e); 
+            setNotification({ message: "Merge failed.", isError: true }); 
+        } finally { 
+            setIsAssigning(false); 
+        }
     };
 
     const handleBatchWipe = async () => {
