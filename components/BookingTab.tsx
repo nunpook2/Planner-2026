@@ -41,7 +41,8 @@ const BookingModal: React.FC<{
     initialStartTime?: string;
     editingBooking: Booking | null;
     existingBookings: Booking[];
-}> = ({ isOpen, onClose, onSave, testers, initialDate, initialTesterId, initialStartTime, editingBooking, existingBookings }) => {
+    allMonthBookings: Booking[];
+}> = ({ isOpen, onClose, onSave, testers, initialDate, initialTesterId, initialStartTime, editingBooking, existingBookings, allMonthBookings }) => {
     const [resourceId, setResourceId] = useState(initialTesterId || '');
     const [customerName, setCustomerName] = useState('');
     const [description, setDescription] = useState('');
@@ -49,6 +50,8 @@ const BookingModal: React.FC<{
     const [endDate, setEndDate] = useState(initialDate);
     const [startTime, setStartTime] = useState(initialStartTime || '09:00');
     const [duration, setDuration] = useState('60'); // Minutes
+    const [isProjectTime, setIsProjectTime] = useState(false);
+    const [plannerApproved, setPlannerApproved] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [certifiedAssistants, setCertifiedAssistants] = useState<Set<string>>(new Set());
 
@@ -91,6 +94,8 @@ const BookingModal: React.FC<{
                 setEndDate(editingBooking.date);
                 setStartTime(editingBooking.startTime);
                 setDuration(editingBooking.durationMinutes.toString());
+                setIsProjectTime(editingBooking.isProjectTime || false);
+                setPlannerApproved(editingBooking.plannerApproved || false);
             } else {
                 setResourceId(initialTesterId || 'unassigned');
                 setCustomerName('');
@@ -99,13 +104,15 @@ const BookingModal: React.FC<{
                 setEndDate(initialDate);
                 setStartTime(initialStartTime || '09:00');
                 setDuration('60');
+                setIsProjectTime(false);
+                setPlannerApproved(false);
             }
             setError(null);
         }
     }, [isOpen, initialDate, initialTesterId, initialStartTime, testers, editingBooking]);
 
     const handleSubmit = () => {
-        if (!resourceId || !customerName || !startTime || !startDate || !endDate) {
+        if (!resourceId || (!isProjectTime && !customerName) || !startTime || !startDate || !endDate) {
             setError("Please fill in all required fields.");
             return;
         }
@@ -142,6 +149,27 @@ const BookingModal: React.FC<{
             return;
         }
 
+        let isOverQuotaFlag = false;
+        if (isProjectTime) {
+            let usedMinutes = 0;
+            allMonthBookings.forEach(b => {
+                if (b.isProjectTime && b.resourceId === resourceId) {
+                    // Ignore self when editing
+                    if (!(editingBooking && b.id === editingBooking.id)) {
+                        usedMinutes += b.durationMinutes;
+                    }
+                }
+            });
+            const requestedMinutes = dates.length * parseInt(duration);
+            if (usedMinutes + requestedMinutes > 1200) { // 20 hours
+                if (!plannerApproved) {
+                    setError(`Quota Exceeded: This tester only has ${Math.max(0, 1200 - usedMinutes)} mins remaining for personal projects this month. Planner approval required to override.`);
+                    return;
+                }
+                isOverQuotaFlag = true;
+            }
+        }
+
         const tester = testers.find(t => t.id === resourceId);
         
         const newBookings = dates.map(date => ({
@@ -150,8 +178,11 @@ const BookingModal: React.FC<{
             date,
             startTime,
             durationMinutes: parseInt(duration),
-            customerName,
-            description
+            customerName: isProjectTime ? 'Personal Project' : customerName,
+            description,
+            isProjectTime,
+            plannerApproved: isProjectTime ? plannerApproved : false,
+            isOverQuota: isOverQuotaFlag
         }));
 
         onSave(newBookings);
@@ -159,6 +190,9 @@ const BookingModal: React.FC<{
     };
 
     if (!isOpen) return null;
+
+    const selectedTester = testers.find(t => t.id === resourceId);
+    const isSelectedTesterAssistant = selectedTester?.team === 'assistants_4_2';
 
     return (
         <div className="fixed inset-0 bg-base-900/80 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-fade-in" onClick={onClose}>
@@ -176,7 +210,11 @@ const BookingModal: React.FC<{
                     
                     <div className="space-y-1">
                         <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">พนักงาน (Staff Member)</label>
-                        <select value={resourceId} onChange={e => setResourceId(e.target.value)} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all">
+                        <select value={resourceId} onChange={e => {
+                            setResourceId(e.target.value);
+                            const t = testers.find(t => t.id === e.target.value);
+                            if (t?.team === 'assistants_4_2') setIsProjectTime(false);
+                        }} className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all">
                             <option value="unassigned">-- ไม่ระบุบุคคล (งานทั่วไป/แจ้งเพื่อทราบ) --</option>
                             {testers.map(t => {
                                 const isAssistant = t.team === 'assistants_4_2';
@@ -190,10 +228,43 @@ const BookingModal: React.FC<{
                         </select>
                     </div>
 
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">ชื่องาน / ลูกค้า (Task/Customer Name)</label>
-                        <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="ชื่องานหรือลูกค้า" className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all" />
-                    </div>
+                    {!isSelectedTesterAssistant && resourceId !== 'unassigned' && resourceId !== '' && (
+                        <div className="flex flex-col gap-2 p-4 bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-800 rounded-2xl">
+                            <div className="flex items-center gap-3">
+                                <input 
+                                    type="checkbox" 
+                                    checked={isProjectTime} 
+                                    onChange={e => setIsProjectTime(e.target.checked)} 
+                                    className="w-5 h-5 rounded-md text-cyan-600 focus:ring-cyan-500" 
+                                />
+                                <div>
+                                    <label className="text-xs font-black text-cyan-900 dark:text-cyan-100 uppercase tracking-tight">Personal Project Time</label>
+                                    <p className="text-[9px] font-bold text-cyan-600 dark:text-cyan-400 mt-0.5 tracking-wide">Deducts from 20-hour monthly quota</p>
+                                </div>
+                            </div>
+                            {isProjectTime && (
+                                <div className="mt-2 pt-3 border-t border-cyan-200 dark:border-cyan-800 flex items-center gap-3 pl-8">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={plannerApproved} 
+                                        onChange={e => setPlannerApproved(e.target.checked)} 
+                                        className="w-5 h-5 rounded-md text-red-500 focus:ring-red-500 border-red-300" 
+                                    />
+                                    <div>
+                                        <label className="text-xs font-black text-red-700 dark:text-red-400 uppercase tracking-tight">Planner Approved (Override Limit)</label>
+                                        <p className="text-[9px] font-bold text-red-500 dark:text-red-500 mt-0.5 tracking-wide">Check to allow exceeding the 20h quota</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {!isProjectTime && (
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-base-400 uppercase tracking-widest ml-1">ชื่องาน / ลูกค้า (Task/Customer Name)</label>
+                            <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="ชื่องานหรือลูกค้า" className="w-full p-4 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-2xl outline-none font-bold text-sm dark:text-white focus:border-indigo-500 transition-all" />
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
@@ -257,7 +328,7 @@ const MonthView: React.FC<{
         const days = [];
         // Empty slots for start of month
         for (let i = 0; i < firstDay; i++) {
-            days.push(<div key={`empty-${i}`} className="h-32 md:h-44 bg-base-50/30 dark:bg-base-900/30 rounded-[1.8rem]"></div>);
+            days.push(<div key={`empty-${i}`} className="h-20 md:h-24 bg-base-50/30 dark:bg-base-900/30 rounded-2xl opacity-50"></div>);
         }
 
         for (let d = 1; d <= daysInMonth; d++) {
@@ -269,57 +340,47 @@ const MonthView: React.FC<{
                 <div 
                     key={d} 
                     onClick={() => onDayClick(dateStr)}
-                    className={`h-auto min-h-[160px] p-3 rounded-[1.8rem] border transition-all duration-300 cursor-pointer group flex flex-col relative overflow-hidden
+                    className={`h-20 md:h-24 p-2.5 rounded-2xl border transition-all duration-300 cursor-pointer group flex flex-col relative overflow-hidden
                         ${isToday 
-                            ? 'bg-white dark:bg-zinc-800 border-amber-400 shadow-lg ring-1 ring-amber-400 z-10' 
-                            : 'bg-white dark:bg-base-800 border-base-100 dark:border-base-700 hover:border-amber-300 hover:shadow-xl hover:-translate-y-1'
+                            ? 'bg-indigo-50/50 dark:bg-indigo-900/20 border-indigo-400 shadow-sm ring-1 ring-indigo-400 z-10' 
+                            : 'bg-white dark:bg-base-800 border-base-100 dark:border-base-700 hover:border-indigo-300 hover:shadow-sm hover:-translate-y-[2px]'
                         }
                     `}
                 >
-                    <div className="flex justify-between items-center mb-3 shrink-0 px-1">
-                        <span className={`text-xl font-black tracking-tight ${isToday ? 'text-amber-500' : 'text-base-300 dark:text-base-600'}`}>{d}</span>
+                    <div className="flex justify-between items-start mb-2 shrink-0 px-0.5">
+                        <span className={`text-sm font-black tracking-tighter leading-none ${isToday ? 'text-indigo-600 dark:text-indigo-400' : 'text-base-400 dark:text-base-500'}`}>{d}</span>
                         {dayBookings.length > 0 && (
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${isToday ? 'bg-amber-500 text-white shadow-md' : 'bg-base-100 dark:bg-base-700 text-base-500 dark:text-base-400'}`}>
+                            <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md leading-none ${isToday ? 'bg-indigo-500 text-white shadow-sm' : 'bg-base-100 dark:bg-base-700 text-base-500 dark:text-base-400'}`}>
                                 {dayBookings.length}
                             </span>
                         )}
                     </div>
                     
-                    <div className="flex-grow overflow-y-auto custom-scrollbar space-y-2">
-                        {dayBookings.map((b, i) => {
+                    <div className="flex-grow flex flex-wrap gap-1 content-start mt-0.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                        {dayBookings.slice(0, 15).map((b, i) => {
                             const tester = testers.find(t => t.id === b.resourceId);
                             const isAssistant = tester?.team === 'assistants_4_2';
                             const isUnassigned = b.resourceId === 'unassigned';
                             
+                            let bgClass = 'bg-indigo-500';
+                            if (isUnassigned) bgClass = 'bg-emerald-500';
+                            else if (isAssistant) bgClass = 'bg-amber-500';
+                            else if (b.isOverQuota) bgClass = 'bg-red-500';
+                            else if (b.isProjectTime) bgClass = 'bg-cyan-500';
+
                             return (
                                 <div 
                                     key={i} 
-                                    className={`relative flex flex-col p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 border-l-[4px] border-y border-r border-slate-200 dark:border-zinc-700 shadow-sm hover:shadow-md hover:translate-x-0.5 transition-all duration-200 group/card
-                                        ${isUnassigned ? 'border-l-emerald-500' : isAssistant ? 'border-l-amber-400' : 'border-l-indigo-500'}
-                                    `}
-                                >
-                                    <div className="flex items-center gap-1.5 mb-1.5">
-                                        <div className="px-2 py-1 rounded-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 flex items-center gap-1.5 shadow-sm">
-                                            <ClockIcon className={`h-3.5 w-3.5 ${isUnassigned ? 'text-emerald-500' : isAssistant ? 'text-amber-500' : 'text-indigo-500'}`} />
-                                            <span className="font-mono text-[10px] font-black text-slate-700 dark:text-slate-200 tracking-tight">
-                                                {formatTime(b.startTime)} - {calculateEndTime(b.startTime, b.durationMinutes)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="pl-0.5">
-                                        <span className="block truncate text-[12px] font-black text-slate-800 dark:text-white leading-tight">
-                                            {b.customerName}
-                                        </span>
-                                        {b.description && (
-                                            <span className="block truncate text-[10px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
-                                                {b.description}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
+                                    className={`w-2 h-2 rounded-full shadow-sm ${bgClass}`}
+                                    title={`${b.customerName} - ${b.resourceName}`}
+                                />
                             );
                         })}
+                        {dayBookings.length > 15 && (
+                            <div className="w-2 h-2 rounded-full bg-base-300 flex items-center justify-center">
+                                <span className="text-[4px] leading-none text-white font-black">+</span>
+                            </div>
+                        )}
                     </div>
                 </div>
             );
@@ -328,21 +389,100 @@ const MonthView: React.FC<{
     };
 
     return (
-        <div className="flex flex-col h-full bg-white/50 dark:bg-base-900/50 rounded-[2.5rem] border border-base-200 dark:border-base-800 shadow-xl overflow-hidden p-6">
-            <div className="flex justify-between items-center mb-6 px-2">
-                <button onClick={() => onMonthChange('prev')} className="p-2 hover:bg-white rounded-xl shadow-sm text-base-500 transition-all border border-transparent hover:border-base-200"><ChevronDownIcon className="h-5 w-5 rotate-90" /></button>
-                <h3 className="text-xl font-black text-base-900 dark:text-white uppercase tracking-tight">{monthName}</h3>
-                <button onClick={() => onMonthChange('next')} className="p-2 hover:bg-white rounded-xl shadow-sm text-base-500 transition-all border border-transparent hover:border-base-200"><ChevronDownIcon className="h-5 w-5 -rotate-90" /></button>
+        <div className="flex flex-col h-full bg-white/50 dark:bg-base-900/50 rounded-[2.5rem] border border-base-200 dark:border-base-800 shadow-xl overflow-hidden p-5">
+            <div className="flex justify-between items-center mb-4 px-2">
+                <button onClick={() => onMonthChange('prev')} className="p-1.5 hover:bg-white rounded-xl shadow-sm text-base-500 transition-all border border-transparent hover:border-base-200"><ChevronDownIcon className="h-5 w-5 rotate-90" /></button>
+                <h3 className="text-lg font-black text-base-900 dark:text-white uppercase tracking-tight">{monthName}</h3>
+                <button onClick={() => onMonthChange('next')} className="p-1.5 hover:bg-white rounded-xl shadow-sm text-base-500 transition-all border border-transparent hover:border-base-200"><ChevronDownIcon className="h-5 w-5 -rotate-90" /></button>
             </div>
             
-            <div className="grid grid-cols-7 text-center mb-3">
+            <div className="grid grid-cols-7 text-center mb-2">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                    <span key={day} className="text-[11px] font-black text-base-400 uppercase tracking-widest">{day}</span>
+                    <span key={day} className="text-[9px] font-black text-base-400 uppercase tracking-widest">{day}</span>
                 ))}
             </div>
             
-            <div className="grid grid-cols-7 gap-3 overflow-y-auto custom-scrollbar flex-grow p-1">
+            <div className="grid grid-cols-7 gap-2 overflow-y-auto custom-scrollbar flex-grow p-1">
                 {renderDays()}
+            </div>
+        </div>
+    );
+};
+
+const ProjectTimeTracker: React.FC<{ bookings: Booking[], testers: Tester[], currentDate: Date, onMonthChange: (direction: 'prev' | 'next') => void }> = ({ bookings, testers, currentDate, onMonthChange }) => {
+    // Only Testers (not assistants), exclude Chaiyapat
+    const validTesters = testers.filter(t => t.team !== 'assistants_4_2' && t.name.toLowerCase() !== 'chaiyapat');
+    
+    // Calculate total project minutes for each tester
+    const usage = useMemo(() => {
+        const stats: Record<string, number> = {};
+        validTesters.forEach(t => stats[t.id] = 0);
+        
+        bookings.forEach(b => {
+            if (b.isProjectTime && stats[b.resourceId] !== undefined) {
+                stats[b.resourceId] += b.durationMinutes;
+            }
+        });
+        return stats;
+    }, [bookings, validTesters]);
+
+    const MAX_MINUTES = 20 * 60; // 20 hours
+    const monthName = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+    if (validTesters.length === 0) return null;
+
+    return (
+        <div className="bg-white/60 dark:bg-base-900/60 p-6 rounded-[2rem] border border-white dark:border-base-800 shadow-sm backdrop-blur-md animate-fade-in shrink-0">
+            <div className="flex items-center justify-between mb-5">
+                <div>
+                    <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 uppercase tracking-tighter flex items-center gap-2">
+                        <ClockIcon className="h-5 w-5 text-cyan-500" /> Personal Project Tracker ({monthName})
+                    </h3>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">20-Hour Quota (Testers Only)</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => onMonthChange('prev')} className="p-2 bg-base-100 dark:bg-base-800 text-base-500 rounded-xl hover:bg-cyan-50 hover:text-cyan-600 transition-all">
+                        <ChevronDownIcon className="h-4 w-4 rotate-90" />
+                    </button>
+                    <button onClick={() => onMonthChange('next')} className="p-2 bg-base-100 dark:bg-base-800 text-base-500 rounded-xl hover:bg-cyan-50 hover:text-cyan-600 transition-all">
+                        <ChevronDownIcon className="h-4 w-4 -rotate-90" />
+                    </button>
+                </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {validTesters.map(tester => {
+                    const used = usage[tester.id] || 0;
+                    const remaining = Math.max(0, MAX_MINUTES - used);
+                    const percent = Math.min(100, (used / MAX_MINUTES) * 100);
+                    
+                    const isWarning = percent > 80;
+                    const isExceeded = percent >= 100;
+                    
+                    return (
+                        <div key={tester.id} className={`p-4 rounded-2xl border transition-all ${isExceeded ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/50' : 'bg-white dark:bg-base-800 border-base-200 dark:border-base-700'}`}>
+                            <div className="flex justify-between items-start mb-3">
+                                <span className={`text-sm font-black uppercase tracking-tight ${isExceeded ? 'text-red-700 dark:text-red-400' : 'text-slate-800 dark:text-white'}`}>{tester.name}</span>
+                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-widest ${isExceeded ? 'bg-red-500 text-white' : 'bg-slate-100 dark:bg-base-700 text-slate-500 dark:text-slate-300'}`}>
+                                    {Math.floor(used / 60)}h {used % 60}m used
+                                </span>
+                            </div>
+                            
+                            <div className="h-2 w-full bg-slate-100 dark:bg-base-900 rounded-full overflow-hidden shadow-inner mb-2">
+                                <div 
+                                    className={`h-full rounded-full transition-all duration-1000 ${isExceeded ? 'bg-red-500' : isWarning ? 'bg-amber-400' : 'bg-cyan-400'}`} 
+                                    style={{ width: `${percent}%` }}
+                                ></div>
+                            </div>
+                            
+                            <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest">
+                                <span className="text-slate-400">0h</span>
+                                <span className={isExceeded ? 'text-red-500' : 'text-cyan-600 dark:text-cyan-400'}>{Math.floor(remaining / 60)}h {remaining % 60}m left</span>
+                                <span className="text-slate-400">20h</span>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
@@ -375,7 +515,6 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
     }, [selectedDate]);
 
     const fetchMonthBookings = useCallback(async () => {
-        setLoading(true);
         try {
             const year = monthViewDate.getFullYear();
             const month = monthViewDate.getMonth();
@@ -387,8 +526,9 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
     }, [monthViewDate]);
 
     useEffect(() => {
+        setLoading(true);
         if (viewMode === 'day') fetchDayBookings();
-        else fetchMonthBookings();
+        fetchMonthBookings();
     }, [fetchDayBookings, fetchMonthBookings, viewMode]);
 
     const handleSaveBooking = async (bookingsData: Omit<Booking, 'id'>[]) => {
@@ -461,6 +601,7 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
                 initialStartTime={modalConfig.startTime}
                 editingBooking={editingBooking}
                 existingBookings={viewMode === 'day' ? bookings : monthBookings.filter(b => b.date === (editingBooking ? editingBooking.date : selectedDate))}
+                allMonthBookings={monthBookings}
             />
 
             {/* Header */}
@@ -511,6 +652,8 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
                 </div>
             </div>
 
+            <ProjectTimeTracker bookings={monthBookings} testers={testers} currentDate={monthViewDate} onMonthChange={handleMonthChange} />
+
             {/* Content Area */}
             {viewMode === 'day' ? (
                 <div className="flex-grow bg-white dark:bg-base-900 rounded-[2.5rem] border border-base-200 dark:border-base-800 shadow-xl overflow-auto p-6 animate-fade-in">
@@ -526,6 +669,7 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
                                 const tester = testers.find(t => t.id === booking.resourceId);
                                 const isAssistant = tester?.team === 'assistants_4_2';
                                 const isUnassigned = booking.resourceId === 'unassigned';
+                                const isProject = booking.isProjectTime;
                                 
                                 return (
                                     <div 
@@ -537,6 +681,10 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
                                                     ? 'bg-white dark:bg-base-800 border-l-emerald-500 border-y-slate-200 border-r-slate-200 dark:border-base-700'
                                                 : isAssistant 
                                                     ? 'bg-white dark:bg-base-800 border-l-amber-400 border-y-slate-200 border-r-slate-200 dark:border-base-700' 
+                                                : booking.isOverQuota
+                                                    ? 'bg-gradient-to-br from-red-50 to-white dark:from-red-900/10 dark:to-base-800 border-l-red-500 border-y-red-200 border-r-red-200 dark:border-base-700'
+                                                : isProject
+                                                    ? 'bg-gradient-to-br from-cyan-50 to-white dark:from-cyan-900/10 dark:to-base-800 border-l-cyan-400 border-y-cyan-100 border-r-cyan-100 dark:border-base-700'
                                                     : 'bg-white dark:bg-base-800 border-l-indigo-500 border-y-slate-200 border-r-slate-200 dark:border-base-700'
                                             }
                                         `}
@@ -570,17 +718,17 @@ const BookingTab: React.FC<BookingTabProps> = ({ testers }) => {
                                         
                                         <div className="mt-auto pt-4 border-t border-slate-100 dark:border-base-700/50 flex flex-col gap-2">
                                             <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                                                <ClockIcon className="h-4 w-4 text-slate-400" />
+                                                <ClockIcon className={`h-4 w-4 ${booking.isOverQuota ? 'text-red-500' : isProject ? 'text-cyan-500' : 'text-slate-400'}`} />
                                                 <span className="text-xs font-bold">
                                                     {formatTime(booking.startTime)} - {calculateEndTime(booking.startTime, booking.durationMinutes)}
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                                                <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black text-white ${isUnassigned ? 'bg-emerald-500' : isAssistant ? 'bg-amber-500' : 'bg-indigo-500'}`}>
+                                                <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black text-white ${isUnassigned ? 'bg-emerald-500' : isAssistant ? 'bg-amber-500' : booking.isOverQuota ? 'bg-red-500' : isProject ? 'bg-cyan-500' : 'bg-indigo-500'}`}>
                                                     {booking.resourceName.substring(0, 1).toUpperCase()}
                                                 </div>
                                                 <span className="text-xs font-bold truncate">
-                                                    {booking.resourceName}
+                                                    {booking.resourceName} {booking.isOverQuota ? <span className="text-red-500 font-bold ml-1">(Over Quota)</span> : isProject && <span className="text-cyan-500 font-bold ml-1">(Project)</span>}
                                                 </span>
                                             </div>
                                         </div>

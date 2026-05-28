@@ -254,6 +254,9 @@ export interface Booking {
     description: string;
     contactInfo?: string;
     createdBy?: string;
+    isProjectTime?: boolean;
+    plannerApproved?: boolean;
+    isOverQuota?: boolean;
 }
 
 // --- Support / Helpdesk System ---
