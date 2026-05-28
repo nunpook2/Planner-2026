@@ -11,8 +11,8 @@ import QualityDashboard from './components/QualityDashboard';
 import BookingTab from './components/BookingTab'; // Import the new Booking Tab
 import ProficiencyTab from './components/ProficiencyTab';
 import RequestsTab from './components/RequestsTab';
-import { getTesters, getAssignedTasks } from './services/dataService';
-import type { Tester, AssignedTask } from './types';
+import { getTesters, getAssignedTasks, getAppSettings } from './services/dataService';
+import type { Tester, AssignedTask, AppSettings } from './types';
 import { TaskStatus } from './types';
 // Import RefreshIcon from common icons to fix the 'Cannot find name' error
 import { DatabaseIcon, UploadIcon, ClipboardListIcon, CalendarIcon, CogIcon, BeakerIcon, AlertTriangleIcon, RefreshIcon, UserCircleIcon, DocumentTextIcon, ChatBubbleLeftIcon } from './components/common/Icons'; // Added UserCircleIcon for Booking
@@ -57,6 +57,7 @@ const App: React.FC = () => {
     const [activeTab, setActiveTab] = useState('import');
     const [testers, setTesters] = useState<Tester[]>([]);
     const [notOkCount, setNotOkCount] = useState(0);
+    const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isInitialLoad, setIsInitialLoad] = useState(true); // Flag to control full-page loading
     const [error, setError] = useState<React.ReactNode | null>(null);
@@ -74,11 +75,15 @@ const App: React.FC = () => {
         setIsLoading(true);
         setError(null);
         try {
-            const [fetchedTesters, allAssigned] = await Promise.all([
+            const [fetchedTesters, allAssigned, settings] = await Promise.all([
                 getTesters(),
-                getAssignedTasks()
+                getAssignedTasks(),
+                getAppSettings()
             ]);
             setTesters(fetchedTesters);
+            if (settings) {
+                setAppSettings(settings);
+            }
             
             let count = 0;
             allAssigned.forEach(doc => {
@@ -154,43 +159,44 @@ const App: React.FC = () => {
                 />
             );
             case 'proficiency': return <ProficiencyTab testers={testers} />;
-            case 'settings': return <SettingsTab testers={testers} onRefreshTesters={fetchCoreData} onTasksUpdated={triggerTaskRefresh} />;
+            case 'settings': return <SettingsTab testers={testers} onRefreshTesters={fetchCoreData} onTasksUpdated={triggerTaskRefresh} appSettings={appSettings} onSettingsUpdated={fetchCoreData} />;
             default: return <ImportTab onTasksUpdated={triggerTaskRefresh} />;
         }
     };
     
     const TabButton = ({ tabName, label, icon, badge }: { tabName: string; label: string; icon: React.ReactNode; badge?: number }) => {
         const isActive = activeTab === tabName;
+        const displayLabel = appSettings?.tabLabels?.[tabName] || label;
+        
         return (
             <button
                 onClick={() => setActiveTab(tabName)}
                 className={`
-                    relative group flex flex-col lg:flex-row items-center lg:justify-start gap-4 px-5 py-4 rounded-[1.5rem] transition-all duration-500 w-full overflow-hidden
+                    relative group flex flex-col lg:flex-row items-center lg:justify-start gap-4 px-5 py-3.5 rounded-2xl transition-all duration-300 w-full overflow-hidden
                     ${isActive
-                        ? 'bg-gradient-to-r from-primary-600/10 to-transparent text-primary-700 dark:text-primary-400 shadow-[inset_0_0_15px_rgba(99,102,241,0.05)]'
-                        : 'text-base-400 hover:text-base-900 dark:hover:text-base-100'
+                        ? 'bg-gradient-to-r from-primary-500/15 via-primary-500/5 to-transparent text-primary-800 dark:text-primary-300 shadow-sm border border-primary-500/20'
+                        : 'text-base-600 dark:text-base-300 hover:text-primary-600 dark:hover:text-primary-300 hover:bg-white dark:hover:bg-base-800 hover:shadow-sm border border-transparent hover:border-base-200 dark:hover:border-base-700'
                     }
-                `}
-            >
+                `}>
                 {isActive && (
-                    <div className="absolute left-0 top-3 bottom-3 w-1.5 bg-gradient-to-b from-primary-400 to-primary-700 rounded-r-full animate-fade-in"></div>
+                    <div className="absolute left-0 top-2 bottom-2 w-1.5 bg-gradient-to-b from-primary-500 to-primary-700 rounded-r-lg shadow-[0_0_8px_rgba(99,102,241,0.6)]"></div>
                 )}
                 
                 <div className={`
-                    p-2.5 rounded-xl transition-all duration-300 flex-shrink-0 relative
+                    p-2.5 flex items-center justify-center rounded-xl transition-all duration-300 flex-shrink-0 relative
                     ${isActive 
-                        ? 'bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-lg shadow-primary-500/20 scale-110' 
-                        : 'bg-white dark:bg-base-800 border border-base-100 dark:border-base-700 text-base-400 group-hover:scale-110 group-hover:bg-primary-50 dark:group-hover:bg-primary-900/20 group-hover:text-primary-500'
+                        ? 'bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-lg shadow-primary-500/40 scale-110 ring-2 ring-primary-500/20' 
+                        : 'bg-white dark:bg-base-800 border border-base-200 dark:border-base-700 text-base-500 dark:text-base-400 group-hover:scale-110 group-hover:bg-primary-50 dark:group-hover:bg-primary-500/20 group-hover:text-primary-600 dark:group-hover:text-primary-400 shadow-sm'
                     }
                 `}>
                     {icon}
                     {badge !== undefined && badge > 0 && (
-                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-base-900 animate-pulse-subtle">
+                        <div className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] px-1 bg-red-500 text-white text-[11px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-base-900 shadow-md animate-pulse-subtle">
                             {badge > 99 ? '99+' : badge}
                         </div>
                     )}
                 </div>
-                <span className={`font-black text-[13px] uppercase tracking-widest hidden lg:block transition-all ${isActive ? 'translate-x-1' : 'opacity-80'}`}>{label}</span>
+                <span className={`font-black uppercase tracking-wider hidden lg:block transition-all duration-300 ${isActive ? 'translate-x-1 text-[13px] text-primary-800 dark:text-primary-300' : 'text-[13px] text-base-600 dark:text-base-400 group-hover:text-primary-600 dark:group-hover:text-primary-400'}`}>{displayLabel}</span>
             </button>
         );
     };

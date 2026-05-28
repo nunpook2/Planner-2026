@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import type { Tester, TestMapping } from '../types';
+import type { Tester, TestMapping, AppSettings } from '../types';
 import { 
-    addTester, deleteTester, updateTester, runCleanup, clearAllTaskData, getTestMappings, addTestMapping, updateTestMapping, deleteTestMapping 
+    addTester, deleteTester, updateTester, runCleanup, clearAllTaskData, getTestMappings, addTestMapping, updateTestMapping, deleteTestMapping, saveAppSettings 
 } from '../services/dataService';
-import { TrashIcon, UploadIcon, PencilIcon, CheckCircleIcon, XCircleIcon, AlertTriangleIcon, PlusIcon, DragHandleIcon } from './common/Icons';
+import { TrashIcon, UploadIcon, PencilIcon, CheckCircleIcon, XCircleIcon, AlertTriangleIcon, PlusIcon, DragHandleIcon, CogIcon } from './common/Icons';
 
 declare const XLSX: any;
 
@@ -177,7 +177,7 @@ const GroupOrderManager: React.FC<{ onTasksUpdated: () => void; setNotification:
     const draggedGroupIndex = useRef<number | null>(null);
     const [dragOverGroupIndex, setDragOverGroupIndex] = useState<number | null>(null);
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
             const f = await getTestMappings();
             setMappings(f);
@@ -186,9 +186,9 @@ const GroupOrderManager: React.FC<{ onTasksUpdated: () => void; setNotification:
             f.forEach(m => { if (m.headerGroup) { const c = groupMinOrders[m.headerGroup] ?? Infinity; const mOrder = m.order ?? Infinity; if (mOrder < c) groupMinOrders[m.headerGroup] = mOrder; } });
             setGroups(u.sort((a, b) => (groupMinOrders[a] ?? Infinity) - (groupMinOrders[b] ?? Infinity)));
         } catch (e) {}
-    };
+    }, []);
     
-    useEffect(() => { fetchData() }, []);
+    useEffect(() => { fetchData() }, [fetchData]);
 
     const handleDrop = (e: React.DragEvent, t: number) => {
         e.preventDefault(); setDragOverGroupIndex(null);
@@ -294,8 +294,8 @@ const MappingManager: React.FC<{ setNotification: (n: any) => void }> = ({ setNo
     const draggedMappingIndex = useRef<number | null>(null);
     const [dragOverMappingIndex, setDragOverMappingIndex] = useState<number | null>(null);
 
-    const fetchData = async () => { try { setMappings(await getTestMappings()); } catch(e){} };
-    useEffect(() => { fetchData(); }, []);
+    const fetchData = useCallback(async () => { try { setMappings(await getTestMappings()); } catch(e){} }, []);
+    useEffect(() => { fetchData(); }, [fetchData]);
 
     const handleUpload = async () => {
         if (!file) return;
@@ -455,14 +455,103 @@ const MappingManager: React.FC<{ setNotification: (n: any) => void }> = ({ setNo
     );
 };
 
-const SettingsTab: React.FC<{ testers: Tester[]; onRefreshTesters: () => void; onTasksUpdated: () => void; }> = (props) => {
-    const [activeSubTab, setActiveSubTab] = useState<'team' | 'mappings' | 'columns' | 'danger'>('team');
+const defaultLabels: Record<string, string> = {
+    quality: 'Quality Center',
+    import: 'Import Data',
+    tasks: 'Assign Tasks',
+    booking: 'Special Booking',
+    requests: 'Support Requests',
+    schedule: 'Shift Tracking',
+    dashboard: 'Shift Summary',
+    equipment: 'Equipment',
+    proficiency: 'Proficiency',
+    roster: 'Roster & Shifts',
+    settings: 'Settings'
+};
+
+const UISettingsPanel: React.FC<{ 
+    appSettings?: AppSettings | null; 
+    onSettingsUpdated?: () => void; 
+    setNotification: (n: any) => void;
+}> = ({ appSettings, onSettingsUpdated, setNotification }) => {
+    const [labels, setLabels] = useState<Record<string, string>>({ ...defaultLabels });
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        if (appSettings?.tabLabels) {
+            setLabels({ ...defaultLabels, ...appSettings.tabLabels });
+        }
+    }, [appSettings]);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            await saveAppSettings({
+                ...appSettings,
+                tabLabels: labels
+            });
+            setNotification({ message: 'Menu names updated securely.' });
+            if (onSettingsUpdated) onSettingsUpdated();
+        } catch (e: any) {
+            setNotification({ message: e.message, isError: true });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <div className="bg-white dark:bg-base-900 rounded-3xl border border-base-200 dark:border-base-800 shadow-xl overflow-hidden p-6 max-w-2xl mx-auto">
+            <div className="flex items-center gap-3 mb-6">
+                <CogIcon className="h-6 w-6 text-primary-500" />
+                <div>
+                    <h3 className="text-xl font-black text-base-900 dark:text-base-100 uppercase tracking-tight">Sidebar Navigation Names</h3>
+                    <p className="text-sm font-bold text-base-500 mt-1">Customize the display names for the left navigation tabs.</p>
+                </div>
+            </div>
+
+            <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 p-4 rounded-2xl flex gap-3 items-start mb-6">
+                <AlertTriangleIcon className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                <div className="text-sm text-amber-900 dark:text-amber-200 font-medium">
+                    <strong>Precautions (ข้อควรระวัง):</strong> Changing these names will update the menu for <span className="font-bold underline">all users</span> in the system. Use clear and easily understandable names to prevent confusion for other lab members.
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                {Object.entries(defaultLabels).map(([key, defaultLabel]) => (
+                    <div key={key} className="flex items-center gap-4">
+                        <label className="w-48 text-[12px] font-black uppercase tracking-widest text-base-500 text-right shrink-0">{defaultLabel}</label>
+                        <input
+                            type="text"
+                            value={labels[key] || ''}
+                            onChange={e => setLabels(prev => ({ ...prev, [key]: e.target.value }))}
+                            placeholder={defaultLabel}
+                            className="w-full bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-xl px-4 py-2 font-bold text-sm focus:border-primary-500 focus:bg-white dark:focus:bg-base-900 outline-none transition-all"
+                        />
+                    </div>
+                ))}
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-base-100 dark:border-base-800 flex justify-end">
+                <button 
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-md active:scale-95 disabled:opacity-50"
+                >
+                    {isSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const SettingsTab: React.FC<{ testers: Tester[]; onRefreshTesters: () => void; onTasksUpdated: () => void; appSettings?: AppSettings | null; onSettingsUpdated?: () => void; }> = (props) => {
+    const [activeSubTab, setActiveSubTab] = useState<'team' | 'mappings' | 'columns' | 'ui' | 'danger'>('ui');
     const [notification, setNotification] = useState<{ message: string; isError?: boolean } | null>(null);
     const [showCleanupModal, setShowCleanupModal] = useState(false);
     const [showWipeModal, setShowWipeModal] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const tabs = [{ id: 'team', label: 'Team Management' }, { id: 'mappings', label: 'Test Mappings' }, { id: 'columns', label: 'Column Order' }, { id: 'danger', label: 'Danger Zone', danger: true }];
+    const tabs = [{ id: 'team', label: 'Team Management' }, { id: 'mappings', label: 'Test Mappings' }, { id: 'columns', label: 'Column Order' }, { id: 'ui', label: 'UI Settings' }, { id: 'danger', label: 'Danger Zone', danger: true }];
 
     const handleCleanupConfirm = async () => { setIsProcessing(true); try { const res = await runCleanup(); setNotification({ message: `Deleted ${res.deleted} empty tasks.` }); props.onTasksUpdated(); } catch (e: any) { setNotification({ message: e.message, isError: true }); } finally { setIsProcessing(false); setShowCleanupModal(false); } };
     const handleWipeConfirm = async () => { setIsProcessing(true); try { await clearAllTaskData(); setNotification({ message: "All data wiped successfully." }); props.onTasksUpdated(); } catch (e: any) { setNotification({ message: e.message, isError: true }); } finally { setIsProcessing(false); setShowWipeModal(false); } };
@@ -484,6 +573,7 @@ const SettingsTab: React.FC<{ testers: Tester[]; onRefreshTesters: () => void; o
                 {activeSubTab === 'team' && <TesterManager testers={props.testers} onRefreshTesters={props.onRefreshTesters} setNotification={setNotification} />}
                 {activeSubTab === 'mappings' && <MappingManager setNotification={setNotification} />}
                 {activeSubTab === 'columns' && <GroupOrderManager onTasksUpdated={props.onTasksUpdated} setNotification={setNotification} />}
+                {activeSubTab === 'ui' && <UISettingsPanel appSettings={props.appSettings} onSettingsUpdated={props.onSettingsUpdated} setNotification={setNotification} />}
                 {activeSubTab === 'danger' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-8">
                         <div className="bg-white dark:bg-base-800 border border-base-200 dark:border-base-700 rounded-2xl p-6 shadow-sm flex flex-col items-center text-center">

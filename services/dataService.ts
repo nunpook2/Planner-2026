@@ -774,3 +774,16 @@ export const saveSupportRequest = async (request: SupportRequest): Promise<void>
 export const deleteSupportRequest = async (id: string): Promise<void> => {
     await getCollection('supportRequests').doc(id).delete();
 };
+
+export const getAppSettings = async (): Promise<any> => {
+    if (!firestore) return null;
+    const docRef = getCollection('system').doc('appSettings');
+    const doc = await safeGet(docRef);
+    return doc.exists ? doc.data() : null;
+};
+
+export const saveAppSettings = async (settings: any): Promise<void> => {
+    if (!firestore) return;
+    const docRef = getCollection('system').doc('appSettings');
+    await docRef.set(settings, { merge: true });
+};

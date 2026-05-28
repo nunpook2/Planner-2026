@@ -273,3 +273,8 @@ export interface SupportRequest {
     updatedAt: string;
     resolvedAt?: string | null;
 }
+
+// --- App Settings ---
+export interface AppSettings {
+    tabLabels?: Record<string, string>;
+}
