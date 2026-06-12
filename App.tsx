@@ -121,6 +121,7 @@ const App: React.FC = () => {
             case 'tasks': return (
                 <TasksTab 
                     testers={testers} 
+                    onTasksUpdated={triggerTaskRefresh}
                     refreshKey={taskRefreshKey} 
                     selectedDate={globalSelectedDate}
                     onDateChange={setGlobalSelectedDate}
@@ -196,7 +197,7 @@ const App: React.FC = () => {
                         </div>
                     )}
                 </div>
-                <span className={`font-semibold tracking-wide hidden lg:block transition-all duration-300 ${isActive ? 'translate-x-1 text-[14px] text-primary-800 dark:text-primary-300' : 'text-[14px] text-base-600 dark:text-base-400 group-hover:text-primary-600 dark:group-hover:text-primary-400'}`}>{displayLabel}</span>
+                <span className={`font-bold hidden lg:block transition-all duration-300 ${isActive ? 'translate-x-1 text-[15px] text-primary-800 dark:text-primary-300' : 'text-[15px] text-base-600 dark:text-base-400 group-hover:text-primary-600 dark:group-hover:text-primary-400'}`}>{displayLabel}</span>
             </button>
         );
     };

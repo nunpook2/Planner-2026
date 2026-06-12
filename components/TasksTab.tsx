@@ -532,7 +532,7 @@ const ExpandableCell: React.FC<{
     );
 };
 
-const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: string; onDateChange: (date: string) => void; selectedShift: 'day' | 'night'; onShiftChange: (shift: 'day' | 'night') => void; }> = ({ testers, refreshKey, selectedDate, onDateChange, selectedShift, onShiftChange }) => {
+const TasksTab: React.FC<{ testers: Tester[]; onTasksUpdated?: () => void; refreshKey: number; selectedDate: string; onDateChange: (date: string) => void; selectedShift: 'day' | 'night'; onShiftChange: (shift: 'day' | 'night') => void; }> = ({ testers, onTasksUpdated, refreshKey, selectedDate, onDateChange, selectedShift, onShiftChange }) => {
     const [categorizedTasks, setCategorizedTasks] = useState<CategorizedTask[]>([]);
     const [assignedGlobal, setAssignedGlobal] = useState<AssignedTask[]>([]); 
     const [testMappings, setTestMappings] = useState<TestMapping[]>([]);
@@ -754,29 +754,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         } catch (e) { setNotification({ message: "Failed to delete task.", isError: true }); } finally { setIsAssigning(false); setDeleteConfirm(null); }
     };
 
-    const handleAutoCleanCompleted = async () => {
-        if (completedItemsCount === 0) return;
-        setIsAssigning(true);
-        try {
-            const batch = firestore.batch();
-            let deleteCount = 0;
-            categorizedTasks.forEach(doc => {
-                const originalTasks = doc.tasks;
-                const remainingTasks = originalTasks.filter(task => {
-                    const sig = getTaskSignature(doc.id, task);
-                    const status = assignedItemSignatures.get(sig);
-                    return status !== TaskStatus.Done;
-                });
-                if (remainingTasks.length !== originalTasks.length) {
-                    deleteCount += (originalTasks.length - remainingTasks.length);
-                    if (remainingTasks.length === 0) batch.delete(firestore.collection('categorizedTasks').doc(doc.docId));
-                    else batch.update(firestore.collection('categorizedTasks').doc(doc.docId), { tasks: remainingTasks });
-                }
-            });
-            if (deleteCount > 0) { await batch.commit(); setNotification({ message: `Successfully cleaned ${deleteCount} completed items from the grid.` }); fetchData(); } else { setNotification({ message: "No items to clean." }); }
-        } catch (e) { setNotification({ message: "Failed to clean completed tasks.", isError: true }); } finally { setIsAssigning(false); }
-    };
-
     const handleBatchForceDone = async () => {
         if (selectedItemCount === 0) return;
         setIsAssigning(true);
@@ -972,7 +949,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
         setIsAssigning(true);
         try {
             const batch = firestore.batch();
-            const assignments: Record<string, RawTask[]> = {};
+            const assignments: Record<string, { tasks: RawTask[], category: string }> = {};
             
             // Logic to update pool (remove assigned items)
             const poolUpdates: Map<string, RawTask[]> = new Map();
@@ -1001,8 +978,10 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                             clean.isOverPlan = true;
                         }
 
-                        if (!assignments[original.id]) assignments[original.id] = []; 
-                        assignments[original.id].push(clean);
+                        if (!assignments[original.id]) {
+                            assignments[original.id] = { tasks: [], category: original.category || 'normal' };
+                        }
+                        assignments[original.id].tasks.push(clean);
                     });
 
                     // Prepare pool cleanup (remove selected items from source doc)
@@ -1019,11 +998,11 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
 
             if (!isAssigningToPrepare) {
                 // Save assignments
-                for (const [rid, tasks] of Object.entries(assignments)) {
+                for (const [rid, data] of Object.entries(assignments)) {
                     batch.set(firestore.collection('assignedTasks').doc(), { 
                         requestId: rid, 
-                        tasks, 
-                        category: categorizedTasks.find(c => c.id === rid)?.category || 'normal', 
+                        tasks: data.tasks, 
+                        category: data.category || 'normal', 
                         testerId: person.id, 
                         testerName: person.name, 
                         assignedDate: selectedDate, 
@@ -1041,6 +1020,7 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
             setSelectedItems({}); 
             setExpandedCell(null); 
             fetchData(); 
+            if (onTasksUpdated) onTasksUpdated();
             setNotification({ message: isOverPlanAssignment ? "Over Plan Assignment Complete." : "Assignment Complete." });
         } catch (e) { 
             console.error(e);
@@ -1112,11 +1092,6 @@ const TasksTab: React.FC<{ testers: Tester[]; refreshKey: number; selectedDate: 
                         <div className="flex flex-col"><span className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.2em] mb-1">Deployed Assets</span><span className="text-xl font-black text-slate-900 dark:text-white leading-none tracking-tighter">{inventoryAudit.assignedToStaff}</span></div>
                     </div>
                     <div className="flex gap-2 pr-2">
-                        {completedItemsCount > 0 && (
-                            <button onClick={handleAutoCleanCompleted} className="px-5 py-2.5 bg-emerald-600 text-white text-[10px] font-black rounded-xl hover:bg-emerald-700 transition-all uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 border-b-4 border-emerald-800 animate-pulse-subtle">
-                                <TrashIcon className="h-4 w-4" /> Clean Completed ({completedItemsCount})
-                            </button>
-                        )}
                         {activeCategory === 'manual' && (
                             <button onClick={() => setIsAddManualModalOpen(true)} className="px-5 py-2.5 bg-indigo-600 text-white text-[10px] font-black rounded-xl hover:bg-indigo-700 transition-all uppercase tracking-widest flex items-center gap-2 shadow-sm active:scale-95"><PlusIcon className="h-4 w-4" /> New Template</button>
                         )}
