@@ -70,7 +70,7 @@ const CalendarWidget: React.FC<{
                 <button onClick={handleNextMonth} className="p-1 hover:bg-base-100 rounded-full text-base-400 hover:text-primary-600 transition-colors"><ChevronDownIcon className="h-5 w-5 -rotate-90" /></button>
             </div>
             <div className="grid grid-cols-7 text-center mb-2">
-                {['S','M','T','W','T','F','S'].map(d => <span key={d} className="text-[10px] font-bold text-base-400 uppercase tracking-widest">{d}</span>)}
+                {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d, i) => <span key={d} className="text-[10px] font-bold text-base-400 uppercase tracking-widest">{d[0]}</span>)}
             </div>
             <div className="grid grid-cols-7 gap-y-2 place-items-center">
                 {renderDays()}

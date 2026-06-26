@@ -639,7 +639,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     personnel: group.testerName, 
                     requestId: group.requestId, 
                     task, 
-                    taskType: 'งานทดสอบ (Testing)',
+                    taskType: 'Testing',
                     priority
                 });
             });
@@ -652,7 +652,7 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     personnel: group.assistantName, 
                     requestId: group.requestId, 
                     task, 
-                    taskType: 'งานเตรียมตัวอย่าง (Preparation)',
+                    taskType: 'Preparation',
                     priority
                 });
             });
@@ -691,13 +691,39 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
             }
         });
 
+        const pastelColors = ["D9EAD3", "C9DAF8", "F4CCCC", "FFF2CC", "D9D2E9", "EAD1DC", "FCE5CD", "D0E0E3", "CFE2F3", "F9CB9C", "E6B8AF", "B6D7A8", "A2C4C9", "9FC5E8", "B4A7D6", "D5A6BD"];
+        const borderStyle = {
+            top: { style: 'thin', color: { rgb: "000000" } },
+            bottom: { style: 'thin', color: { rgb: "000000" } },
+            left: { style: 'thin', color: { rgb: "000000" } },
+            right: { style: 'thin', color: { rgb: "000000" } }
+        };
+
+        const headerStyle = {
+            font: { bold: true, sz: 11, name: 'Arial' },
+            fill: { fgColor: { rgb: "E0E0E0" } },
+            border: borderStyle,
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true }
+        };
+
         const rows: any[][] = [];
-        rows.push(["Tester", "Plantodate", "Request ID", "ลำดับความสำคัญ", "ประเภทงาน", "รายการทดสอบ", "Variant", "Sample Name", "Remark", "Total"]);
+        
+        const headers = ["Tester", "Plantodate", "Request ID", "Priority", "Task Type", "Test Parameter", "Variant", "Sample Name", "Remark", "Total"];
+        rows.push(headers.map(h => ({ v: h, s: headerStyle })));
 
         let grandTotal = 0;
         const sortedTesters = Object.keys(hierarchy).sort();
 
-        sortedTesters.forEach((tester) => {
+        sortedTesters.forEach((tester, tIdx) => {
+            const color = pastelColors[tIdx % pastelColors.length];
+            const dataStyle = {
+                font: { sz: 10, name: 'Arial' },
+                fill: { fgColor: { rgb: color } },
+                border: borderStyle,
+                alignment: { vertical: 'center', wrapText: true }
+            };
+            const centerDataStyle = { ...dataStyle, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } };
+            
             const testerDates = hierarchy[tester];
             Object.keys(testerDates).forEach((date) => {
                 const reqIds = testerDates[date];
@@ -724,16 +750,16 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                     grandTotal += count;
 
                                     const row: any[] = [];
-                                    row[0] = (rIdx === 0 && pIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? tester : "";
-                                    row[1] = (rIdx === 0 && pIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? dateDisplay : "";
-                                    row[2] = (pIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? reqId : "";
-                                    row[3] = (tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? priority : "";
-                                    row[4] = (dsIdx === 0 && vIdx === 0) ? taskType : "";
-                                    row[5] = (vIdx === 0) ? desc : "";
-                                    row[6] = variant;
-                                    row[7] = Array.from(samples).join(', '); // Show unique sample names
-                                    row[8] = remark;
-                                    row[9] = count;
+                                    row[0] = { v: (rIdx === 0 && pIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? tester : "", s: dataStyle };
+                                    row[1] = { v: (rIdx === 0 && pIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? dateDisplay : "", s: centerDataStyle };
+                                    row[2] = { v: (pIdx === 0 && tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? reqId : "", s: centerDataStyle };
+                                    row[3] = { v: (tyIdx === 0 && dsIdx === 0 && vIdx === 0) ? priority : "", s: centerDataStyle };
+                                    row[4] = { v: (dsIdx === 0 && vIdx === 0) ? taskType : "", s: dataStyle };
+                                    row[5] = { v: (vIdx === 0) ? desc : "", s: dataStyle };
+                                    row[6] = { v: variant, s: centerDataStyle };
+                                    row[7] = { v: Array.from(samples).join(', '), s: dataStyle };
+                                    row[8] = { v: remark, s: dataStyle };
+                                    row[9] = { v: count, s: centerDataStyle, t: 'n' };
 
                                     rows.push(row);
                                 });
@@ -742,13 +768,33 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     });
                 });
             });
-            rows.push([]);
+            // Blank row between testers without borders
+            rows.push(headers.map(() => ({ v: "", s: {} }))); 
         });
 
-        rows.push(["Grand Total", "", "", "", "", "", "", "", "", grandTotal]);
+        // Grand Total row
+        const footerStyle = {
+            font: { bold: true, sz: 11, name: 'Arial' },
+            fill: { fgColor: { rgb: "E0E0E0" } },
+            border: borderStyle,
+            alignment: { horizontal: 'right', vertical: 'center' }
+        };
+        const footerNumStyle = { ...footerStyle, alignment: { horizontal: 'center', vertical: 'center' } };
+        
+        const grandTotalRow = [];
+        for (let i = 0; i < 9; i++) {
+            grandTotalRow.push({ v: i === 0 ? "Grand Total" : "", s: footerStyle });
+        }
+        grandTotalRow.push({ v: grandTotal, s: footerNumStyle, t: 'n' });
+        rows.push(grandTotalRow);
 
         const ws = XLSX.utils.aoa_to_sheet(rows);
-        ws['!cols'] = [ { wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 25 }, { wch: 35 }, { wch: 25 }, { wch: 35 }, { wch: 45 }, { wch: 8 } ];
+        ws['!cols'] = [ { wch: 18 }, { wch: 12 }, { wch: 20 }, { wch: 16 }, { wch: 28 }, { wch: 40 }, { wch: 20 }, { wch: 35 }, { wch: 30 }, { wch: 8 } ];
+        
+        // Page setup: A4 Landscape
+        ws['!pageSetup'] = { paperSize: 9, orientation: 'landscape', fitToWidth: 1, fitToHeight: 0 };
+        ws['!margins'] = { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 };
+
         const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Mission Summary"); XLSX.writeFile(wb, `ShiftMissionSummary_${exportDate}_${selectedShift}.xlsx`);
     };
 
