@@ -1,6 +1,6 @@
 
 import { firestore } from './firebase';
-import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog, Booking, ProficiencyTest, ProficiencyRecord, SupportRequest } from '../types';
+import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog, Booking, ProficiencyTest, ProficiencyRecord, SupportRequest, Walkthrough } from '../types';
 import { TaskCategory } from '../types';
 
 // Export firestore for use in components
@@ -786,4 +786,58 @@ export const saveAppSettings = async (settings: any): Promise<void> => {
     if (!firestore) return;
     const docRef = getCollection('system').doc('appSettings');
     await docRef.set(settings, { merge: true });
+};
+
+// --- Method Walkthrough System ---
+export const getWalkthroughs = async (): Promise<Walkthrough[]> => {
+    if (!firestore) throw new Error("Database not initialized");
+    const snapshot = await safeGet(getCollection('walkthroughs').orderBy('createdAt', 'desc'));
+    return snapshot.docs.map((doc: any) => ({
+        id: doc.id,
+        ...doc.data()
+    })) as Walkthrough[];
+};
+
+export const saveWalkthrough = async (walkthrough: Omit<Walkthrough, 'id'>, id?: string): Promise<void> => {
+    if (!firestore) throw new Error("Database not initialized");
+    const collection = getCollection('walkthroughs');
+    
+    // Clean fields
+    const cleaned = Object.fromEntries(Object.entries(walkthrough).filter(([_, v]) => v !== undefined));
+    
+    if (id) {
+        await collection.doc(id).update(cleaned);
+    } else {
+        await collection.add({
+            ...cleaned,
+            createdAt: walkthrough.createdAt || new Date().toISOString()
+        });
+    }
+};
+
+export const deleteWalkthrough = async (id: string): Promise<void> => {
+    if (!firestore) throw new Error("Database not initialized");
+    await getCollection('walkthroughs').doc(id).delete();
+};
+
+export const acknowledgeWalkthrough = async (walkthroughId: string, testerId: string): Promise<void> => {
+    if (!firestore) throw new Error("Database not initialized");
+    const docRef = getCollection('walkthroughs').doc(walkthroughId);
+    const doc = await docRef.get();
+    if (!doc.exists) return;
+    
+    const data = doc.data() as Walkthrough;
+    const acknowledgements = { ...data.acknowledgements };
+    acknowledgements[testerId] = {
+        acknowledged: true,
+        acknowledgedAt: new Date().toISOString()
+    };
+    
+    // Check if fully completed
+    const isCompleted = data.targetTesters.every(tid => acknowledgements[tid]?.acknowledged);
+    
+    await docRef.update({
+        acknowledgements,
+        isCompleted
+    });
 };

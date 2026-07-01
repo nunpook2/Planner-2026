@@ -11,6 +11,7 @@ import QualityDashboard from './components/QualityDashboard';
 import BookingTab from './components/BookingTab'; // Import the new Booking Tab
 import ProficiencyTab from './components/ProficiencyTab';
 import RequestsTab from './components/RequestsTab';
+import WalkthroughTab from './components/WalkthroughTab';
 import { getTesters, getAssignedTasks, getAppSettings } from './services/dataService';
 import type { Tester, AssignedTask, AppSettings } from './types';
 import { TaskStatus } from './types';
@@ -160,6 +161,7 @@ const App: React.FC = () => {
                 />
             );
             case 'proficiency': return <ProficiencyTab testers={testers} />;
+            case 'walkthrough': return <WalkthroughTab testers={testers} />;
             case 'settings': return <SettingsTab testers={testers} onRefreshTesters={fetchCoreData} onTasksUpdated={triggerTaskRefresh} appSettings={appSettings} onSettingsUpdated={fetchCoreData} />;
             default: return <ImportTab onTasksUpdated={triggerTaskRefresh} />;
         }
@@ -244,6 +246,7 @@ const App: React.FC = () => {
                             <TabButton tabName="equipment" label="Equipment" icon={<CogIcon className="h-5 w-5"/>} />
                             <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
                             <TabButton tabName="proficiency" label="Proficiency" icon={<DocumentTextIcon className="h-5 w-5"/>} />
+                            <TabButton tabName="walkthrough" label="Method Walkthrough" icon={<DocumentTextIcon className="h-5 w-5"/>} />
                             <TabButton tabName="roster" label="Roster & Shifts" icon={<DatabaseIcon className="h-5 w-5"/>} />
                             <TabButton tabName="settings" label="Settings" icon={<CogIcon className="h-5 w-5"/>} />
                         </nav>
@@ -255,6 +258,7 @@ const App: React.FC = () => {
                         <TabButton tabName="tasks" label="" icon={<ClipboardListIcon className="h-5 w-5"/>} />
                         <TabButton tabName="schedule" label="" icon={<CalendarIcon className="h-5 w-5"/>} />
                         <TabButton tabName="booking" label="" icon={<UserCircleIcon className="h-5 w-5"/>} />
+                        <TabButton tabName="walkthrough" label="" icon={<DocumentTextIcon className="h-5 w-5"/>} />
                     </div>
 
                     <main className="flex-1 min-w-0 min-h-[calc(100vh-8rem)]">

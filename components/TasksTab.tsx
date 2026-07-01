@@ -1263,47 +1263,89 @@ const TasksTab: React.FC<{ testers: Tester[]; onTasksUpdated?: () => void; refre
                                     <tr className="bg-slate-50">{gridHeaders.flatMap(([group, subKeys], i) => subKeys.filter(k => activeColumnKeys.includes(k)).map(key => ( <th key={key} className={`p-1 font-black text-[11px] text-center border-b border-r border-base-100 uppercase w-14 shadow-inner ${HEADER_THEMES[i % HEADER_THEMES.length].subHeaderBg} text-white`}>{key.split('|')[1]}</th> )) )}</tr>
                                 </thead>
                                 <tbody className="divide-y divide-base-100 dark:divide-base-800">
-                                    {gridData.map(row => (
-                                        <tr key={row.requestId} className={`group transition-colors ${row.isDuplicateRow ? 'bg-red-50 hover:bg-red-100 border-l-4 border-red-500' : 'hover:bg-indigo-50/20'}`}>
-                                            <td className="p-0.5 border-r border-base-200 bg-white dark:bg-base-955 sticky left-0 z-40 text-center font-black text-slate-800 text-[9px] leading-tight">{`${(new Date(row.minDueDate)).getDate()}/${(new Date(row.minDueDate)).getMonth()+1}`}</td>
-                                            <td className={`px-2 py-2 border-r-2 border-indigo-400 bg-white dark:bg-base-900 sticky left-[42px] z-40 shadow-sm`}>
-                                                <div className="flex items-center justify-between gap-2 h-full">
-                                                    <div className="flex flex-col gap-0.5 min-w-0">
-                                                        <div className="flex items-center gap-1 min-w-0">
-                                                            <span className={`text-[13px] font-black uppercase leading-none tracking-tighter truncate ${row.isDuplicateRow ? 'text-red-600' : 'text-base-955 dark:text-base-50'}`}>{row.requestId.replace(/^RS1-/, '')}</span>
-                                                            {row.customerRemarks.length > 0 && (
-                                                                <button 
-                                                                    onClick={() => setActiveRemarks({ id: row.requestId, list: row.customerRemarks })}
-                                                                    className="shrink-0 p-1 bg-amber-100 text-amber-600 rounded-md hover:bg-amber-600 hover:text-white transition-all animate-pulse-subtle"
-                                                                    title="View Customer Remarks"
-                                                                >
-                                                                    <ClipboardListIcon className="h-3 w-3" />
-                                                                </button>
+                                    {gridData.map(row => {
+                                        const isNearDue = row.minDueDate !== Infinity && (row.minDueDate - Date.now()) <= 3 * 24 * 60 * 60 * 1000;
+                                        const rowBgClass = row.isDuplicateRow 
+                                            ? 'bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-900/30 border-l-4 border-red-500' 
+                                            : isNearDue 
+                                                ? 'bg-amber-50/80 hover:bg-amber-100/90 dark:bg-amber-950/30 dark:hover:bg-amber-900/40 border-l-4 border-amber-400' 
+                                                : 'hover:bg-indigo-50/20';
+                                        
+                                        const stickyBgClass1 = row.isDuplicateRow 
+                                            ? 'bg-red-50 dark:bg-red-950/20 text-red-600' 
+                                            : isNearDue 
+                                                ? 'bg-amber-50/85 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' 
+                                                : 'bg-white dark:bg-base-955 text-slate-800 dark:text-base-200';
+
+                                        const stickyBgClass2 = row.isDuplicateRow 
+                                            ? 'bg-red-50 dark:bg-red-950/20' 
+                                            : isNearDue 
+                                                ? 'bg-amber-50/85 dark:bg-amber-950/40' 
+                                                : 'bg-white dark:bg-base-900';
+
+                                        return (
+                                            <tr key={row.requestId} className={`group transition-colors ${rowBgClass}`}>
+                                                <td className={`p-0.5 border-r border-base-200 ${stickyBgClass1} sticky left-0 z-40 text-center font-black text-[9px] leading-tight`}>
+                                                    {row.minDueDate !== Infinity ? `${(new Date(row.minDueDate)).getDate()}/${(new Date(row.minDueDate)).getMonth()+1}` : '-'}
+                                                </td>
+                                                <td className={`px-2 py-2 border-r-2 border-indigo-400 ${stickyBgClass2} sticky left-[42px] z-40 shadow-sm`}>
+                                                    <div className="flex items-center justify-between gap-2 h-full">
+                                                        <div className="flex flex-col gap-0.5 min-w-0">
+                                                            <div className="flex items-center gap-1 min-w-0">
+                                                                <span className={`text-[13px] font-black uppercase leading-none tracking-tighter truncate ${row.isDuplicateRow ? 'text-red-600' : isNearDue ? 'text-amber-800 dark:text-amber-200' : 'text-base-955 dark:text-base-50'}`}>{row.requestId.replace(/^RS1-/, '')}</span>
+                                                                {row.customerRemarks.length > 0 && (
+                                                                    <button 
+                                                                        onClick={() => setActiveRemarks({ id: row.requestId, list: row.customerRemarks })}
+                                                                        className="shrink-0 p-1 bg-amber-100 text-amber-600 rounded-md hover:bg-amber-600 hover:text-white transition-all animate-pulse-subtle"
+                                                                        title="View Customer Remarks"
+                                                                    >
+                                                                        <ClipboardListIcon className="h-3 w-3" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            <span className="text-[8px] font-black text-slate-400 shrink-0">#{row.availableItems}/{row.itemCount}</span>
+                                                            {row.isDuplicateRow && (
+                                                                <div className="flex items-center gap-2 mt-1">
+                                                                    <span className="px-1 py-0.5 bg-red-600 text-white text-[6px] rounded-sm font-black animate-pulse">DUPLICATE</span>
+                                                                    <button onClick={(e) => { e.stopPropagation(); handleMergeDuplicates(row.requestId); }} className="px-2 py-0.5 bg-white border border-red-200 text-red-600 text-[8px] font-bold rounded hover:bg-red-50 shadow-sm flex items-center gap-1">
+                                                                        <SparklesIcon className="h-3 w-3"/> Fix
+                                                                    </button>
+                                                                </div>
                                                             )}
                                                         </div>
-                                                        <span className="text-[8px] font-black text-slate-400 shrink-0">#{row.availableItems}/{row.itemCount}</span>
-                                                        {row.isDuplicateRow && (
-                                                            <div className="flex items-center gap-2 mt-1">
-                                                                <span className="px-1 py-0.5 bg-red-600 text-white text-[6px] rounded-sm font-black animate-pulse">DUPLICATE</span>
-                                                                <button onClick={(e) => { e.stopPropagation(); handleMergeDuplicates(row.requestId); }} className="px-2 py-0.5 bg-white border border-red-200 text-red-600 text-[8px] font-bold rounded hover:bg-red-50 shadow-sm flex items-center gap-1">
-                                                                    <SparklesIcon className="h-3 w-3"/> Fix
-                                                                </button>
-                                                            </div>
-                                                        )}
+                                                        <div className="flex flex-col items-end gap-1 shrink-0">
+                                                            {row.isPoCat && <span className="px-1.5 py-0.5 bg-orange-600 text-white text-[9px] rounded font-black tracking-wide shadow-sm">PO CAT</span>}
+                                                            {row.isSprint && <span className="px-1.5 py-0.5 bg-rose-600 text-white text-[9px] rounded font-black tracking-wide shadow-sm border border-rose-400">SPRINT</span>}
+                                                            {row.isLSP && <span className="px-1.5 py-0.5 bg-cyan-600 text-white text-[9px] rounded font-black tracking-wide shadow-sm border border-cyan-400">LSP</span>}
+                                                            {row.isUrgent && !row.isSprint && !row.isLSP && <span className="px-1.5 py-0.5 bg-red-600 text-white text-[9px] rounded font-black tracking-wide shadow-sm">URGENT</span>}
+                                                        </div>
                                                     </div>
-                                                    <div className="flex flex-col items-end gap-1 shrink-0">
-                                                        {row.isPoCat && <span className="px-1.5 py-0.5 bg-orange-600 text-white text-[9px] rounded font-black tracking-wide shadow-sm">PO CAT</span>}
-                                                        {row.isSprint && <span className="px-1.5 py-0.5 bg-rose-600 text-white text-[9px] rounded font-black tracking-wide shadow-sm border border-rose-400">SPRINT</span>}
-                                                        {row.isLSP && <span className="px-1.5 py-0.5 bg-cyan-600 text-white text-[9px] rounded font-black tracking-wide shadow-sm border border-cyan-400">LSP</span>}
-                                                        {row.isUrgent && !row.isSprint && !row.isLSP && <span className="px-1.5 py-0.5 bg-red-600 text-white text-[9px] rounded font-black tracking-wide shadow-sm">URGENT</span>}
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            {activeColumnKeys.map(header => <ExpandableCell key={header} headerKey={header} items={row.cells[header] || []} isGroupEnd={lastKeysOfGroups.has(header)} expandedCell={expandedCell} setExpandedCell={setExpandedCell} selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems} isAssigningToPrepare={isAssigningToPrepare} setNoteEditor={setNoteEditor} onInitiateDelete={(d, i, l) => setDeleteConfirm({ docId: d, index: i, label: l })} />)}
-                                            <ExpandableCell headerKey="unmapped" items={row.unmappedItems} isGroupEnd={false} expandedCell={expandedCell} setExpandedCell={setExpandedCell} selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems} isAssigningToPrepare={isAssigningToPrepare} setNoteEditor={setNoteEditor} onInitiateDelete={(d, i, l) => setDeleteConfirm({ docId: d, index: i, label: l })} />
-                                        </tr>
-                                    ))}
+                                                </td>
+                                                {activeColumnKeys.map(header => <ExpandableCell key={header} headerKey={header} items={row.cells[header] || []} isGroupEnd={lastKeysOfGroups.has(header)} expandedCell={expandedCell} setExpandedCell={setExpandedCell} selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems} isAssigningToPrepare={isAssigningToPrepare} setNoteEditor={setNoteEditor} onInitiateDelete={(d, i, l) => setDeleteConfirm({ docId: d, index: i, label: l })} />)}
+                                                <ExpandableCell headerKey="unmapped" items={row.unmappedItems} isGroupEnd={false} expandedCell={expandedCell} setExpandedCell={setExpandedCell} selectedItems={selectedItems} handleSelectItem={handleSelectItem} setSelectedItems={setSelectedItems} isAssigningToPrepare={isAssigningToPrepare} setNoteEditor={setNoteEditor} onInitiateDelete={(d, i, l) => setDeleteConfirm({ docId: d, index: i, label: l })} />
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
+                                <tfoot className="sticky bottom-0 z-50 bg-indigo-50 dark:bg-base-900 border-t-2 border-indigo-500 shadow-md">
+                                    <tr>
+                                        <td className="p-2 border-t border-r border-base-200 bg-indigo-100 dark:bg-base-800 sticky left-0 z-40 text-center font-black text-indigo-900 dark:text-indigo-300 text-[10px]">SUM</td>
+                                        <td className="px-2 py-2 border-t border-r-2 border-indigo-400 bg-indigo-100 dark:bg-base-800 sticky left-[42px] z-40 shadow-sm font-black text-slate-800 dark:text-slate-200 text-[10px]">
+                                            {gridData.length} Requests
+                                        </td>
+                                        {activeColumnKeys.map(header => {
+                                            const colSum = gridData.reduce((acc, r) => acc + (r.cells[header]?.length || 0), 0);
+                                            return (
+                                                <td key={header} className="p-2 border-t border-r border-base-200 bg-indigo-50/95 dark:bg-base-900/95 text-center font-black text-indigo-950 dark:text-indigo-200 text-[11px]">
+                                                    {colSum > 0 ? colSum : '-'}
+                                                </td>
+                                            );
+                                        })}
+                                        <td className="p-2 border-t border-l border-base-200 bg-indigo-50/95 dark:bg-base-900/95 text-center font-black text-indigo-950 dark:text-indigo-200 text-[11px]">
+                                            {gridData.reduce((acc, r) => acc + (r.unmappedItems?.length || 0), 0) || '-'}
+                                        </td>
+                                    </tr>
+                                </tfoot>
                             </table>
                         ) : (
                             <div className="py-40 text-center opacity-10 flex flex-col items-center"><BeakerIcon className="h-24 w-24 mb-6" /><span className="text-2xl font-black uppercase tracking-[0.5em]">Fleet Standby - No Missions</span></div>

@@ -278,3 +278,21 @@ export interface SupportRequest {
 export interface AppSettings {
     tabLabels?: Record<string, string>;
 }
+
+// --- Method Walkthrough System ---
+export interface WalkthroughAcknowledgement {
+    acknowledged: boolean;
+    acknowledgedAt?: string;
+}
+
+export interface Walkthrough {
+    id?: string;
+    title: string;
+    content: string;
+    createdAt: string;
+    createdBy: string;
+    targetTesters: string[]; // List of tester ids
+    acknowledgements: Record<string, WalkthroughAcknowledgement>; // testerId -> acknowledgment details
+    isCompleted?: boolean; // True when all target testers have acknowledged
+    imageUrl?: string; // Optional attached image (Base64 or URL)
+}
