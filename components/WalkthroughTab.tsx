@@ -41,9 +41,10 @@ const compressImage = (base64Str: string, maxWidth = 1024, maxHeight = 1024): Pr
 
 interface WalkthroughTabProps {
     testers: Tester[];
+    onWalkthroughsUpdated?: () => void;
 }
 
-const WalkthroughTab: React.FC<WalkthroughTabProps> = ({ testers }) => {
+const WalkthroughTab: React.FC<WalkthroughTabProps> = ({ testers, onWalkthroughsUpdated }) => {
     const [walkthroughs, setWalkthroughs] = useState<Walkthrough[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [notification, setNotification] = useState<{ message: string, isError?: boolean } | null>(null);
@@ -156,6 +157,7 @@ const WalkthroughTab: React.FC<WalkthroughTabProps> = ({ testers }) => {
             setNotification({ message: "บันทึกและเผยแพร่ใบงาน walkthrough สำเร็จ!" });
             window.scrollTo({ top: 0, behavior: 'smooth' });
             fetchWalkthroughs();
+            onWalkthroughsUpdated?.();
         } catch (error) {
             console.error("Error creating walkthrough:", error);
             setNotification({ message: "เกิดข้อผิดพลาดในการบันทึกใบงาน", isError: true });
@@ -178,6 +180,7 @@ const WalkthroughTab: React.FC<WalkthroughTabProps> = ({ testers }) => {
             if (matched) {
                 setActiveWalkthrough(matched);
             }
+            onWalkthroughsUpdated?.();
         } catch (error) {
             console.error("Error acknowledging walkthrough:", error);
             setNotification({ message: `ไม่สามารถลงนามให้กับคุณ ${testerName} ได้`, isError: true });
@@ -195,6 +198,7 @@ const WalkthroughTab: React.FC<WalkthroughTabProps> = ({ testers }) => {
             if (activeWalkthrough?.id === id) {
                 setActiveWalkthrough(null);
             }
+            onWalkthroughsUpdated?.();
         } catch (error) {
             console.error("Error deleting walkthrough:", error);
             setNotification({ message: "เกิดข้อผิดพลาดในการลบเอกสาร", isError: true });

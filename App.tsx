@@ -12,7 +12,7 @@ import BookingTab from './components/BookingTab'; // Import the new Booking Tab
 import ProficiencyTab from './components/ProficiencyTab';
 import RequestsTab from './components/RequestsTab';
 import WalkthroughTab from './components/WalkthroughTab';
-import { getTesters, getAssignedTasks, getAppSettings } from './services/dataService';
+import { getTesters, getAssignedTasks, getAppSettings, getSupportRequests, getWalkthroughs, getEquipments, getProficiencyRecords } from './services/dataService';
 import type { Tester, AssignedTask, AppSettings } from './types';
 import { TaskStatus } from './types';
 // Import RefreshIcon from common icons to fix the 'Cannot find name' error
@@ -58,6 +58,10 @@ const App: React.FC = () => {
     const [activeTab, setActiveTab] = useState('import');
     const [testers, setTesters] = useState<Tester[]>([]);
     const [notOkCount, setNotOkCount] = useState(0);
+    const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+    const [pendingWalkthroughsCount, setPendingWalkthroughsCount] = useState(0);
+    const [issueEquipmentCount, setIssueEquipmentCount] = useState(0);
+    const [pendingProficiencyCount, setPendingProficiencyCount] = useState(0);
     const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isInitialLoad, setIsInitialLoad] = useState(true); // Flag to control full-page loading
@@ -76,10 +80,22 @@ const App: React.FC = () => {
         setIsLoading(true);
         setError(null);
         try {
-            const [fetchedTesters, allAssigned, settings] = await Promise.all([
+            const [
+                fetchedTesters, 
+                allAssigned, 
+                settings,
+                fetchedRequests,
+                fetchedWalkthroughs,
+                fetchedEquipments,
+                fetchedProficiencyRecords
+            ] = await Promise.all([
                 getTesters(),
                 getAssignedTasks(),
-                getAppSettings()
+                getAppSettings(),
+                getSupportRequests().catch(() => []),
+                getWalkthroughs().catch(() => []),
+                getEquipments().catch(() => []),
+                getProficiencyRecords().catch(() => [])
             ]);
             setTesters(fetchedTesters);
             if (settings) {
@@ -91,6 +107,22 @@ const App: React.FC = () => {
                 count += (doc.tasks || []).filter(t => t.status === TaskStatus.NotOK).length;
             });
             setNotOkCount(count);
+
+            // Calculate pending support requests (status is other than 'done')
+            const pendingRequests = fetchedRequests.filter(r => r.status !== 'done').length;
+            setPendingRequestsCount(pendingRequests);
+
+            // Calculate pending walkthroughs (not completed)
+            const pendingWalkthroughs = fetchedWalkthroughs.filter(w => !w.isCompleted).length;
+            setPendingWalkthroughsCount(pendingWalkthroughs);
+
+            // Calculate equipment issues or maintenance
+            const issueEquipments = fetchedEquipments.filter(e => e.status === 'issue' || e.status === 'maintenance').length;
+            setIssueEquipmentCount(issueEquipments);
+
+            // Calculate pending proficiency records (status is 'pending')
+            const pendingProficiency = fetchedProficiencyRecords.filter(r => r.status === 'pending').length;
+            setPendingProficiencyCount(pendingProficiency);
 
         } catch (error: any) {
             console.error("Error fetching data: ", error);
@@ -131,8 +163,8 @@ const App: React.FC = () => {
                 />
             );
             case 'booking': return <BookingTab testers={testers} />; // New Booking Tab
-            case 'requests': return <RequestsTab testers={testers} />;
-            case 'equipment': return <EquipmentTab testers={testers} />;
+            case 'requests': return <RequestsTab testers={testers} onRequestsUpdated={triggerTaskRefresh} />;
+            case 'equipment': return <EquipmentTab testers={testers} onEquipmentUpdated={triggerTaskRefresh} />;
             case 'roster': return (
                 <RosterTab 
                     testers={testers} 
@@ -161,7 +193,7 @@ const App: React.FC = () => {
                 />
             );
             case 'proficiency': return <ProficiencyTab testers={testers} />;
-            case 'walkthrough': return <WalkthroughTab testers={testers} />;
+            case 'walkthrough': return <WalkthroughTab testers={testers} onWalkthroughsUpdated={triggerTaskRefresh} />;
             case 'settings': return <SettingsTab testers={testers} onRefreshTesters={fetchCoreData} onTasksUpdated={triggerTaskRefresh} appSettings={appSettings} onSettingsUpdated={fetchCoreData} />;
             default: return <ImportTab onTasksUpdated={triggerTaskRefresh} />;
         }
@@ -240,13 +272,13 @@ const App: React.FC = () => {
                             <TabButton tabName="tasks" label="Assign Tasks" icon={<ClipboardListIcon className="h-5 w-5"/>} />
                             <TabButton tabName="booking" label="Special Booking" icon={<UserCircleIcon className="h-5 w-5"/>} />
                             <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
-                            <TabButton tabName="requests" label="Support Requests" icon={<ChatBubbleLeftIcon className="h-5 w-5"/>} />
+                            <TabButton tabName="requests" label="Support Requests" icon={<ChatBubbleLeftIcon className="h-5 w-5"/>} badge={pendingRequestsCount} />
                             <TabButton tabName="schedule" label="Shift Tracking" icon={<CalendarIcon className="h-5 w-5"/>} />
                             <TabButton tabName="dashboard" label="Shift Summary" icon={<BeakerIcon className="h-5 w-5"/>} />
-                            <TabButton tabName="equipment" label="Equipment" icon={<CogIcon className="h-5 w-5"/>} />
+                            <TabButton tabName="equipment" label="Equipment" icon={<CogIcon className="h-5 w-5"/>} badge={issueEquipmentCount} />
                             <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
-                            <TabButton tabName="proficiency" label="Proficiency" icon={<DocumentTextIcon className="h-5 w-5"/>} />
-                            <TabButton tabName="walkthrough" label="Method Walkthrough" icon={<DocumentTextIcon className="h-5 w-5"/>} />
+                            <TabButton tabName="proficiency" label="Proficiency" icon={<DocumentTextIcon className="h-5 w-5"/>} badge={pendingProficiencyCount} />
+                            <TabButton tabName="walkthrough" label="Method Walkthrough" icon={<DocumentTextIcon className="h-5 w-5"/>} badge={pendingWalkthroughsCount} />
                             <TabButton tabName="roster" label="Roster & Shifts" icon={<DatabaseIcon className="h-5 w-5"/>} />
                             <TabButton tabName="settings" label="Settings" icon={<CogIcon className="h-5 w-5"/>} />
                         </nav>
@@ -258,7 +290,7 @@ const App: React.FC = () => {
                         <TabButton tabName="tasks" label="" icon={<ClipboardListIcon className="h-5 w-5"/>} />
                         <TabButton tabName="schedule" label="" icon={<CalendarIcon className="h-5 w-5"/>} />
                         <TabButton tabName="booking" label="" icon={<UserCircleIcon className="h-5 w-5"/>} />
-                        <TabButton tabName="walkthrough" label="" icon={<DocumentTextIcon className="h-5 w-5"/>} />
+                        <TabButton tabName="walkthrough" label="" icon={<DocumentTextIcon className="h-5 w-5"/>} badge={pendingWalkthroughsCount} />
                     </div>
 
                     <main className="flex-1 min-w-0 min-h-[calc(100vh-8rem)]">

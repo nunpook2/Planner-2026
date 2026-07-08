@@ -5,6 +5,7 @@ import { PlusIcon, TrashIcon, CheckCircleIcon, XCircleIcon, ClockIcon, Informati
 
 interface RequestsTabProps {
     testers: Tester[];
+    onRequestsUpdated?: () => void;
 }
 
 const SUPPORT_STATUS_MAP: Record<SupportRequestStatus, { label: string, color: string, icon: React.FC<any> }> = {
@@ -14,7 +15,7 @@ const SUPPORT_STATUS_MAP: Record<SupportRequestStatus, { label: string, color: s
     done: { label: 'ปิดงาน', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400', icon: CheckCircleIcon }
 };
 
-const RequestsTab: React.FC<RequestsTabProps> = ({ testers }) => {
+const RequestsTab: React.FC<RequestsTabProps> = ({ testers, onRequestsUpdated }) => {
     const [requests, setRequests] = useState<SupportRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [notification, setNotification] = useState<{message: string, isError?: boolean} | null>(null);
@@ -68,6 +69,7 @@ const RequestsTab: React.FC<RequestsTabProps> = ({ testers }) => {
             setIsModalOpen(false);
             setEditingRequest(null);
             fetchData();
+            onRequestsUpdated?.();
         } catch (error) {
             console.error("Error saving request:", error);
             setNotification({ message: "Failed to save request.", isError: true });
@@ -85,6 +87,7 @@ const RequestsTab: React.FC<RequestsTabProps> = ({ testers }) => {
             await saveSupportRequest(updated);
             setNotification({ message: `Status updated to ${SUPPORT_STATUS_MAP[newStatus].label}.` });
             fetchData();
+            onRequestsUpdated?.();
         } catch (error) {
             console.error("Error updating status:", error);
             setNotification({ message: "Failed to update status.", isError: true });
@@ -97,6 +100,7 @@ const RequestsTab: React.FC<RequestsTabProps> = ({ testers }) => {
             setNotification({ message: 'Request deleted successfully.' });
             setRequestToDelete(null);
             fetchData();
+            onRequestsUpdated?.();
         } catch (error) {
              console.error("Error deleting request:", error);
              setNotification({ message: "Failed to delete request.", isError: true });

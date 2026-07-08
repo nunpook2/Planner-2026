@@ -499,9 +499,10 @@ const CustodianListView: React.FC<{ equipments: Equipment[]; testers: Tester[] }
 
 interface EquipmentTabProps {
     testers: Tester[];
+    onEquipmentUpdated?: () => void;
 }
 
-const EquipmentTab: React.FC<EquipmentTabProps> = ({ testers }) => {
+const EquipmentTab: React.FC<EquipmentTabProps> = ({ testers, onEquipmentUpdated }) => {
     const [activeTab, setActiveTab] = useState<'main' | 'custodian' | 'monthly'>('main');
     const [viewMode, setViewMode] = useState<'grid' | 'detail'>('grid');
     const [equipments, setEquipments] = useState<Equipment[]>([]);
@@ -581,6 +582,7 @@ const EquipmentTab: React.FC<EquipmentTabProps> = ({ testers }) => {
         setIsConfigModalOpen(false);
         fetchData();
         setNotification({ message: "Equipment updated successfully." });
+        onEquipmentUpdated?.();
     };
 
     const handleDeleteConfirm = async () => {
@@ -592,6 +594,7 @@ const EquipmentTab: React.FC<EquipmentTabProps> = ({ testers }) => {
             setSelectedEquip(null);
             fetchData();
             setNotification({ message: "Equipment deleted." });
+            onEquipmentUpdated?.();
         }
     };
 
@@ -653,6 +656,7 @@ const EquipmentTab: React.FC<EquipmentTabProps> = ({ testers }) => {
         setSelectedEquip({ ...selectedEquip, history: updatedHistory });
         setNewHistoryEntry({ date: new Date().toISOString().split('T')[0], description: '', partsReplaced: '', technician: 'External' });
         fetchData();
+        onEquipmentUpdated?.();
     };
 
     // Import Logic
@@ -745,7 +749,7 @@ const EquipmentTab: React.FC<EquipmentTabProps> = ({ testers }) => {
     };
     const confirmImport = async () => {
         setIsLoading(true);
-        try { await batchImportEquipments(importConfirmState.data); await fetchData(); setNotification({ message: `Imported ${importConfirmState.count} assets.` }); } catch (e) { setNotification({ message: "Import failed.", isError: true }); } finally { setIsLoading(false); setImportConfirmState({ isOpen: false, count: 0, data: [] }); }
+        try { await batchImportEquipments(importConfirmState.data); await fetchData(); setNotification({ message: `Imported ${importConfirmState.count} assets.` }); onEquipmentUpdated?.(); } catch (e) { setNotification({ message: "Import failed.", isError: true }); } finally { setIsLoading(false); setImportConfirmState({ isOpen: false, count: 0, data: [] }); }
     };
 
     if (viewMode === 'detail' && selectedEquip) {
@@ -758,6 +762,7 @@ const EquipmentTab: React.FC<EquipmentTabProps> = ({ testers }) => {
                 onSave={async (updated) => {
                     await saveEquipment(updated);
                     await fetchData();
+                    onEquipmentUpdated?.();
                 }}
             />
         );
