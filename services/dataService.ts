@@ -1,6 +1,6 @@
 
 import { firestore } from './firebase';
-import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog, Booking, ProficiencyTest, ProficiencyRecord, SupportRequest, Walkthrough } from '../types';
+import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog, Booking, ProficiencyTest, ProficiencyRecord, SupportRequest, Walkthrough, BorrowRecord } from '../types';
 import { TaskCategory } from '../types';
 
 // Export firestore for use in components
@@ -841,3 +841,36 @@ export const acknowledgeWalkthrough = async (walkthroughId: string, testerId: st
         isCompleted
     });
 };
+
+// --- Equipment Borrow & Return Record System ---
+export const getBorrowRecords = async (): Promise<BorrowRecord[]> => {
+    if (!firestore) throw new Error("Database not initialized");
+    const snapshot = await safeGet(getCollection('borrowRecords').orderBy('createdAt', 'desc'));
+    return snapshot.docs.map((doc: any) => ({
+        id: doc.id,
+        ...doc.data()
+    })) as BorrowRecord[];
+};
+
+export const saveBorrowRecord = async (record: BorrowRecord): Promise<void> => {
+    if (!firestore) throw new Error("Database not initialized");
+    const collection = getCollection('borrowRecords');
+    
+    // Clean fields
+    const cleaned = Object.fromEntries(Object.entries(record).filter(([_, v]) => v !== undefined));
+    
+    if (cleaned.id) {
+        await collection.doc(cleaned.id as string).update(cleaned);
+    } else {
+        await collection.add({
+            ...cleaned,
+            createdAt: cleaned.createdAt || new Date().toISOString()
+        });
+    }
+};
+
+export const deleteBorrowRecord = async (id: string): Promise<void> => {
+    if (!firestore) throw new Error("Database not initialized");
+    await getCollection('borrowRecords').doc(id).delete();
+};
+

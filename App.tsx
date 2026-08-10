@@ -12,11 +12,12 @@ import BookingTab from './components/BookingTab'; // Import the new Booking Tab
 import ProficiencyTab from './components/ProficiencyTab';
 import RequestsTab from './components/RequestsTab';
 import WalkthroughTab from './components/WalkthroughTab';
-import { getTesters, getAssignedTasks, getAppSettings, getSupportRequests, getWalkthroughs, getEquipments, getProficiencyRecords } from './services/dataService';
+import { BorrowTab } from './components/BorrowTab';
+import { getTesters, getAssignedTasks, getAppSettings, getSupportRequests, getWalkthroughs, getEquipments, getProficiencyRecords, getBorrowRecords } from './services/dataService';
 import type { Tester, AssignedTask, AppSettings } from './types';
 import { TaskStatus } from './types';
 // Import RefreshIcon from common icons to fix the 'Cannot find name' error
-import { DatabaseIcon, UploadIcon, ClipboardListIcon, CalendarIcon, CogIcon, BeakerIcon, AlertTriangleIcon, RefreshIcon, UserCircleIcon, DocumentTextIcon, ChatBubbleLeftIcon } from './components/common/Icons'; // Added UserCircleIcon for Booking
+import { DatabaseIcon, UploadIcon, ClipboardListIcon, CalendarIcon, CogIcon, BeakerIcon, AlertTriangleIcon, RefreshIcon, UserCircleIcon, DocumentTextIcon, ChatBubbleLeftIcon, BoxIcon } from './components/common/Icons'; // Added UserCircleIcon for Booking
 
 const LoadingSpinner = () => (
     <div className="flex flex-col items-center justify-center h-full animate-fade-in">
@@ -61,6 +62,7 @@ const App: React.FC = () => {
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
     const [pendingWalkthroughsCount, setPendingWalkthroughsCount] = useState(0);
     const [issueEquipmentCount, setIssueEquipmentCount] = useState(0);
+    const [overdueBorrowCount, setOverdueBorrowCount] = useState(0);
     const [pendingProficiencyCount, setPendingProficiencyCount] = useState(0);
     const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -70,6 +72,17 @@ const App: React.FC = () => {
     
     const [globalSelectedDate, setGlobalSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [globalSelectedShift, setGlobalSelectedShift] = useState<'day' | 'night'>('day');
+    const [isIsolatedView, setIsIsolatedView] = useState(false);
+
+    useEffect(() => {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const isTabBorrow = params.get('tab') === 'borrow';
+            setIsIsolatedView(activeTab === 'borrow' && isTabBorrow);
+        } catch (e) {
+            console.error("Failed to parse URL query params", e);
+        }
+    }, [activeTab]);
 
     const triggerTaskRefresh = useCallback(() => {
         setTaskRefreshKey(prevKey => prevKey + 1);
@@ -87,7 +100,8 @@ const App: React.FC = () => {
                 fetchedRequests,
                 fetchedWalkthroughs,
                 fetchedEquipments,
-                fetchedProficiencyRecords
+                fetchedProficiencyRecords,
+                fetchedBorrowRecords
             ] = await Promise.all([
                 getTesters(),
                 getAssignedTasks(),
@@ -95,7 +109,8 @@ const App: React.FC = () => {
                 getSupportRequests().catch(() => []),
                 getWalkthroughs().catch(() => []),
                 getEquipments().catch(() => []),
-                getProficiencyRecords().catch(() => [])
+                getProficiencyRecords().catch(() => []),
+                getBorrowRecords().catch(() => [])
             ]);
             setTesters(fetchedTesters);
             if (settings) {
@@ -124,6 +139,11 @@ const App: React.FC = () => {
             const pendingProficiency = fetchedProficiencyRecords.filter(r => r.status === 'pending').length;
             setPendingProficiencyCount(pendingProficiency);
 
+            // Calculate overdue borrow records
+            const todayStr = new Date().toISOString().split('T')[0];
+            const overdueBorrows = fetchedBorrowRecords.filter(r => !r.actualReturnDate && r.expectedReturnDate < todayStr).length;
+            setOverdueBorrowCount(overdueBorrows);
+
         } catch (error: any) {
             console.error("Error fetching data: ", error);
             setError("An unexpected error occurred. Please check your network connection.");
@@ -136,6 +156,17 @@ const App: React.FC = () => {
     useEffect(() => {
         // Initial load
         fetchCoreData();
+        
+        // Detect tab query parameter to auto-switch tab (e.g., from QR code scans)
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const tabParam = params.get('tab');
+            if (tabParam) {
+                setActiveTab(tabParam);
+            }
+        } catch (e) {
+            console.error("Failed to parse URL query params", e);
+        }
     }, [fetchCoreData]);
 
     // Handle background refreshes without unmounting the whole tab area
@@ -193,6 +224,24 @@ const App: React.FC = () => {
                 />
             );
             case 'proficiency': return <ProficiencyTab testers={testers} />;
+            case 'borrow': return (
+                <BorrowTab 
+                    testers={testers} 
+                    onBorrowUpdated={triggerTaskRefresh} 
+                    isIsolatedView={isIsolatedView}
+                    onExitIsolated={() => {
+                        setIsIsolatedView(false);
+                        try {
+                            const url = new URL(window.location.href);
+                            url.searchParams.delete('tab');
+                            window.history.replaceState({}, '', url.toString());
+                        } catch (e) {
+                            console.error("Failed to clear tab params on exit", e);
+                        }
+                        setActiveTab('dashboard');
+                    }}
+                />
+            );
             case 'walkthrough': return <WalkthroughTab testers={testers} onWalkthroughsUpdated={triggerTaskRefresh} />;
             case 'settings': return <SettingsTab testers={testers} onRefreshTesters={fetchCoreData} onTasksUpdated={triggerTaskRefresh} appSettings={appSettings} onSettingsUpdated={fetchCoreData} />;
             default: return <ImportTab onTasksUpdated={triggerTaskRefresh} />;
@@ -240,61 +289,68 @@ const App: React.FC = () => {
         <div className="min-h-screen bg-base-50/50 dark:bg-base-955 font-sans text-base-800 dark:text-base-200 flex flex-col">
             {error ? <ErrorModal onRetry={() => fetchCoreData()}>{error}</ErrorModal> : null}
             
-            <header className="sticky top-0 z-40 bg-white/40 dark:bg-base-900/40 backdrop-blur-xl border-b border-white dark:border-base-800">
-                <div className="w-[98%] mx-auto px-6 h-16 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="bg-gradient-to-br from-primary-600 to-primary-800 p-2 rounded-xl shadow-xl shadow-primary-500/30">
-                            <BeakerIcon className="h-5 w-5 text-white"/>
+            {!isIsolatedView && (
+                <header className="sticky top-0 z-40 bg-white/40 dark:bg-base-900/40 backdrop-blur-xl border-b border-white dark:border-base-800">
+                    <div className="w-[98%] mx-auto px-6 h-16 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-gradient-to-br from-primary-600 to-primary-800 p-2 rounded-xl shadow-xl shadow-primary-500/30">
+                                <BeakerIcon className="h-5 w-5 text-white"/>
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-black tracking-tighter text-base-900 dark:text-white leading-none">
+                                    Planner V2
+                                </h1>
+                                <p className="text-[9px] text-base-400 font-black uppercase tracking-[0.3em] mt-1">Lab Intelligence System</p>
+                            </div>
                         </div>
-                        <div>
-                            <h1 className="text-xl font-black tracking-tighter text-base-900 dark:text-white leading-none">
-                                Planner V2
-                            </h1>
-                            <p className="text-[9px] text-base-400 font-black uppercase tracking-[0.3em] mt-1">Lab Intelligence System</p>
-                        </div>
+                        {isLoading && !isInitialLoad && (
+                            <div className="flex items-center gap-2 px-4 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-full animate-fade-in">
+                                <RefreshIcon className="h-3.5 w-3.5 animate-spin" />
+                                <span className="text-[9px] font-black uppercase tracking-widest">Syncing...</span>
+                            </div>
+                        )}
                     </div>
-                    {isLoading && !isInitialLoad && (
-                        <div className="flex items-center gap-2 px-4 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-full animate-fade-in">
-                            <RefreshIcon className="h-3.5 w-3.5 animate-spin" />
-                            <span className="text-[9px] font-black uppercase tracking-widest">Syncing...</span>
+                </header>
+            )}
+            
+            <div className={`flex-1 ${isIsolatedView ? 'w-full max-w-5xl mx-auto py-2 md:py-6 px-3' : 'w-[98%] mx-auto px-2 py-4'}`}>
+                <div className="flex flex-col lg:flex-row gap-6 h-full">
+                    {!isIsolatedView && (
+                        <aside className="hidden lg:block w-64 flex-shrink-0 sticky top-20 self-start bg-white/30 dark:bg-base-900/30 backdrop-blur-md rounded-[2.5rem] p-4 border border-white dark:border-base-800 shadow-sm">
+                            <nav className="space-y-1">
+                                <TabButton tabName="quality" label="Quality Center" icon={<AlertTriangleIcon className="h-5 w-5"/>} badge={notOkCount} />
+                                <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
+                                <TabButton tabName="import" label="Import Data" icon={<UploadIcon className="h-5 w-5"/>} />
+                                <TabButton tabName="tasks" label="Assign Tasks" icon={<ClipboardListIcon className="h-5 w-5"/>} />
+                                <TabButton tabName="booking" label="Special Booking" icon={<UserCircleIcon className="h-5 w-5"/>} />
+                                <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
+                                <TabButton tabName="requests" label="Support Requests" icon={<ChatBubbleLeftIcon className="h-5 w-5"/>} badge={pendingRequestsCount} />
+                                <TabButton tabName="schedule" label="Shift Tracking" icon={<CalendarIcon className="h-5 w-5"/>} />
+                                <TabButton tabName="dashboard" label="Shift Summary" icon={<BeakerIcon className="h-5 w-5"/>} />
+                                <TabButton tabName="equipment" label="Equipment" icon={<CogIcon className="h-5 w-5"/>} badge={issueEquipmentCount} />
+                                <TabButton tabName="borrow" label="ยืม-คืน อุปกรณ์" icon={<BoxIcon className="h-5 w-5"/>} badge={overdueBorrowCount} />
+                                <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
+                                <TabButton tabName="proficiency" label="Proficiency" icon={<DocumentTextIcon className="h-5 w-5"/>} badge={pendingProficiencyCount} />
+                                <TabButton tabName="walkthrough" label="Method Walkthrough" icon={<DocumentTextIcon className="h-5 w-5"/>} badge={pendingWalkthroughsCount} />
+                                <TabButton tabName="roster" label="Roster & Shifts" icon={<DatabaseIcon className="h-5 w-5"/>} />
+                                <TabButton tabName="settings" label="Settings" icon={<CogIcon className="h-5 w-5"/>} />
+                            </nav>
+                        </aside>
+                    )}
+
+                    {!isIsolatedView && (
+                        <div className="lg:hidden fixed bottom-6 left-6 right-6 bg-white/80 dark:bg-base-900/80 backdrop-blur-2xl border border-white dark:border-base-800 rounded-[2.5rem] p-3 z-50 flex justify-around shadow-2xl">
+                            <TabButton tabName="quality" label="" icon={<AlertTriangleIcon className="h-5 w-5"/>} badge={notOkCount} />
+                            <TabButton tabName="import" label="" icon={<UploadIcon className="h-5 w-5"/>} />
+                            <TabButton tabName="tasks" label="" icon={<ClipboardListIcon className="h-5 w-5"/>} />
+                            <TabButton tabName="schedule" label="" icon={<CalendarIcon className="h-5 w-5"/>} />
+                            <TabButton tabName="booking" label="" icon={<UserCircleIcon className="h-5 w-5"/>} />
+                            <TabButton tabName="walkthrough" label="" icon={<DocumentTextIcon className="h-5 w-5"/>} badge={pendingWalkthroughsCount} />
                         </div>
                     )}
-                </div>
-            </header>
-            
-            <div className="flex-1 w-[98%] mx-auto px-2 py-4">
-                <div className="flex flex-col lg:flex-row gap-6 h-full">
-                    <aside className="hidden lg:block w-64 flex-shrink-0 sticky top-20 self-start bg-white/30 dark:bg-base-900/30 backdrop-blur-md rounded-[2.5rem] p-4 border border-white dark:border-base-800 shadow-sm">
-                        <nav className="space-y-1">
-                            <TabButton tabName="quality" label="Quality Center" icon={<AlertTriangleIcon className="h-5 w-5"/>} badge={notOkCount} />
-                            <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
-                            <TabButton tabName="import" label="Import Data" icon={<UploadIcon className="h-5 w-5"/>} />
-                            <TabButton tabName="tasks" label="Assign Tasks" icon={<ClipboardListIcon className="h-5 w-5"/>} />
-                            <TabButton tabName="booking" label="Special Booking" icon={<UserCircleIcon className="h-5 w-5"/>} />
-                            <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
-                            <TabButton tabName="requests" label="Support Requests" icon={<ChatBubbleLeftIcon className="h-5 w-5"/>} badge={pendingRequestsCount} />
-                            <TabButton tabName="schedule" label="Shift Tracking" icon={<CalendarIcon className="h-5 w-5"/>} />
-                            <TabButton tabName="dashboard" label="Shift Summary" icon={<BeakerIcon className="h-5 w-5"/>} />
-                            <TabButton tabName="equipment" label="Equipment" icon={<CogIcon className="h-5 w-5"/>} badge={issueEquipmentCount} />
-                            <div className="h-px bg-gradient-to-r from-transparent via-base-200 dark:via-base-800 to-transparent my-3 mx-4"></div>
-                            <TabButton tabName="proficiency" label="Proficiency" icon={<DocumentTextIcon className="h-5 w-5"/>} badge={pendingProficiencyCount} />
-                            <TabButton tabName="walkthrough" label="Method Walkthrough" icon={<DocumentTextIcon className="h-5 w-5"/>} badge={pendingWalkthroughsCount} />
-                            <TabButton tabName="roster" label="Roster & Shifts" icon={<DatabaseIcon className="h-5 w-5"/>} />
-                            <TabButton tabName="settings" label="Settings" icon={<CogIcon className="h-5 w-5"/>} />
-                        </nav>
-                    </aside>
 
-                    <div className="lg:hidden fixed bottom-6 left-6 right-6 bg-white/80 dark:bg-base-900/80 backdrop-blur-2xl border border-white dark:border-base-800 rounded-[2.5rem] p-3 z-50 flex justify-around shadow-2xl">
-                        <TabButton tabName="quality" label="" icon={<AlertTriangleIcon className="h-5 w-5"/>} badge={notOkCount} />
-                        <TabButton tabName="import" label="" icon={<UploadIcon className="h-5 w-5"/>} />
-                        <TabButton tabName="tasks" label="" icon={<ClipboardListIcon className="h-5 w-5"/>} />
-                        <TabButton tabName="schedule" label="" icon={<CalendarIcon className="h-5 w-5"/>} />
-                        <TabButton tabName="booking" label="" icon={<UserCircleIcon className="h-5 w-5"/>} />
-                        <TabButton tabName="walkthrough" label="" icon={<DocumentTextIcon className="h-5 w-5"/>} badge={pendingWalkthroughsCount} />
-                    </div>
-
-                    <main className="flex-1 min-w-0 min-h-[calc(100vh-8rem)]">
-                        <div className="bg-white/60 dark:bg-base-900/60 rounded-[3rem] border border-white dark:border-base-800 p-1 h-full shadow-2xl overflow-hidden relative">
+                    <main className="flex-1 min-w-0">
+                        <div className={`${isIsolatedView ? 'bg-white/80 dark:bg-base-900/80 rounded-[2rem]' : 'bg-white/60 dark:bg-base-900/60 rounded-[3rem] min-h-[calc(100vh-8rem)]'} border border-white dark:border-base-800 p-1 h-full shadow-2xl overflow-hidden relative`}>
                            {isInitialLoad ? <LoadingSpinner /> : renderTabContent()}
                        </div>
                     </main>

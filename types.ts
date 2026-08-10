@@ -296,3 +296,25 @@ export interface Walkthrough {
     isCompleted?: boolean; // True when all target testers have acknowledged
     imageUrl?: string; // Optional attached image (Base64 or URL)
 }
+
+// --- Equipment Borrow & Return Record System ---
+export interface BorrowRecord {
+    id?: string;
+    equipmentName: string; // Name of equipment (typed manually, not linked to Lab equipment)
+    borrowerName: string; // Borrower name
+    borrowerType: 'internal' | 'external';
+    borrowerPhone: string;
+    borrowDate: string; // YYYY-MM-DD
+    borrowTime: string; // HH:mm
+    expectedReturnDate: string; // YYYY-MM-DD
+    actualReturnDate?: string; // YYYY-MM-DD or empty
+    guarantorName?: string; // Internal staff name who vouches (required if borrowerType is 'external')
+    status: 'borrowed' | 'returned' | 'overdue';
+    createdAt: string;
+    notes?: string;
+    borrowPhotoUrl?: string; // Photo taken during borrow (Base64)
+    returnPhotoUrl?: string; // Photo taken during return (Base64)
+    returnedBy?: string; // Name of person who returned it
+    returnReceiverName?: string; // Name of internal employee who accepted the return
+}
+

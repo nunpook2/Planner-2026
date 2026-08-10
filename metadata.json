@@ -1,5 +1,8 @@
 {
   "name": "Planner V8- Laboratory Task Management",
   "description": "An advanced laboratory task management system to streamline test assignments, scheduling, and progress tracking for analysts. Features include Excel data import, task prioritization, roster management, and comprehensive reporting, all powered by a real-time database.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

@@ -531,7 +531,7 @@ const UISettingsPanel: React.FC<{
                 ))}
             </div>
 
-            <div className="mt-8 pt-6 border-t border-base-100 dark:border-base-800 flex justify-end">
+            <div className="mt-8 pt-6 border-t border-t-base-100 dark:border-t-base-800 flex justify-end">
                 <button 
                     onClick={handleSave}
                     disabled={isSaving}
@@ -544,14 +544,221 @@ const UISettingsPanel: React.FC<{
     );
 };
 
+// --- QR CODE GENERATOR FOR EQUIPMENTS & FUTURE ACTIVITIES ---
+const QRCodeManager: React.FC = () => {
+    const currentBaseUrl = window.location.origin + window.location.pathname;
+    const borrowUrl = `${currentBaseUrl}?tab=borrow`;
+    
+    const [customText, setCustomText] = useState(borrowUrl);
+    const [qrSize, setQrSize] = useState('250');
+    const [qrTitle, setQrTitle] = useState('แสกนเพื่อ ยืม-คืน อุปกรณ์');
+    
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encodeURIComponent(customText)}`;
+    
+    const presetLinks = [
+        { label: 'ยืม-คืน อุปกรณ์ (Borrow & Return)', url: borrowUrl, title: 'แสกนเพื่อ ยืม-คืน อุปกรณ์' },
+        { label: 'หน้าแรกระบบ Planner (Home)', url: currentBaseUrl, title: 'ระบบจัดการ Planner V2' },
+        { label: 'ตารางเวร (Shift Tracking)', url: `${currentBaseUrl}?tab=schedule`, title: 'แสกนเพื่อดูตารางเวร' },
+        { label: 'ลงทะเบียนจองเครื่องมือ (Booking)', url: `${currentBaseUrl}?tab=booking`, title: 'แสนกนเพื่อจองเครื่องมือ' },
+    ];
+
+    const handlePrint = () => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Print QR Code - ${qrTitle}</title>
+                <style>
+                    body {
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: white;
+                        color: #1e293b;
+                    }
+                    .container {
+                        text-align: center;
+                        border: 3px solid #e2e8f0;
+                        padding: 40px;
+                        border-radius: 24px;
+                        max-width: 400px;
+                        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+                    }
+                    h1 {
+                        font-size: 24px;
+                        font-weight: 800;
+                        margin-bottom: 20px;
+                    }
+                    img {
+                        border: 1px solid #cbd5e1;
+                        padding: 10px;
+                        border-radius: 12px;
+                        background: #fff;
+                    }
+                    p {
+                        font-size: 14px;
+                        color: #64748b;
+                        margin-top: 20px;
+                        font-weight: 500;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>${qrTitle}</h1>
+                    <img src="${qrUrl}" width="${qrSize}" height="${qrSize}" alt="QR Code" />
+                    <p>สแกนผ่านโทรศัพท์มือถือเพื่อเข้าใช้งานฟังก์ชันโดยตรง</p>
+                </div>
+                <script>
+                    window.onload = function() {
+                        window.print();
+                        setTimeout(function() { window.close(); }, 500);
+                    };
+                </script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
+
+    return (
+        <div className="bg-white dark:bg-base-900 rounded-3xl border border-base-200 dark:border-base-800 shadow-xl overflow-hidden p-6 max-w-3xl mx-auto space-y-6 animate-fade-in">
+            <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-primary-100 dark:bg-primary-950/40 text-primary-600 dark:text-primary-400 rounded-xl">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 className="text-xl font-black text-base-900 dark:text-base-100 uppercase tracking-tight">QR Code Generator (สร้างรหัสคิวอาร์)</h3>
+                    <p className="text-sm font-bold text-base-500 mt-1">สร้างคิวอาร์โค้ดสำหรับติดตังตามจุด เพื่อสแกนเปิดการยืม-คืนได้อย่างรวดเร็ว หรือสร้างสำหรับกิจกรรมอื่นๆ ในอนาคต</p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+                {/* Inputs & Config */}
+                <div className="md:col-span-3 space-y-4">
+                    <div className="bg-base-50 dark:bg-base-800 p-4 rounded-2xl border border-base-100 dark:border-base-700">
+                        <span className="text-[10px] font-black uppercase text-primary-600 dark:text-primary-400 block mb-2">ลิงก์สำเร็จรูป (Presets)</span>
+                        <div className="flex flex-col gap-2">
+                            {presetLinks.map((preset, idx) => (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => {
+                                        setCustomText(preset.url);
+                                        setQrTitle(preset.title);
+                                    }}
+                                    className="text-left px-3.5 py-2.5 bg-white dark:bg-base-900 border border-base-200 dark:border-base-700 rounded-xl text-xs font-bold hover:border-primary-500 dark:hover:border-primary-500 transition-all flex items-center justify-between group"
+                                >
+                                    <span className="text-slate-700 dark:text-slate-200">{preset.label}</span>
+                                    <span className="text-[10px] text-slate-400 font-medium truncate max-w-[150px] group-hover:text-primary-500">{preset.url}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-[11px] font-black text-base-400 uppercase tracking-wider block">
+                            ข้อความ / ลิงก์ปลายทาง (Target URL / Text)
+                        </label>
+                        <input
+                            type="text"
+                            value={customText}
+                            onChange={(e) => setCustomText(e.target.value)}
+                            placeholder="ใส่ข้อความหรือลิงก์ปลายทาง..."
+                            className="w-full bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-xl px-4 py-2.5 font-bold text-xs focus:border-primary-500 outline-none transition-all dark:text-white"
+                        />
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-[11px] font-black text-base-400 uppercase tracking-wider block">
+                            หัวข้อ/ชื่อคิวอาร์ (QR Title)
+                        </label>
+                        <input
+                            type="text"
+                            value={qrTitle}
+                            onChange={(e) => setQrTitle(e.target.value)}
+                            placeholder="ระบุชื่อสำหรับแสดงตอนปริ้นท์..."
+                            className="w-full bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-xl px-4 py-2.5 font-bold text-xs focus:border-primary-500 outline-none transition-all dark:text-white"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] font-black text-base-400 uppercase tracking-wider block">
+                                ขนาดพิกเซล (Size px)
+                            </label>
+                            <select
+                                value={qrSize}
+                                onChange={(e) => setQrSize(e.target.value)}
+                                className="w-full bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-xl px-3 py-2.5 font-bold text-xs focus:border-primary-500 outline-none transition-all dark:text-white"
+                            >
+                                <option value="150">150 x 150</option>
+                                <option value="200">200 x 200</option>
+                                <option value="250">250 x 250</option>
+                                <option value="300">300 x 300</option>
+                                <option value="400">400 x 400</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                {/* QR Code Preview Box */}
+                <div className="md:col-span-2 flex flex-col items-center justify-center p-6 bg-base-50 dark:bg-base-800 rounded-3xl border border-base-100 dark:border-base-700 text-center space-y-4">
+                    <span className="text-[10px] font-black uppercase text-base-400 block tracking-widest">QR Code Preview</span>
+                    <div className="bg-white p-4 rounded-2xl shadow-sm border border-base-200/60 inline-block">
+                        <img 
+                            src={qrUrl} 
+                            alt="QR Code" 
+                            width={qrSize} 
+                            height={qrSize} 
+                            referrerPolicy="no-referrer"
+                            className="max-w-full h-auto"
+                        />
+                    </div>
+                    
+                    <div className="w-full space-y-2">
+                        <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 truncate px-2">{qrTitle}</h4>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={handlePrint}
+                                className="w-full py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.1" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                </svg>
+                                <span>สั่งพิมพ์คิวอาร์ (Print)</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const SettingsTab: React.FC<{ testers: Tester[]; onRefreshTesters: () => void; onTasksUpdated: () => void; appSettings?: AppSettings | null; onSettingsUpdated?: () => void; }> = (props) => {
-    const [activeSubTab, setActiveSubTab] = useState<'team' | 'mappings' | 'columns' | 'ui' | 'danger'>('ui');
+    const [activeSubTab, setActiveSubTab] = useState<'team' | 'mappings' | 'columns' | 'ui' | 'qrcode' | 'danger'>('ui');
     const [notification, setNotification] = useState<{ message: string; isError?: boolean } | null>(null);
     const [showCleanupModal, setShowCleanupModal] = useState(false);
     const [showWipeModal, setShowWipeModal] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const tabs = [{ id: 'team', label: 'Team Management' }, { id: 'mappings', label: 'Test Mappings' }, { id: 'columns', label: 'Column Order' }, { id: 'ui', label: 'UI Settings' }, { id: 'danger', label: 'Danger Zone', danger: true }];
+    const tabs = [
+        { id: 'team', label: 'Team Management' },
+        { id: 'mappings', label: 'Test Mappings' },
+        { id: 'columns', label: 'Column Order' },
+        { id: 'ui', label: 'UI Settings' },
+        { id: 'qrcode', label: 'QR Code' },
+        { id: 'danger', label: 'Danger Zone', danger: true }
+    ];
 
     const handleCleanupConfirm = async () => { setIsProcessing(true); try { const res = await runCleanup(); setNotification({ message: `Deleted ${res.deleted} empty tasks.` }); props.onTasksUpdated(); } catch (e: any) { setNotification({ message: e.message, isError: true }); } finally { setIsProcessing(false); setShowCleanupModal(false); } };
     const handleWipeConfirm = async () => { setIsProcessing(true); try { await clearAllTaskData(); setNotification({ message: "All data wiped successfully." }); props.onTasksUpdated(); } catch (e: any) { setNotification({ message: e.message, isError: true }); } finally { setIsProcessing(false); setShowWipeModal(false); } };
@@ -574,6 +781,7 @@ const SettingsTab: React.FC<{ testers: Tester[]; onRefreshTesters: () => void; o
                 {activeSubTab === 'mappings' && <MappingManager setNotification={setNotification} />}
                 {activeSubTab === 'columns' && <GroupOrderManager onTasksUpdated={props.onTasksUpdated} setNotification={setNotification} />}
                 {activeSubTab === 'ui' && <UISettingsPanel appSettings={props.appSettings} onSettingsUpdated={props.onSettingsUpdated} setNotification={setNotification} />}
+                {activeSubTab === 'qrcode' && <QRCodeManager />}
                 {activeSubTab === 'danger' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-8">
                         <div className="bg-white dark:bg-base-800 border border-base-200 dark:border-base-700 rounded-2xl p-6 shadow-sm flex flex-col items-center text-center">
