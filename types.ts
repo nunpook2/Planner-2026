@@ -155,6 +155,10 @@ export interface HighValueCheck {
     isPresent: boolean;
     status: 'normal' | 'abnormal';
     note?: string;
+    trackQuantity?: boolean;
+    initialQuantity?: number;
+    currentQuantity?: number;
+    isConsumable?: boolean;
 }
 
 export interface ShiftReport {
@@ -292,6 +296,9 @@ export interface HighValueAsset {
     cabinet: string;
     photo?: string; // base64 string
     isActive: boolean;
+    trackQuantity?: boolean;
+    initialQuantity?: number;
+    isConsumable?: boolean;
 }
 
 export interface AppSettings {

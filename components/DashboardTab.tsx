@@ -117,7 +117,11 @@ const ReportEditorModal: React.FC<{
                     isPresent: existing ? existing.isPresent : true,
                     status: existing ? existing.status : 'normal',
                     note: existing ? existing.note : '',
-                    checkedAt: existing ? existing.checkedAt : new Date().toISOString()
+                    checkedAt: existing ? existing.checkedAt : new Date().toISOString(),
+                    trackQuantity: asset.trackQuantity || false,
+                    initialQuantity: asset.initialQuantity || 1,
+                    currentQuantity: existing && existing.currentQuantity !== undefined ? existing.currentQuantity : (asset.initialQuantity || 1),
+                    isConsumable: asset.isConsumable || false
                 };
             });
             setHighValueChecks(initialChecks);
@@ -249,11 +253,13 @@ const ReportEditorModal: React.FC<{
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto pr-2 flex-1 max-h-[58vh] lg:max-h-[64vh] no-scrollbar">
                                     {highValueChecks.map((check, index) => {
                                         const asset = appSettings?.highValueAssets?.find(a => a.id === check.assetId);
+                                        const isQtyMismatched = check.trackQuantity && !check.isConsumable && (check.currentQuantity !== undefined ? check.currentQuantity : (check.initialQuantity || 1)) < (check.initialQuantity || 1);
+                                        const isCardAbnormal = !check.isPresent || check.status === 'abnormal' || isQtyMismatched;
                                         return (
                                             <div 
                                                 key={check.assetId} 
                                                 className={`p-5 rounded-[2rem] border-2 transition-all duration-300 space-y-4 flex flex-col justify-between shadow-sm ${
-                                                    !check.isPresent || check.status === 'abnormal'
+                                                    isCardAbnormal
                                                         ? 'bg-rose-50/40 dark:bg-rose-950/15 border-rose-200 dark:border-rose-900/40 shadow-md shadow-rose-500/5' 
                                                         : 'bg-white dark:bg-base-800 border-base-100 dark:border-base-700 hover:border-base-200 dark:hover:border-base-600'
                                                 }`}
@@ -279,52 +285,109 @@ const ReportEditorModal: React.FC<{
                                                         <h5 className="font-extrabold text-sm md:text-base text-base-900 dark:text-base-50 leading-snug mt-0.5 block break-words" title={check.assetName}>
                                                             {check.assetName}
                                                         </h5>
-                                                        <span className="inline-block bg-base-100 dark:bg-base-900 px-3 py-1 rounded-full text-xs text-base-500 dark:text-base-400 mt-2 font-bold border border-base-200/50 dark:border-base-750">
-                                                            📍 ตู้เก็บ: {check.cabinet}
-                                                        </span>
+                                                        <div className="flex flex-wrap gap-1.5 mt-2">
+                                                            <span className="inline-block bg-base-100 dark:bg-base-900 px-3 py-1 rounded-full text-xs text-base-500 dark:text-base-400 font-bold border border-base-200/50 dark:border-base-750">
+                                                                📍 ตู้เก็บ: {check.cabinet}
+                                                            </span>
+                                                            {check.trackQuantity && (
+                                                                <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                                                                    check.isConsumable 
+                                                                        ? 'bg-orange-50 dark:bg-orange-950/25 text-orange-600 dark:text-orange-400 border-orange-200/50 dark:border-orange-900/30' 
+                                                                        : 'bg-primary-50 dark:bg-primary-950/25 text-primary-600 dark:text-primary-400 border-primary-200/50 dark:border-primary-900/30'
+                                                                }`}>
+                                                                    {check.isConsumable ? '♻️ สิ้นเปลือง' : '⚖️ นับถ้วนหน้า'}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
 
                                                 <div className="space-y-3 pt-3 border-t-2 border-base-50 dark:border-base-750">
                                                     <div className="grid grid-cols-2 gap-3">
-                                                        {/* Storage presence state selector */}
-                                                        <div>
-                                                            <span className="text-[10px] font-black text-base-400 dark:text-base-500 uppercase tracking-widest block mb-1.5 text-center">
-                                                                สถานะจัดเก็บ
-                                                            </span>
-                                                            <div className="flex p-1 bg-base-50 dark:bg-base-900 rounded-xl border border-base-150 dark:border-base-700">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        const updated = [...highValueChecks];
-                                                                        updated[index].isPresent = true;
-                                                                        setHighValueChecks(updated);
-                                                                    }}
-                                                                    className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${
-                                                                        check.isPresent 
-                                                                            ? 'bg-emerald-600 text-white shadow-md' 
-                                                                            : 'text-base-400 hover:text-base-700 dark:hover:text-base-300'
-                                                                    }`}
-                                                                >
-                                                                    อยู่ครบ
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        const updated = [...highValueChecks];
-                                                                        updated[index].isPresent = false;
-                                                                        setHighValueChecks(updated);
-                                                                    }}
-                                                                    className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${
-                                                                        !check.isPresent 
-                                                                            ? 'bg-rose-600 text-white shadow-md' 
-                                                                            : 'text-base-400 hover:text-base-700 dark:hover:text-base-300'
-                                                                    }`}
-                                                                >
-                                                                    ไม่อยู่
-                                                                </button>
+                                                        {/* Storage presence state selector OR Quantity counter */}
+                                                        {check.trackQuantity ? (
+                                                            <div>
+                                                                <span className="text-[10px] font-black text-base-400 dark:text-base-500 uppercase tracking-widest block mb-1 text-center">
+                                                                    จำนวน (ตรวจนับ)
+                                                                </span>
+                                                                <div className="flex items-center justify-between p-1 bg-base-50 dark:bg-base-900 rounded-xl border border-base-150 dark:border-base-700 h-[38px]">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const updated = [...highValueChecks];
+                                                                            const current = updated[index].currentQuantity ?? updated[index].initialQuantity ?? 1;
+                                                                            const nextQty = Math.max(0, current - 1);
+                                                                            updated[index].currentQuantity = nextQty;
+                                                                            updated[index].isPresent = nextQty > 0;
+                                                                            setHighValueChecks(updated);
+                                                                        }}
+                                                                        className="w-8 h-8 flex items-center justify-center text-sm font-black text-base-500 hover:bg-base-200 dark:hover:bg-base-800 rounded-lg transition-all"
+                                                                    >
+                                                                        -
+                                                                    </button>
+                                                                    <div className="flex items-baseline justify-center gap-0.5 min-w-0 px-1">
+                                                                        <span className={`text-sm font-black ${isQtyMismatched ? 'text-rose-600 dark:text-rose-400 animate-pulse' : 'text-base-900 dark:text-white'}`}>
+                                                                            {check.currentQuantity ?? check.initialQuantity ?? 1}
+                                                                        </span>
+                                                                        <span className="text-[10px] text-base-400 font-bold">
+                                                                            /{check.initialQuantity ?? 1}
+                                                                        </span>
+                                                                    </div>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const updated = [...highValueChecks];
+                                                                            const current = updated[index].currentQuantity ?? updated[index].initialQuantity ?? 1;
+                                                                            const nextQty = current + 1;
+                                                                            updated[index].currentQuantity = nextQty;
+                                                                            updated[index].isPresent = nextQty > 0;
+                                                                            setHighValueChecks(updated);
+                                                                        }}
+                                                                        className="w-8 h-8 flex items-center justify-center text-sm font-black text-base-500 hover:bg-base-200 dark:hover:bg-base-800 rounded-lg transition-all"
+                                                                    >
+                                                                        +
+                                                                    </button>
+                                                                </div>
                                                             </div>
-                                                        </div>
+                                                        ) : (
+                                                            <div>
+                                                                <span className="text-[10px] font-black text-base-400 dark:text-base-500 uppercase tracking-widest block mb-1.5 text-center">
+                                                                    สถานะจัดเก็บ
+                                                                </span>
+                                                                <div className="flex p-1 bg-base-50 dark:bg-base-900 rounded-xl border border-base-150 dark:border-base-700">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const updated = [...highValueChecks];
+                                                                            updated[index].isPresent = true;
+                                                                            setHighValueChecks(updated);
+                                                                        }}
+                                                                        className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${
+                                                                            check.isPresent 
+                                                                                ? 'bg-emerald-600 text-white shadow-md' 
+                                                                                : 'text-base-400 hover:text-base-700 dark:hover:text-base-300'
+                                                                        }`}
+                                                                    >
+                                                                        อยู่ครบ
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const updated = [...highValueChecks];
+                                                                            updated[index].isPresent = false;
+                                                                            setHighValueChecks(updated);
+                                                                        }}
+                                                                        className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${
+                                                                            !check.isPresent 
+                                                                                ? 'bg-rose-600 text-white shadow-md' 
+                                                                                : 'text-base-400 hover:text-base-700 dark:hover:text-base-300'
+                                                                        }`}
+                                                                    >
+                                                                        ไม่อยู่
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        )}
 
                                                         {/* Physical status condition toggles */}
                                                         <div>
@@ -687,7 +750,10 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
                 display: 'รอการตรวจสอบ'
             };
         }
-        const hasIssue = checks.some(c => !c.isPresent || c.status === 'abnormal');
+        const hasIssue = checks.some(c => {
+            const isQtyMismatched = c.trackQuantity && !c.isConsumable && (c.currentQuantity !== undefined ? c.currentQuantity : (c.initialQuantity || 1)) < (c.initialQuantity || 1);
+            return !c.isPresent || c.status === 'abnormal' || isQtyMismatched;
+        });
         if (hasIssue) {
             return {
                 bg: 'bg-red-50 dark:bg-red-950/20 border-2 border-red-200 dark:border-red-900/30 text-red-900 dark:text-red-300 animate-pulse',

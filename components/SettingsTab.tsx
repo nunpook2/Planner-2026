@@ -813,7 +813,13 @@ const HighValueAssetsManager: React.FC<{
         try {
             let updatedAssets = [...assets];
             if (editingAsset.id) {
-                updatedAssets = updatedAssets.map(a => a.id === editingAsset.id ? { ...a, ...editingAsset } as HighValueAsset : a);
+                updatedAssets = updatedAssets.map(a => a.id === editingAsset.id ? { 
+                    ...a, 
+                    ...editingAsset,
+                    trackQuantity: editingAsset.trackQuantity ?? false,
+                    initialQuantity: editingAsset.initialQuantity ?? 1,
+                    isConsumable: editingAsset.isConsumable ?? false
+                } as HighValueAsset : a);
             } else {
                 const newAsset: HighValueAsset = {
                     id: 'hva_' + Date.now(),
@@ -821,7 +827,10 @@ const HighValueAssetsManager: React.FC<{
                     code: editingAsset.code,
                     cabinet: editingAsset.cabinet || 'ตู้เก็บหลัก',
                     photo: editingAsset.photo || '',
-                    isActive: editingAsset.isActive !== false
+                    isActive: editingAsset.isActive !== false,
+                    trackQuantity: editingAsset.trackQuantity ?? false,
+                    initialQuantity: editingAsset.initialQuantity ?? 1,
+                    isConsumable: editingAsset.isConsumable ?? false
                 };
                 updatedAssets.push(newAsset);
             }
@@ -1017,6 +1026,66 @@ const HighValueAssetsManager: React.FC<{
                                 </div>
                             </div>
 
+                            {/* Quantity Tracking Options */}
+                            <div className="bg-base-50 dark:bg-base-900/50 p-4 rounded-2xl border border-base-200 dark:border-base-700 space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="trackQuantity"
+                                        checked={editingAsset?.trackQuantity || false}
+                                        onChange={e => setEditingAsset(prev => ({ 
+                                            ...prev, 
+                                            trackQuantity: e.target.checked,
+                                            // Pre-fill initial values if checked
+                                            initialQuantity: prev?.initialQuantity || 1,
+                                            isConsumable: prev?.isConsumable || false
+                                        }))}
+                                        className="w-4 h-4 text-primary-600 rounded border-base-300 focus:ring-primary-500"
+                                    />
+                                    <label htmlFor="trackQuantity" className="text-sm font-bold text-base-800 dark:text-base-200 flex items-center gap-1.5 cursor-pointer">
+                                        เปิดใช้งานการนับจำนวน (Track Quantity)
+                                    </label>
+                                </div>
+
+                                {editingAsset?.trackQuantity && (
+                                    <div className="pl-6 space-y-3 pt-1 border-l-2 border-primary-500/30 animate-fade-in">
+                                        <div>
+                                            <label className="text-xs font-bold text-base-500 uppercase tracking-wider block mb-1">จำนวนเริ่มต้นที่มีอยู่จริง (Original/Baseline Qty)</label>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    required
+                                                    value={editingAsset?.initialQuantity || 1}
+                                                    onChange={e => setEditingAsset(prev => ({ ...prev, initialQuantity: Math.max(1, parseInt(e.target.value) || 1) }))}
+                                                    className="w-32 p-2 bg-white dark:bg-base-900 border border-base-200 dark:border-base-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none transition-all dark:text-white text-sm font-bold"
+                                                    placeholder="1"
+                                                />
+                                                <span className="text-xs text-base-400">ชิ้น/อัน</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-start gap-2 pt-1">
+                                            <input
+                                                type="checkbox"
+                                                id="isConsumable"
+                                                checked={editingAsset?.isConsumable || false}
+                                                onChange={e => setEditingAsset(prev => ({ ...prev, isConsumable: e.target.checked }))}
+                                                className="w-4 h-4 mt-0.5 text-primary-600 rounded border-base-300 focus:ring-primary-500"
+                                            />
+                                            <div className="flex flex-col">
+                                                <label htmlFor="isConsumable" className="text-xs font-bold text-base-800 dark:text-base-200 cursor-pointer">
+                                                    เป็นของใช้สิ้นเปลือง (Consumable)
+                                                </label>
+                                                <p className="text-[11px] text-base-400 mt-0.5 leading-relaxed">
+                                                    หากติ๊กไว้: จำนวนที่ลดลงหรือหายไปจะ **ไม่ถือว่าผิดปกติ** (จะไม่เตือนตัวแดง) เหมาะสำหรับถุงมือ เข็มฉีดยา ฟิลเตอร์ เป็นต้น
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="flex items-center gap-2 pt-2">
                                 <input
                                     type="checkbox"
@@ -1083,6 +1152,20 @@ const HighValueAssetsManager: React.FC<{
                                     <span className="font-bold">ตู้จัดเก็บ:</span>
                                     <span className="font-medium text-base-700 dark:text-base-300">{asset.cabinet}</span>
                                 </div>
+                                {asset.trackQuantity && (
+                                    <div className="flex items-center gap-1.5 text-xs text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-950/20 px-3 py-1.5 rounded-xl border border-primary-100 dark:border-primary-900/30 w-fit mt-1.5">
+                                        <span className="font-bold">จำนวน: {asset.initialQuantity} ชิ้น</span>
+                                        {asset.isConsumable ? (
+                                            <span className="text-[10px] font-black bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                                                ของใช้สิ้นเปลือง
+                                            </span>
+                                        ) : (
+                                            <span className="text-[10px] font-black bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                                                ตรวจสอบถ้วนหน้า
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="flex justify-between items-center mt-6 pt-4 border-t border-base-100 dark:border-base-700">
