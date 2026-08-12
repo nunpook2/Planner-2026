@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { GoogleGenAI, Modality } from "@google/genai";
-import type { Tester, AssignedTask, RawTask, ShiftReport, DailySchedule, AssignedPrepareTask, CategorizedTask } from '../types';
+import type { Tester, AssignedTask, RawTask, ShiftReport, DailySchedule, AssignedPrepareTask, CategorizedTask, AppSettings, HighValueCheck } from '../types';
 import { TaskStatus, TaskCategory } from '../types';
 import { 
     getAssignedTasks, getShiftReport, saveShiftReport, getDailySchedule, getAssignedPrepareTasks, getCategorizedTasks,
@@ -57,6 +57,7 @@ interface DashboardTabProps {
     onDateChange: (date: string) => void;
     selectedShift: 'day' | 'night';
     onShiftChange: (shift: 'day' | 'night') => void;
+    appSettings?: AppSettings | null;
 }
 
 const getTaskValue = (task: RawTask, header: string): string | number => {
@@ -91,49 +92,323 @@ const ReportEditorModal: React.FC<{
     onSave: (report: ShiftReport) => void;
     date: string;
     shift: 'day' | 'night';
-}> = ({ isOpen, onClose, report, onSave, date, shift }) => {
+    appSettings: AppSettings | null;
+}> = ({ isOpen, onClose, report, onSave, date, shift, appSettings }) => {
     const [wasteLevel, setWasteLevel] = useState<'low' | 'medium' | 'high'>('low');
     const [note, setNote] = useState('');
-    useEffect(() => { if (isOpen) { setWasteLevel(report?.wasteLevel || 'low'); setNote(report?.infrastructureNote || ''); } }, [isOpen, report]);
+    const [highValueChecks, setHighValueChecks] = useState<HighValueCheck[]>([]);
+
+    useEffect(() => {
+        if (isOpen) {
+            setWasteLevel(report?.wasteLevel || 'low');
+            setNote(report?.infrastructureNote || '');
+            
+            // Prepare initial highValueChecks
+            const activeAssets = appSettings?.highValueAssets?.filter(a => a.isActive) || [];
+            const existingChecks = report?.highValueChecks || [];
+            
+            const initialChecks = activeAssets.map(asset => {
+                const existing = existingChecks.find(c => c.assetId === asset.id);
+                return {
+                    assetId: asset.id,
+                    assetName: asset.name,
+                    assetCode: asset.code,
+                    cabinet: asset.cabinet,
+                    isPresent: existing ? existing.isPresent : true,
+                    status: existing ? existing.status : 'normal',
+                    note: existing ? existing.note : '',
+                    checkedAt: existing ? existing.checkedAt : new Date().toISOString()
+                };
+            });
+            setHighValueChecks(initialChecks);
+        }
+    }, [isOpen, report, appSettings]);
+
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-base-900/90 backdrop-blur-xl flex items-center justify-center z-[110] animate-fade-in p-4" onClick={onClose}>
-            <div className="bg-white dark:bg-base-900 rounded-[3rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col border border-white/20" onClick={e => e.stopPropagation()}>
-                <div className="p-8 border-b border-base-100 dark:border-base-800 flex justify-between items-center">
-                    <div>
-                        <h3 className="text-2xl font-black tracking-tighter text-base-955 dark:text-white">Lab Waste Status</h3>
-                        <p className="text-[10px] font-bold text-base-400 uppercase tracking-widest mt-1">{date} | {shift.toUpperCase()} SHIFT</p>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-base-200 dark:hover:bg-base-700 rounded-full transition-colors"><XCircleIcon className="h-6 w-6 text-base-400"/></button>
-                </div>
-                <div className="p-8 space-y-10">
-                    <div className="space-y-6">
-                        <div className="flex flex-col items-center gap-2 mb-4">
-                             <TrashIcon className="h-8 w-8 text-primary-500 mb-2" />
-                             <h4 className="text-xs font-black uppercase tracking-[0.4em] text-base-400">Select Current Level</h4>
-                        </div>
-                        <div className="grid grid-cols-1 gap-4">
-                            {(['low', 'medium', 'high'] as const).map(lv => (
-                                <button key={lv} onClick={() => setWasteLevel(lv)} className={`relative group px-8 py-6 rounded-[2rem] border-2 transition-all duration-500 text-left flex items-center justify-between ${wasteLevel === lv ? lv === 'low' ? 'bg-emerald-600 border-emerald-400 text-white shadow-[0_20px_40px_-10px_rgba(16,185,129,0.5)] scale-[1.02]' : lv === 'medium' ? 'bg-amber-500 border-amber-300 text-white shadow-[0_20px_40px_-10px_rgba(245,158,11,0.5)] scale-[1.02]' : 'bg-red-600 border-red-400 text-white shadow-[0_20px_40px_-10px_rgba(220,38,38,0.5)] scale-[1.02]' : 'bg-base-50 dark:bg-base-800 border-base-100 dark:border-base-700 text-base-400 hover:border-base-300 hover:bg-white'}`}>
-                                    <div className="flex flex-col"><span className={`text-[10px] font-black uppercase tracking-widest mb-1 ${wasteLevel === lv ? 'text-white/60' : 'text-base-400'}`}>Level Status</span><span className="text-2xl font-black uppercase tracking-tighter">{lv === 'low' ? 'Low / Safe' : lv === 'medium' ? 'Medium / Full' : 'High / Overflow'}</span></div>
-                                    <div className={`w-8 h-8 rounded-full border-4 flex items-center justify-center transition-all ${wasteLevel === lv ? 'bg-white border-white/20' : 'border-base-200 bg-transparent'}`}>{wasteLevel === lv && <CheckCircleIcon className={`h-5 w-5 ${lv === 'low' ? 'text-emerald-600' : lv === 'medium' ? 'text-amber-500' : 'text-red-600'}`} />}</div>
-                                </button>
-                            ))}
+        <div className="fixed inset-0 bg-base-900/90 backdrop-blur-xl flex items-center justify-center z-[110] animate-fade-in p-2 md:p-4" onClick={onClose}>
+            <div className="bg-white dark:bg-base-900 rounded-[2.5rem] shadow-2xl w-full max-w-[96vw] lg:max-w-7xl h-[95vh] lg:h-[92vh] overflow-hidden flex flex-col border border-white/20 transition-all duration-300" onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="px-8 py-6 border-b border-base-100 dark:border-base-800 flex justify-between items-center bg-base-50/50 dark:bg-base-950/40 shrink-0">
+                    <div className="flex items-center gap-4">
+                        <span className="p-3 bg-primary-50 dark:bg-primary-950/30 text-primary-600 rounded-2xl">
+                            <BeakerIcon className="h-7 w-7" />
+                        </span>
+                        <div>
+                            <h3 className="text-2xl md:text-3xl font-black tracking-tighter text-base-955 dark:text-white">Lab Shift Handover & Verification</h3>
+                            <p className="text-xs font-bold text-base-400 uppercase tracking-widest mt-1">
+                                {date} <span className="mx-2 text-base-200">|</span> <span className="text-primary-600">{shift.toUpperCase()} SHIFT</span>
+                            </p>
                         </div>
                     </div>
-                    <div className="space-y-3"><h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-base-400 ml-4">Operational Notes</h4><textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Add mission-critical notes about waste or environment..." rows={3} className="w-full p-6 bg-base-50 dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-[2rem] text-sm font-bold focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none dark:text-white resize-none transition-all"/></div>
+                    <button onClick={onClose} className="p-2 hover:bg-base-200 dark:hover:bg-base-700 rounded-full transition-colors">
+                        <XCircleIcon className="h-8 w-8 text-base-400"/>
+                    </button>
                 </div>
-                <div className="p-8 border-t border-base-100 dark:border-base-800 flex flex-col gap-3">
-                    <button onClick={() => onSave({ id: `${date}_${shift}`, date, shift, instruments: [], wasteLevel, cleanliness: 'good', infrastructureNote: note, cleanlinessNote: '' })} className="w-full py-5 bg-primary-600 text-white font-black rounded-[1.5rem] shadow-xl hover:brightness-110 transition-all uppercase tracking-[0.2em] text-[12px] border-b-4 border-primary-800">Commit Lab Report</button>
-                    <button onClick={onClose} className="w-full py-3 text-[10px] font-black text-base-400 hover:text-base-800 uppercase tracking-widest transition-colors">Discard Changes</button>
+                
+                {/* Scrollable Content Body */}
+                <div className="p-6 md:p-8 overflow-y-auto flex-1 no-scrollbar">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start h-full">
+                        
+                        {/* LEFT COLUMN: Zone 1 (Waste) & Zone 3 (Notes) */}
+                        <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-0">
+                            
+                            {/* Zone 1: Lab Waste Status */}
+                            <div className="bg-base-50/30 dark:bg-base-950/20 p-6 rounded-[2rem] border border-base-100 dark:border-base-800 space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <span className="p-2 bg-rose-50 dark:bg-rose-950/30 text-rose-600 rounded-xl">
+                                        <TrashIcon className="h-5 w-5" />
+                                    </span>
+                                    <div>
+                                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-base-400">Zone 1: Lab Waste Status</h4>
+                                        <p className="text-[11px] text-base-400 mt-0.5">ระบุปริมาณขยะเคมีและขยะชีวภาพประจำกะ</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 gap-3">
+                                    {(['low', 'medium', 'high'] as const).map(lv => (
+                                        <button 
+                                            key={lv} 
+                                            onClick={() => setWasteLevel(lv)} 
+                                            className={`relative group px-6 py-4 rounded-2xl border-2 transition-all duration-300 text-left flex items-center justify-between ${
+                                                wasteLevel === lv 
+                                                    ? lv === 'low' 
+                                                        ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg shadow-emerald-500/10' 
+                                                        : lv === 'medium' 
+                                                            ? 'bg-amber-500 border-amber-300 text-white shadow-lg shadow-amber-500/10' 
+                                                            : 'bg-red-600 border-red-400 text-white shadow-lg shadow-red-500/10' 
+                                                    : 'bg-white dark:bg-base-800 border-base-100 dark:border-base-700 text-base-500 hover:border-base-300 hover:bg-base-50/50'
+                                            }`}
+                                        >
+                                            <div className="flex flex-col">
+                                                <span className={`text-[9px] font-black uppercase tracking-widest ${wasteLevel === lv ? 'text-white/60' : 'text-base-400'}`}>
+                                                    Level Status
+                                                </span>
+                                                <span className="text-lg font-black uppercase tracking-tight mt-0.5">
+                                                    {lv === 'low' ? 'Low / Safe' : lv === 'medium' ? 'Medium / Full' : 'High / Overflow'}
+                                                </span>
+                                            </div>
+                                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                                                wasteLevel === lv ? 'bg-white border-transparent' : 'border-base-200 bg-transparent'
+                                            }`}>
+                                                {wasteLevel === lv && (
+                                                    <CheckCircleIcon className={`h-4 w-4 ${
+                                                        lv === 'low' ? 'text-emerald-600' : lv === 'medium' ? 'text-amber-500' : 'text-red-600'
+                                                    }`} />
+                                                )}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Zone 3: Operational Notes */}
+                            <div className="bg-base-50/30 dark:bg-base-950/20 p-6 rounded-[2rem] border border-base-100 dark:border-base-800 space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <span className="p-2 bg-cyan-50 dark:bg-cyan-950/30 text-cyan-600 rounded-xl">
+                                        <ChatAlt2Icon className="h-5 w-5" />
+                                    </span>
+                                    <div>
+                                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-base-400">Zone 3: Handover Notes</h4>
+                                        <p className="text-[11px] text-base-400 mt-0.5">บันทึกเหตุการณ์สำคัญ ข้อควรระวัง หรือสิ่งที่ต้องฝากกะถัดไป</p>
+                                    </div>
+                                </div>
+                                
+                                <textarea 
+                                    value={note} 
+                                    onChange={e => setNote(e.target.value)} 
+                                    placeholder="เขียนบันทึกส่งมอบกะ เช่น ปัญหาเครื่องมือขัดข้อง สารเคมีหมด หรือแจ้งเตือนความสะอาดพิเศษ..." 
+                                    rows={4} 
+                                    className="w-full p-4 bg-white dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-[1.5rem] text-sm font-bold focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none dark:text-white resize-none transition-all placeholder:text-base-400"
+                                />
+                            </div>
+                        </div>
+                        
+                        {/* RIGHT COLUMN: Zone 2 (High Value Assets list in dual column grid) */}
+                        <div className="lg:col-span-8 space-y-6 lg:border-l lg:border-base-100 lg:dark:border-base-800 lg:pl-8 flex flex-col h-full min-h-[50vh]">
+                            <div className="flex items-center justify-between shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <span className="p-3 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-2xl">
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                        </svg>
+                                    </span>
+                                    <div>
+                                        <h4 className="text-base font-black uppercase tracking-[0.2em] text-base-955 dark:text-white">Zone 2: อุปกรณ์มูลค่าสูง ({highValueChecks.length} รายการ)</h4>
+                                        <p className="text-xs text-base-400 mt-0.5">ตรวจนับสิ่งของและตรวจสอบสภาพอุปกรณ์ในตู้พิเศษเพื่อความถูกต้องครบถ้วน</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {highValueChecks.length === 0 ? (
+                                <div className="p-12 text-center bg-base-50/50 dark:bg-base-800 rounded-[2rem] border-2 border-dashed border-base-100 dark:border-base-700 flex-1 flex flex-col items-center justify-center">
+                                    <p className="text-base font-bold text-base-400">ยังไม่มีการตั้งค่าอุปกรณ์มูลค่าสูงในเมนูตั้งค่าระบบ</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto pr-2 flex-1 max-h-[58vh] lg:max-h-[64vh] no-scrollbar">
+                                    {highValueChecks.map((check, index) => {
+                                        const asset = appSettings?.highValueAssets?.find(a => a.id === check.assetId);
+                                        return (
+                                            <div 
+                                                key={check.assetId} 
+                                                className={`p-5 rounded-[2rem] border-2 transition-all duration-300 space-y-4 flex flex-col justify-between shadow-sm ${
+                                                    !check.isPresent || check.status === 'abnormal'
+                                                        ? 'bg-rose-50/40 dark:bg-rose-950/15 border-rose-200 dark:border-rose-900/40 shadow-md shadow-rose-500/5' 
+                                                        : 'bg-white dark:bg-base-800 border-base-100 dark:border-base-700 hover:border-base-200 dark:hover:border-base-600'
+                                                }`}
+                                            >
+                                                <div className="flex items-start gap-4">
+                                                    {asset?.photo ? (
+                                                        <img 
+                                                            src={asset.photo} 
+                                                            alt={check.assetName} 
+                                                            className="w-24 h-24 rounded-2xl object-cover border-2 border-base-100 dark:border-base-700 shrink-0 shadow-md" 
+                                                            referrerPolicy="no-referrer" 
+                                                        />
+                                                    ) : (
+                                                        <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-950/20 dark:to-indigo-950/45 text-indigo-600 dark:text-indigo-400 flex flex-col items-center justify-center font-black shrink-0 border border-indigo-150 dark:border-indigo-900/40">
+                                                            <span className="text-lg tracking-wider">{check.assetCode}</span>
+                                                            <span className="text-[9px] text-indigo-400 uppercase tracking-widest mt-1">NO IMAGE</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="min-w-0 flex-grow">
+                                                        <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 block uppercase tracking-widest">
+                                                            {check.assetCode}
+                                                        </span>
+                                                        <h5 className="font-extrabold text-sm md:text-base text-base-900 dark:text-base-50 leading-snug mt-0.5 block break-words" title={check.assetName}>
+                                                            {check.assetName}
+                                                        </h5>
+                                                        <span className="inline-block bg-base-100 dark:bg-base-900 px-3 py-1 rounded-full text-xs text-base-500 dark:text-base-400 mt-2 font-bold border border-base-200/50 dark:border-base-750">
+                                                            📍 ตู้เก็บ: {check.cabinet}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-3 pt-3 border-t-2 border-base-50 dark:border-base-750">
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        {/* Storage presence state selector */}
+                                                        <div>
+                                                            <span className="text-[10px] font-black text-base-400 dark:text-base-500 uppercase tracking-widest block mb-1.5 text-center">
+                                                                สถานะจัดเก็บ
+                                                            </span>
+                                                            <div className="flex p-1 bg-base-50 dark:bg-base-900 rounded-xl border border-base-150 dark:border-base-700">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const updated = [...highValueChecks];
+                                                                        updated[index].isPresent = true;
+                                                                        setHighValueChecks(updated);
+                                                                    }}
+                                                                    className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${
+                                                                        check.isPresent 
+                                                                            ? 'bg-emerald-600 text-white shadow-md' 
+                                                                            : 'text-base-400 hover:text-base-700 dark:hover:text-base-300'
+                                                                    }`}
+                                                                >
+                                                                    อยู่ครบ
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const updated = [...highValueChecks];
+                                                                        updated[index].isPresent = false;
+                                                                        setHighValueChecks(updated);
+                                                                    }}
+                                                                    className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${
+                                                                        !check.isPresent 
+                                                                            ? 'bg-rose-600 text-white shadow-md' 
+                                                                            : 'text-base-400 hover:text-base-700 dark:hover:text-base-300'
+                                                                    }`}
+                                                                >
+                                                                    ไม่อยู่
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Physical status condition toggles */}
+                                                        <div>
+                                                            <span className="text-[10px] font-black text-base-400 dark:text-base-500 uppercase tracking-widest block mb-1.5 text-center">
+                                                                สภาพอุปกรณ์
+                                                            </span>
+                                                            <div className="flex p-1 bg-base-50 dark:bg-base-900 rounded-xl border border-base-150 dark:border-base-700">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const updated = [...highValueChecks];
+                                                                        updated[index].status = 'normal';
+                                                                        setHighValueChecks(updated);
+                                                                    }}
+                                                                    className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${
+                                                                        check.status === 'normal' 
+                                                                            ? 'bg-emerald-600 text-white shadow-md' 
+                                                                            : 'text-base-400 hover:text-base-700 dark:hover:text-base-300'
+                                                                    }`}
+                                                                >
+                                                                    ปกติ
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const updated = [...highValueChecks];
+                                                                        updated[index].status = 'abnormal';
+                                                                        setHighValueChecks(updated);
+                                                                    }}
+                                                                    className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${
+                                                                        check.status === 'abnormal' 
+                                                                            ? 'bg-amber-500 text-white shadow-md' 
+                                                                            : 'text-base-400 hover:text-base-700 dark:hover:text-base-300'
+                                                                    }`}
+                                                                >
+                                                                    ชำรุด
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <input
+                                                        type="text"
+                                                        value={check.note}
+                                                        onChange={e => {
+                                                            const updated = [...highValueChecks];
+                                                            updated[index].note = e.target.value;
+                                                            setHighValueChecks(updated);
+                                                        }}
+                                                        placeholder="ระบุโน้ต/สาเหตุเพิ่มเติม..."
+                                                        className="w-full p-3 bg-base-50 dark:bg-base-900 border border-base-100 dark:border-base-700 rounded-xl text-xs font-bold outline-none text-base-700 dark:text-base-200 placeholder:text-base-400 focus:border-indigo-400 dark:focus:border-indigo-900"
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                    </div>
+                </div>
+                
+                {/* Footer Buttons */}
+                <div className="p-8 border-t border-base-100 dark:border-base-800 bg-base-50/35 dark:bg-base-950/20 flex flex-col sm:flex-row gap-4 items-center justify-end shrink-0">
+                    <button 
+                        onClick={onClose} 
+                        className="w-full sm:w-auto px-8 py-3.5 text-xs font-black text-base-400 hover:text-base-800 dark:hover:text-base-200 uppercase tracking-widest transition-colors order-2 sm:order-1"
+                    >
+                        Discard Changes
+                    </button>
+                    <button 
+                        onClick={() => onSave({ id: `${date}_${shift}`, date, shift, instruments: [], wasteLevel, cleanliness: 'good', infrastructureNote: note, cleanlinessNote: '', highValueChecks })} 
+                        className="w-full sm:w-auto px-10 py-4 bg-primary-600 text-white font-black rounded-2xl shadow-xl shadow-primary-500/10 hover:brightness-110 transition-all uppercase tracking-[0.2em] text-[12px] border-b-4 border-primary-800 order-1 sm:order-2"
+                    >
+                        Commit Lab Report
+                    </button>
                 </div>
             </div>
         </div>
     );
 };
 
-const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDateChange, selectedShift, onShiftChange }) => {
+const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDateChange, selectedShift, onShiftChange, appSettings }) => {
     const [assignedTasks, setAssignedTasks] = useState<AssignedTask[]>([]);
     const [prepareTasks, setPrepareTasks] = useState<AssignedPrepareTask[]>([]);
     const [returnedPool, setReturnedPool] = useState<CategorizedTask[]>([]);
@@ -403,6 +678,30 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
         }
     }, [shiftReport]);
 
+    const highValueStatusTheme = useMemo(() => {
+        const checks = shiftReport?.highValueChecks || [];
+        if (!shiftReport || checks.length === 0) {
+            return {
+                bg: 'bg-white dark:bg-base-800 border border-base-100 dark:border-base-700 text-base-400 dark:text-base-500 hover:bg-base-50',
+                text: 'text-base-400 dark:text-base-500',
+                display: 'รอการตรวจสอบ'
+            };
+        }
+        const hasIssue = checks.some(c => !c.isPresent || c.status === 'abnormal');
+        if (hasIssue) {
+            return {
+                bg: 'bg-red-50 dark:bg-red-950/20 border-2 border-red-200 dark:border-red-900/30 text-red-900 dark:text-red-300 animate-pulse',
+                text: 'text-red-600 dark:text-red-400',
+                display: 'พบสิ่งผิดปกติ!'
+            };
+        }
+        return {
+            bg: 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 border border-transparent',
+            text: 'text-white',
+            display: 'ปกติ / ปลอดภัย'
+        };
+    }, [shiftReport]);
+
     const renderPersonnelBoardCard = (person: PersonStats) => {
         const missions = Object.entries(person.summary);
         if (missions.length === 0) return null;
@@ -512,7 +811,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
                 .waste-pulse-active { animation: waste-pulse 2s ease-in-out infinite; }
             `}</style>
 
-            <ReportEditorModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} report={shiftReport} onSave={handleSaveReport} date={selectedDate} shift={selectedShift} />
+            <ReportEditorModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} report={shiftReport} onSave={handleSaveReport} date={selectedDate} shift={selectedShift} appSettings={appSettings || null} />
             {aiSummary && (
                 <div className="fixed inset-0 bg-base-900/80 backdrop-blur-md flex items-center justify-center z-[120] p-4 animate-fade-in" onClick={() => setAiSummary(null)}>
                     <div className="bg-white dark:bg-base-900 rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col border border-white/20 max-h-[80vh]" onClick={e => e.stopPropagation()}>
@@ -564,13 +863,48 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
                                 </button>
                             </div>
                         </div>
-                        <div className="grid grid-cols-6 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-9 gap-4">
                             <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center"><span className="text-[10px] font-black text-primary-600 uppercase tracking-widest mb-1">Global Success</span><div className="flex items-baseline gap-2"><span className="text-2xl font-black text-base-955 dark:text-white">{globalStats.percent}%</span><span className="text-[11px] font-bold text-base-400">({globalStats.done}/{globalStats.total})</span></div></div>
                             <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center"><span className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-1">Po Cat Units</span><div className="flex items-baseline gap-2"><span className="text-2xl font-black text-base-955 dark:text-white">{globalStats.poCat}</span></div></div>
                             <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center"><span className="text-[10px] font-black text-cyan-600 uppercase tracking-widest mb-1">LSP Units</span><div className="flex items-baseline gap-2"><span className="text-2xl font-black text-base-955 dark:text-white">{globalStats.lsp}</span></div></div>
                             <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center"><span className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-1">Sprint Units</span><div className="flex items-baseline gap-2"><span className="text-2xl font-black text-base-955 dark:text-white">{globalStats.sprint}</span></div></div>
                             <div className="bg-white dark:bg-base-800 rounded-2xl p-4 border border-base-100 dark:border-base-700 shadow-sm flex flex-col justify-center"><span className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Urgent Units</span><div className="flex items-baseline gap-2"><span className="text-2xl font-black text-red-600">{globalStats.urgent}</span></div></div>
-                            <button onClick={() => setIsReportModalOpen(true)} className={`rounded-2xl p-4 shadow-xl border-2 transition-all flex flex-col justify-center ${wasteTheme.bg} border-transparent ${shiftReport?.wasteLevel === 'high' ? 'waste-pulse-active' : ''}`}><span className={`text-[10px] font-black uppercase tracking-widest mb-1 ${wasteTheme.text} opacity-80`}>Waste Status</span><span className={`text-2xl font-black ${wasteTheme.text}`}>{wasteTheme.display}</span></button>
+                            
+                            {/* Waste Status Button: Spans 2 cols on desktop, very spacious and clean */}
+                            <button 
+                                onClick={() => setIsReportModalOpen(true)} 
+                                className={`col-span-1 xl:col-span-2 rounded-2xl p-5 shadow-xl border-2 transition-all flex flex-col justify-between text-left ${wasteTheme.bg} border-transparent active:scale-[0.98] hover:scale-[1.02] duration-200 min-h-[90px] relative overflow-hidden group ${shiftReport?.wasteLevel === 'high' ? 'waste-pulse-active' : ''}`}
+                            >
+                                <div className="flex items-center justify-between w-full">
+                                    <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${wasteTheme.text} opacity-90`}>
+                                        Waste Status
+                                    </span>
+                                    <TrashIcon className={`h-5 w-5 ${wasteTheme.text} opacity-80 group-hover:scale-110 transition-transform`} />
+                                </div>
+                                <div className="mt-2">
+                                    <span className={`text-2xl lg:text-3xl font-black tracking-tight ${wasteTheme.text}`}>
+                                        {wasteTheme.display}
+                                    </span>
+                                </div>
+                            </button>
+
+                            {/* Storage Status Button: Spans 2 cols on desktop, very spacious and clean */}
+                            <button 
+                                onClick={() => setIsReportModalOpen(true)} 
+                                className={`col-span-1 xl:col-span-2 rounded-2xl p-5 shadow-xl border-2 transition-all flex flex-col justify-between text-left ${highValueStatusTheme.bg} border-transparent active:scale-[0.98] hover:scale-[1.02] duration-200 min-h-[90px] relative overflow-hidden group`}
+                            >
+                                <div className="flex items-center justify-between w-full">
+                                    <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${highValueStatusTheme.text} opacity-90`}>
+                                        ตู้จัดเก็บพิเศษ
+                                    </span>
+                                    <CheckCircleIcon className={`h-5 w-5 ${highValueStatusTheme.text} opacity-80 group-hover:scale-110 transition-transform`} />
+                                </div>
+                                <div className="mt-2">
+                                    <span className={`text-lg lg:text-xl font-black tracking-tight ${highValueStatusTheme.text} block truncate`}>
+                                        {highValueStatusTheme.display}
+                                    </span>
+                                </div>
+                            </button>
                         </div>
                     </div>
                     <div className="flex-grow overflow-y-auto no-scrollbar p-8">

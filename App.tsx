@@ -221,6 +221,7 @@ const App: React.FC = () => {
                     onDateChange={setGlobalSelectedDate}
                     selectedShift={globalSelectedShift}
                     onShiftChange={setGlobalSelectedShift}
+                    appSettings={appSettings}
                 />
             );
             case 'proficiency': return <ProficiencyTab testers={testers} />;
@@ -243,7 +244,7 @@ const App: React.FC = () => {
                 />
             );
             case 'walkthrough': return <WalkthroughTab testers={testers} onWalkthroughsUpdated={triggerTaskRefresh} />;
-            case 'settings': return <SettingsTab testers={testers} onRefreshTesters={fetchCoreData} onTasksUpdated={triggerTaskRefresh} appSettings={appSettings} onSettingsUpdated={fetchCoreData} />;
+            case 'settings': return <SettingsTab testers={testers} onRefreshTesters={() => fetchCoreData(true)} onTasksUpdated={triggerTaskRefresh} appSettings={appSettings} onSettingsUpdated={() => fetchCoreData(true)} />;
             default: return <ImportTab onTasksUpdated={triggerTaskRefresh} />;
         }
     };

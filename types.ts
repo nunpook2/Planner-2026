@@ -148,11 +148,21 @@ export interface TestMapping {
     order?: number;
 }
 
+export interface HighValueCheck {
+    assetId: string;
+    assetName: string;
+    assetCode: string;
+    isPresent: boolean;
+    status: 'normal' | 'abnormal';
+    note?: string;
+}
+
 export interface ShiftReport {
     id: string; 
     date: string;
     shift: 'day' | 'night';
     instruments: { name: string; status: 'normal' | 'abnormal' }[];
+    highValueChecks?: HighValueCheck[];
     infrastructureNote?: string; 
     wasteLevel: 'low' | 'medium' | 'high';
     cleanliness: 'good' | 'bad';
@@ -275,8 +285,18 @@ export interface SupportRequest {
 }
 
 // --- App Settings ---
+export interface HighValueAsset {
+    id: string;
+    name: string;
+    code: string;
+    cabinet: string;
+    photo?: string; // base64 string
+    isActive: boolean;
+}
+
 export interface AppSettings {
     tabLabels?: Record<string, string>;
+    highValueAssets?: HighValueAsset[];
 }
 
 // --- Method Walkthrough System ---

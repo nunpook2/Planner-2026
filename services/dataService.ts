@@ -775,11 +775,32 @@ export const deleteSupportRequest = async (id: string): Promise<void> => {
     await getCollection('supportRequests').doc(id).delete();
 };
 
+const DEFAULT_HIGH_VALUE_ASSETS = [
+    { id: 'hva_1', name: 'HPLC - เครื่องโครมาโทกราฟีของเหลวประสิทธิภาพสูง', code: 'HPLC-01', cabinet: 'ตู้ควบคุมอุณหภูมิ A1', isActive: true },
+    { id: 'hva_2', name: 'GC-MS - เครื่องแก๊สโครมาโทกราฟี-แมสสเปกโทรมิเตอร์', code: 'GCMS-02', cabinet: 'ตู้ควบคุมความดัน B3', isActive: true },
+    { id: 'hva_3', name: 'ICP-OES - เครื่องวิเคราะห์โลหะหนักความละเอียดสูง', code: 'ICP-03', cabinet: 'ห้องเครื่องมือพิเศษ', isActive: true },
+    { id: 'hva_4', name: 'FTIR Spectrometer - เครื่องอินฟราเรดสเปกโทรมิเตอร์', code: 'FTIR-04', cabinet: 'ตู้ดูดความชื้น C2', isActive: true },
+    { id: 'hva_5', name: 'Analytical Balance 4-Decimal - เครื่องชั่งวิเคราะห์ 4 ตำแหน่ง', code: 'BAL-05', cabinet: 'ตู้กันสั่นสะเทือน D1', isActive: true },
+    { id: 'hva_6', name: 'Portable Density Meter - เครื่องวัดความหนาแน่นพกพาสูง', code: 'PDM-06', cabinet: 'ตู้เซฟเก็บอุปกรณ์รหัส E5', isActive: true },
+    { id: 'hva_7', name: 'Refractometer Automatic - เครื่องวัดดัชนีหักเหแสงอัตโนมัติ', code: 'REF-07', cabinet: 'ตู้กระจกนิรภัยพิเศษ F2', isActive: true }
+];
+
 export const getAppSettings = async (): Promise<any> => {
     if (!firestore) return null;
     const docRef = getCollection('system').doc('appSettings');
     const doc = await safeGet(docRef);
-    return doc.exists ? doc.data() : null;
+    if (doc.exists) {
+        const data = doc.data();
+        if (data.highValueAssets === undefined) {
+            data.highValueAssets = DEFAULT_HIGH_VALUE_ASSETS;
+            await docRef.set(data, { merge: true });
+        }
+        return data;
+    } else {
+        const initial = { highValueAssets: DEFAULT_HIGH_VALUE_ASSETS };
+        await docRef.set(initial);
+        return initial;
+    }
 };
 
 export const saveAppSettings = async (settings: any): Promise<void> => {

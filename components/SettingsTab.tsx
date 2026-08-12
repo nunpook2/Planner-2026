@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { Tester, TestMapping, AppSettings } from '../types';
+import type { Tester, TestMapping, AppSettings, HighValueAsset } from '../types';
 import { 
     addTester, deleteTester, updateTester, runCleanup, clearAllTaskData, getTestMappings, addTestMapping, updateTestMapping, deleteTestMapping, saveAppSettings 
 } from '../services/dataService';
@@ -744,8 +744,407 @@ const QRCodeManager: React.FC = () => {
     );
 };
 
+const compressImage = (base64Str: string, maxWidth = 500, maxHeight = 500): Promise<string> => {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.src = base64Str;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+            } else {
+                if (height > maxHeight) {
+                    width = Math.round((width * maxHeight) / height);
+                    height = maxHeight;
+                }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
+            } else {
+                resolve(base64Str);
+            }
+        };
+        img.onerror = () => {
+            resolve(base64Str);
+        };
+    });
+};
+
+const HighValueAssetsManager: React.FC<{
+    appSettings?: AppSettings | null;
+    onSettingsUpdated?: () => void;
+    setNotification: (n: any) => void;
+}> = ({ appSettings, onSettingsUpdated, setNotification }) => {
+    const [assets, setAssets] = useState<HighValueAsset[]>([]);
+    const [editingAsset, setEditingAsset] = useState<Partial<HighValueAsset> | null>(null);
+    const [assetToDelete, setAssetToDelete] = useState<HighValueAsset | null>(null);
+    const [isFormOpen, setIsFormOpen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [dragActive, setDragActive] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (appSettings?.highValueAssets) {
+            setAssets(appSettings.highValueAssets);
+        } else {
+            setAssets([]);
+        }
+    }, [appSettings]);
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingAsset?.name || !editingAsset?.code) {
+            setNotification({ message: 'โปรดระบุชื่อและรหัสอุปกรณ์', isError: true });
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            let updatedAssets = [...assets];
+            if (editingAsset.id) {
+                updatedAssets = updatedAssets.map(a => a.id === editingAsset.id ? { ...a, ...editingAsset } as HighValueAsset : a);
+            } else {
+                const newAsset: HighValueAsset = {
+                    id: 'hva_' + Date.now(),
+                    name: editingAsset.name,
+                    code: editingAsset.code,
+                    cabinet: editingAsset.cabinet || 'ตู้เก็บหลัก',
+                    photo: editingAsset.photo || '',
+                    isActive: editingAsset.isActive !== false
+                };
+                updatedAssets.push(newAsset);
+            }
+
+            await saveAppSettings({ ...appSettings, highValueAssets: updatedAssets });
+            setNotification({ message: 'บันทึกอุปกรณ์มูลค่าสูงเรียบร้อยแล้ว' });
+            setIsFormOpen(false);
+            setEditingAsset(null);
+            if (onSettingsUpdated) onSettingsUpdated();
+        } catch (error) {
+            setNotification({ message: 'ไม่สามารถบันทึกข้อมูลได้', isError: true });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        const target = assets.find(a => a.id === id);
+        if (target) {
+            setAssetToDelete(target);
+        }
+    };
+
+    const confirmDelete = async () => {
+        if (!assetToDelete) return;
+        try {
+            const updatedAssets = assets.filter(a => a.id !== assetToDelete.id);
+            await saveAppSettings({ ...appSettings, highValueAssets: updatedAssets });
+            setNotification({ message: 'ลบอุปกรณ์เรียบร้อยแล้ว' });
+            setAssetToDelete(null);
+            if (onSettingsUpdated) onSettingsUpdated();
+        } catch (error) {
+            setNotification({ message: 'ลบไม่สำเร็จ', isError: true });
+        }
+    };
+
+    const handleToggleActive = async (asset: HighValueAsset) => {
+        try {
+            const updatedAssets = assets.map(a => a.id === asset.id ? { ...a, isActive: !a.isActive } : a);
+            await saveAppSettings({ ...appSettings, highValueAssets: updatedAssets });
+            setNotification({ message: asset.isActive ? 'ปิดการใช้งานอุปกรณ์ชิ้นนี้แล้ว' : 'เปิดการใช้งานอุปกรณ์ชิ้นนี้แล้ว' });
+            if (onSettingsUpdated) onSettingsUpdated();
+        } catch (error) {
+            setNotification({ message: 'อัปเดตไม่สำเร็จ', isError: true });
+        }
+    };
+
+    const handleFileChange = (file: File) => {
+        if (!file.type.startsWith('image/')) {
+            setNotification({ message: 'กรุณาอัปโหลดไฟล์รูปภาพเท่านั้น', isError: true });
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            if (e.target?.result) {
+                const rawBase64 = e.target.result as string;
+                try {
+                    const compressed = await compressImage(rawBase64);
+                    setEditingAsset(prev => ({ ...prev, photo: compressed }));
+                } catch (err) {
+                    setEditingAsset(prev => ({ ...prev, photo: rawBase64 }));
+                }
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleDrag = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === "dragenter" || e.type === "dragover") {
+            setDragActive(true);
+        } else if (e.type === "dragleave") {
+            setDragActive(false);
+        }
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragActive(false);
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            handleFileChange(e.dataTransfer.files[0]);
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-base-800 p-6 rounded-2xl border border-base-200 dark:border-base-700 shadow-sm">
+                <div>
+                    <h3 className="font-bold text-lg text-base-900 dark:text-base-100">รายการอุปกรณ์มูลค่าสูง (High-Value Equipment List)</h3>
+                    <p className="text-sm text-base-500">จัดการอุปกรณ์มูลค่าสูงที่จัดเก็บแยกพิเศษ เพื่อให้พนักงานทำการตรวจสอบสภาพทุกวันในระหว่างสลับกะ</p>
+                </div>
+                <button
+                    onClick={() => {
+                        setEditingAsset({ isActive: true, cabinet: '', name: '', code: '', photo: '' });
+                        setIsFormOpen(true);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white font-bold rounded-xl shadow-md hover:bg-primary-700 transition-all text-sm shrink-0"
+                >
+                    <PlusIcon className="w-5 h-5" />
+                    <span>เพิ่มอุปกรณ์ใหม่</span>
+                </button>
+            </div>
+
+            {isFormOpen && (
+                <div className="fixed inset-0 bg-base-900/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4 overflow-y-auto" onClick={() => setIsFormOpen(false)}>
+                    <div className="bg-white dark:bg-base-800 rounded-3xl shadow-2xl p-6 w-full max-w-lg border border-base-200 dark:border-base-700 animate-slide-in-up" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-xl font-bold text-base-900 dark:text-base-100 mb-4">{editingAsset?.id ? 'แก้ไขข้อมูลอุปกรณ์' : 'เพิ่มอุปกรณ์มูลค่าสูง'}</h3>
+                        <form onSubmit={handleSave} className="space-y-4">
+                            <div>
+                                <label className="text-xs font-bold text-base-400 uppercase tracking-wider">ชื่ออุปกรณ์ (Equipment Name)</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={editingAsset?.name || ''}
+                                    onChange={e => setEditingAsset(prev => ({ ...prev, name: e.target.value }))}
+                                    className="w-full p-3 mt-1 bg-base-50 dark:bg-base-900 border border-base-200 dark:border-base-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none transition-all dark:text-white"
+                                    placeholder="เช่น HPLC - Agilent 1260"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-base-400 uppercase tracking-wider">รหัสครุภัณฑ์ (Asset ID / Serial)</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={editingAsset?.code || ''}
+                                        onChange={e => setEditingAsset(prev => ({ ...prev, code: e.target.value }))}
+                                        className="w-full p-3 mt-1 bg-base-50 dark:bg-base-900 border border-base-200 dark:border-base-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none transition-all dark:text-white"
+                                        placeholder="เช่น HPLC-001"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-base-400 uppercase tracking-wider">สถานที่จัดเก็บ / ตู้เก็บพิเศษ</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={editingAsset?.cabinet || ''}
+                                        onChange={e => setEditingAsset(prev => ({ ...prev, cabinet: e.target.value }))}
+                                        className="w-full p-3 mt-1 bg-base-50 dark:bg-base-900 border border-base-200 dark:border-base-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none transition-all dark:text-white"
+                                        placeholder="เช่น ตู้กระจกนิรภัย A2"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-base-400 uppercase tracking-wider block mb-1">ภาพถ่ายอุปกรณ์ (Equipment Image)</label>
+                                <div 
+                                    onDragEnter={handleDrag}
+                                    onDragOver={handleDrag}
+                                    onDragLeave={handleDrag}
+                                    onDrop={handleDrop}
+                                    onClick={() => {
+                                        if (!editingAsset?.photo) {
+                                            fileInputRef.current?.click();
+                                        }
+                                    }}
+                                    className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${dragActive ? 'border-primary-500 bg-primary-50/10' : 'border-base-200 dark:border-base-700 hover:border-base-300 bg-base-50/20 dark:bg-base-900/10'}`}
+                                >
+                                    {editingAsset?.photo ? (
+                                        <div className="space-y-3" onClick={e => e.stopPropagation()}>
+                                            <img src={editingAsset.photo} alt="Upload preview" className="h-32 mx-auto object-contain rounded-xl shadow-md border border-base-200" referrerPolicy="no-referrer" />
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setEditingAsset(prev => ({ ...prev, photo: '' }))} 
+                                                className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg text-xs font-bold transition-all"
+                                            >
+                                                ลบรูปภาพ
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center space-y-2">
+                                            <div className="p-3 bg-base-100 dark:bg-base-700 rounded-full text-base-500">
+                                                <UploadIcon className="h-6 w-6" />
+                                            </div>
+                                            <div className="text-sm">
+                                                <span className="font-bold text-primary-600 hover:text-primary-500">คลิกเพื่อเลือกไฟล์</span>
+                                                <span className="text-base-400 dark:text-base-500"> หรือ ลากและวางไฟล์ลงที่นี่</span>
+                                            </div>
+                                            <p className="text-xs text-base-400 dark:text-base-500">PNG, JPG, WEBP ขนาดไม่เกิน 5MB</p>
+                                        </div>
+                                    )}
+                                    <input 
+                                        ref={fileInputRef}
+                                        type="file" 
+                                        accept="image/*" 
+                                        className="hidden" 
+                                        onChange={e => e.target.files && e.target.files[0] && handleFileChange(e.target.files[0])} 
+                                        onClick={e => e.stopPropagation()}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 pt-2">
+                                <input
+                                    type="checkbox"
+                                    id="assetActive"
+                                    checked={editingAsset?.isActive !== false}
+                                    onChange={e => setEditingAsset(prev => ({ ...prev, isActive: e.target.checked }))}
+                                    className="w-4 h-4 text-primary-600 rounded border-base-300 focus:ring-primary-500"
+                                />
+                                <label htmlFor="assetActive" className="text-sm font-bold text-base-700 dark:text-base-300">เปิดใช้งาน (แสดงในการตรวจสอบรายวัน)</label>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-base-100 dark:border-base-700">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsFormOpen(false)}
+                                    className="px-5 py-2.5 text-sm font-semibold text-base-600 hover:bg-base-100 dark:hover:bg-base-700 rounded-xl transition-all"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSaving}
+                                    className="px-6 py-2.5 bg-primary-600 text-white font-bold rounded-xl shadow-md hover:bg-primary-700 disabled:opacity-50 transition-all text-sm"
+                                >
+                                    {isSaving ? 'กำลังบันทึก...' : 'บันทึก'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {assets.map(asset => (
+                    <div key={asset.id} className={`bg-white dark:bg-base-800 rounded-2xl border transition-all overflow-hidden flex flex-col justify-between shadow-sm hover:shadow-md ${asset.isActive ? 'border-base-200 dark:border-base-700' : 'border-base-100 dark:border-base-800 opacity-60'}`}>
+                        <div className="relative h-44 bg-base-100 dark:bg-base-900 flex items-center justify-center overflow-hidden">
+                            {asset.photo ? (
+                                <img src={asset.photo} alt={asset.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                                <div className="flex flex-col items-center justify-center text-base-400 p-4 text-center">
+                                    <div className="p-4 bg-white dark:bg-base-800 rounded-full shadow-inner mb-2 text-primary-500">
+                                        <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v13.5m4.5-13.5v13.5m-1.5-10.5h3.75c.621 0 1.125.504 1.125 1.125V11.25a1.125 1.125 0 01-1.125 1.125H9.75M10.5 15h7.5a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0018 4.5H6a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 006 19.5h1.5m1.5-3.75V19.5" />
+                                        </svg>
+                                    </div>
+                                    <span className="text-xs font-bold uppercase tracking-wider">{asset.code}</span>
+                                </div>
+                            )}
+                            <div className="absolute top-3 right-3 flex gap-1.5">
+                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-md ${asset.isActive ? 'bg-emerald-500 text-white' : 'bg-base-400 text-white'}`}>
+                                    {asset.isActive ? 'เปิดใช้งาน' : 'ปิดการใช้งาน'}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="p-5 flex-grow flex flex-col justify-between">
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-black text-primary-600 uppercase tracking-wider block">{asset.code}</span>
+                                <h4 className="font-bold text-base-900 dark:text-base-100 line-clamp-2 min-h-[3rem]">{asset.name}</h4>
+                                <div className="flex items-center gap-1.5 text-xs text-base-500 mt-2 bg-base-50 dark:bg-base-900 px-3 py-2 rounded-xl border border-base-100 dark:border-base-700 w-fit">
+                                    <svg className="w-3.5 h-3.5 text-base-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                    </svg>
+                                    <span className="font-bold">ตู้จัดเก็บ:</span>
+                                    <span className="font-medium text-base-700 dark:text-base-300">{asset.cabinet}</span>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-between items-center mt-6 pt-4 border-t border-base-100 dark:border-base-700">
+                                <button
+                                    onClick={() => handleToggleActive(asset)}
+                                    className={`text-xs font-bold transition-colors ${asset.isActive ? 'text-base-400 hover:text-base-600' : 'text-primary-600 hover:text-primary-700'}`}
+                                >
+                                    {asset.isActive ? 'ปิดชั่วคราว' : 'เปิดใช้งาน'}
+                                </button>
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => {
+                                            setEditingAsset(asset);
+                                            setIsFormOpen(true);
+                                        }}
+                                        className="p-2 text-base-400 hover:text-primary-600 hover:bg-base-50 dark:hover:bg-base-700 rounded-lg transition-all"
+                                        title="แก้ไข"
+                                    >
+                                        <PencilIcon className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleDelete(asset.id)}
+                                        className="p-2 text-base-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-all"
+                                        title="ลบ"
+                                    >
+                                        <TrashIcon className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                {assets.length === 0 && (
+                    <div className="col-span-full py-20 text-center bg-white dark:bg-base-800 rounded-2xl border border-dashed border-base-200">
+                        <span className="text-sm text-base-400 italic">ไม่มีอุปกรณ์มูลค่าสูงในระบบ กดปุ่ม "เพิ่มอุปกรณ์ใหม่" เพื่อเริ่มต้น</span>
+                    </div>
+                )}
+            </div>
+
+            <ConfirmationModal 
+                isOpen={!!assetToDelete} 
+                onClose={() => setAssetToDelete(null)} 
+                onConfirm={confirmDelete} 
+                title="ยืนยันการลบอุปกรณ์มูลค่าสูง" 
+                message={
+                    <div className="space-y-2">
+                        <p className="text-sm text-base-600 dark:text-base-300">คุณต้องการลบอุปกรณ์ชิ้นนี้ใช่หรือไม่?</p>
+                        <p className="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 p-3 rounded-xl border border-red-200 dark:border-red-900/30 text-xs">
+                            {assetToDelete?.name} ({assetToDelete?.code})
+                        </p>
+                        <p className="text-[11px] text-base-400">การลบข้อมูลนี้จะลบอุปกรณ์ออกจากรายการถาวร และจะไม่แสดงในรายการตรวจสอบของกะใหม่อีกต่อไป</p>
+                    </div>
+                } 
+                confirmText="ยืนยันการลบ" 
+                confirmColor="bg-red-600" 
+            />
+        </div>
+    );
+};
+
 const SettingsTab: React.FC<{ testers: Tester[]; onRefreshTesters: () => void; onTasksUpdated: () => void; appSettings?: AppSettings | null; onSettingsUpdated?: () => void; }> = (props) => {
-    const [activeSubTab, setActiveSubTab] = useState<'team' | 'mappings' | 'columns' | 'ui' | 'qrcode' | 'danger'>('ui');
+    const [activeSubTab, setActiveSubTab] = useState<'team' | 'mappings' | 'columns' | 'ui' | 'highValueAssets' | 'qrcode' | 'danger'>('ui');
     const [notification, setNotification] = useState<{ message: string; isError?: boolean } | null>(null);
     const [showCleanupModal, setShowCleanupModal] = useState(false);
     const [showWipeModal, setShowWipeModal] = useState(false);
@@ -756,6 +1155,7 @@ const SettingsTab: React.FC<{ testers: Tester[]; onRefreshTesters: () => void; o
         { id: 'mappings', label: 'Test Mappings' },
         { id: 'columns', label: 'Column Order' },
         { id: 'ui', label: 'UI Settings' },
+        { id: 'highValueAssets', label: 'High-Value Assets' },
         { id: 'qrcode', label: 'QR Code' },
         { id: 'danger', label: 'Danger Zone', danger: true }
     ];
@@ -770,9 +1170,9 @@ const SettingsTab: React.FC<{ testers: Tester[]; onRefreshTesters: () => void; o
             <ConfirmationModal isOpen={showWipeModal} onClose={() => setShowWipeModal(false)} onConfirm={handleWipeConfirm} title="Wipe All Data" message={<span className="text-red-600 font-bold">WARNING: This will permanently delete ALL tasks, assignments, and history. This cannot be undone.</span>} confirmText="Wipe Everything" confirmColor="bg-red-600" isProcessing={isProcessing}/>
 
             <div><h2 className="text-2xl font-bold text-base-900 dark:text-base-100">Settings</h2><p className="text-base-500">Configure your workspace</p></div>
-            <div className="flex p-1 bg-base-100 dark:bg-base-800 rounded-xl w-fit border border-base-200 dark:border-base-700">
+            <div className="flex p-1 bg-base-100 dark:bg-base-800 rounded-xl w-fit border border-base-200 dark:border-base-700 overflow-x-auto max-w-full">
                 {tabs.map(tab => (
-                    <button key={tab.id} onClick={() => setActiveSubTab(tab.id as any)} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${activeSubTab === tab.id ? 'bg-white dark:bg-base-700 text-base-900 dark:text-white shadow-sm ring-1 ring-black/5' : `text-base-500 hover:text-base-700 dark:hover:text-base-300 ${tab.danger ? 'hover:text-red-600' : ''}`}`}>{tab.label}</button>
+                    <button key={tab.id} onClick={() => setActiveSubTab(tab.id as any)} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 whitespace-nowrap ${activeSubTab === tab.id ? 'bg-white dark:bg-base-700 text-base-900 dark:text-white shadow-sm ring-1 ring-black/5' : `text-base-500 hover:text-base-700 dark:hover:text-base-300 ${tab.danger ? 'hover:text-red-600' : ''}`}`}>{tab.label}</button>
                 ))}
             </div>
 
@@ -781,6 +1181,7 @@ const SettingsTab: React.FC<{ testers: Tester[]; onRefreshTesters: () => void; o
                 {activeSubTab === 'mappings' && <MappingManager setNotification={setNotification} />}
                 {activeSubTab === 'columns' && <GroupOrderManager onTasksUpdated={props.onTasksUpdated} setNotification={setNotification} />}
                 {activeSubTab === 'ui' && <UISettingsPanel appSettings={props.appSettings} onSettingsUpdated={props.onSettingsUpdated} setNotification={setNotification} />}
+                {activeSubTab === 'highValueAssets' && <HighValueAssetsManager appSettings={props.appSettings} onSettingsUpdated={props.onSettingsUpdated} setNotification={setNotification} />}
                 {activeSubTab === 'qrcode' && <QRCodeManager />}
                 {activeSubTab === 'danger' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-8">
