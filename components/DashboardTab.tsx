@@ -270,69 +270,6 @@ const ReportEditorModal: React.FC<{
                                     className="w-full p-4 bg-white dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-[1.5rem] text-sm font-bold focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none dark:text-white resize-none transition-all placeholder:text-base-400"
                                 />
                             </div>
-
-                            {/* Zone 4: Outstanding Borrowed Items */}
-                            <div className="bg-base-50/30 dark:bg-base-950/20 p-6 rounded-[2rem] border border-base-100 dark:border-base-800 space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <span className="p-2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 rounded-xl">
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                        </span>
-                                        <div>
-                                            <h4 className="text-base font-black uppercase tracking-wider text-base-700 dark:text-base-250">Zone 4: รายการอุปกรณ์ที่ถูกยืม</h4>
-                                            <p className="text-xs text-base-500 dark:text-base-400 mt-0.5">เครื่องมือที่กำลังถูกยืมใช้งานและยังไม่ได้ส่งคืนในขณะนี้</p>
-                                        </div>
-                                    </div>
-                                    <span className="px-3 py-1 bg-amber-100/80 text-amber-800 text-xs font-black rounded-lg">
-                                        {borrowRecords.filter(r => r.status !== 'returned').length} รายการ
-                                    </span>
-                                </div>
-
-                                <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1 no-scrollbar">
-                                    {borrowRecords.filter(r => r.status !== 'returned').length === 0 ? (
-                                        <div className="text-center py-6 text-slate-400 dark:text-slate-500 font-semibold border border-dashed border-slate-200 dark:border-base-800 rounded-xl bg-white dark:bg-base-900/40 text-[11px]">
-                                            ไม่มีเครื่องมือหรืออุปกรณ์ค้างยืมในขณะนี้
-                                        </div>
-                                    ) : (
-                                        borrowRecords.filter(r => r.status !== 'returned').map((record) => {
-                                            const isOverdue = record.status === 'overdue' || new Date(record.expectedReturnDate) < new Date();
-                                            return (
-                                                <div 
-                                                    key={record.id}
-                                                    className={`p-3 rounded-xl border flex flex-col gap-1.5 transition-all text-xs bg-white dark:bg-base-900 ${
-                                                        isOverdue 
-                                                            ? 'border-rose-200 dark:border-rose-950 bg-rose-50/10 dark:bg-rose-950/5' 
-                                                            : 'border-slate-100 dark:border-base-800'
-                                                    }`}
-                                                >
-                                                    <div className="flex items-center justify-between gap-2">
-                                                        <span className="font-black text-slate-800 dark:text-white truncate">
-                                                            {record.isHighValue ? '💎' : '🔧'} {record.equipmentName}
-                                                        </span>
-                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black tracking-wide shrink-0 ${
-                                                            isOverdue 
-                                                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300' 
-                                                                : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30'
-                                                        }`}>
-                                                            {isOverdue ? 'เลยกำหนด ⚠️' : 'กำลังยืม'}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
-                                                        <span>👤 ผู้ยืม: <strong className="text-slate-700 dark:text-slate-200">{record.borrowerName}</strong></span>
-                                                        <span>📞 {record.borrowerPhone}</span>
-                                                    </div>
-                                                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium flex justify-between border-t border-slate-50 dark:border-base-850/40 pt-1 mt-0.5">
-                                                        <span>ยืมเมื่อ: {record.borrowDate} ({record.borrowTime} น.)</span>
-                                                        <span className={isOverdue ? 'text-rose-500 font-bold' : ''}>กำหนด: {record.expectedReturnDate}</span>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })
-                                    )}
-                                </div>
-                            </div>
                         </div>
                         
                         {/* RIGHT COLUMN: Zone 2 (High Value Assets list in dual column grid) */}
@@ -358,17 +295,17 @@ const ReportEditorModal: React.FC<{
                                         const activeBorrow = activeBorrows[0];
                                         const expectedPresentQty = Math.max(0, (check.initialQuantity || 1) - activeBorrows.length);
                                         const todayStr = new Date().toISOString().split('T')[0];
-                                        const hasOverdueBorrow = activeBorrows.some(b => b.expectedReturnDate < todayStr);
+                                        const hasOverdueBorrow = activeBorrows.some(b => b.expectedReturnDate <= todayStr);
 
-                                        // Mismatch only if current present quantity in lab is less than the expected non-borrowed quantity!
-                                        const isQtyMismatched = check.trackQuantity && !check.isConsumable && (check.currentQuantity !== undefined ? check.currentQuantity : (check.initialQuantity || 1)) < expectedPresentQty;
+                                        // Mismatch only if current present quantity in lab is not equal to the expected non-borrowed quantity!
+                                        const isQtyMismatched = check.trackQuantity && !check.isConsumable && (check.currentQuantity !== undefined ? check.currentQuantity : (check.initialQuantity || 1)) !== expectedPresentQty;
                                         const isCardAbnormal = !check.isPresent || check.status === 'abnormal' || isQtyMismatched || hasOverdueBorrow;
                                         return (
                                             <div 
                                                 key={check.assetId} 
                                                 className={`p-5 rounded-[2rem] border-2 transition-all duration-300 space-y-4 flex flex-col justify-between shadow-sm ${
                                                     isCardAbnormal
-                                                        ? 'bg-rose-50/10 dark:bg-rose-950/10 border-red-500 dark:border-red-500 shadow-md shadow-red-500/5 ring-1 ring-red-500/20' 
+                                                        ? 'bg-red-50 dark:bg-red-950/35 border-red-500 dark:border-red-500 shadow-md shadow-red-500/5 ring-1 ring-red-500/20' 
                                                         : 'bg-white dark:bg-base-800 border-base-100 dark:border-base-700 hover:border-base-200 dark:hover:border-base-600'
                                                 }`}
                                             >
@@ -443,7 +380,7 @@ const ReportEditorModal: React.FC<{
                                                                 </div>
                                                                 <div className="space-y-2 max-h-[120px] overflow-y-auto no-scrollbar">
                                                                     {activeBorrows.map((b, bIdx) => {
-                                                                        const isBOverdue = b.expectedReturnDate < todayStr;
+                                                                        const isBOverdue = b.expectedReturnDate <= todayStr;
                                                                         return (
                                                                             <div key={b.id || bIdx} className="text-[11.5px] leading-relaxed flex flex-col gap-1 border-b border-slate-100 dark:border-base-850 last:border-none pb-2 last:pb-0">
                                                                                 <div className="flex items-center justify-between gap-2">
