@@ -98,6 +98,7 @@ const ReportEditorModal: React.FC<{
     const [note, setNote] = useState('');
     const [highValueChecks, setHighValueChecks] = useState<HighValueCheck[]>([]);
     const [borrowRecords, setBorrowRecords] = useState<BorrowRecord[]>([]);
+    const [expandedAssets, setExpandedAssets] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         if (isOpen) {
@@ -295,11 +296,11 @@ const ReportEditorModal: React.FC<{
                                         const activeBorrow = activeBorrows[0];
                                         const expectedPresentQty = Math.max(0, (check.initialQuantity || 1) - activeBorrows.length);
                                         const todayStr = new Date().toISOString().split('T')[0];
-                                        const hasOverdueBorrow = activeBorrows.some(b => b.expectedReturnDate <= todayStr);
+                                        const hasOverdueBorrow = !check.isConsumable && activeBorrows.some(b => b.expectedReturnDate <= todayStr);
 
                                         // Mismatch only if current present quantity in lab is not equal to the expected non-borrowed quantity!
                                         const isQtyMismatched = check.trackQuantity && !check.isConsumable && (check.currentQuantity !== undefined ? check.currentQuantity : (check.initialQuantity || 1)) !== expectedPresentQty;
-                                        const isCardAbnormal = !check.isPresent || check.status === 'abnormal' || isQtyMismatched || hasOverdueBorrow;
+                                        const isCardAbnormal = !check.isConsumable && (!check.isPresent || check.status === 'abnormal' || isQtyMismatched || hasOverdueBorrow);
                                         return (
                                             <div 
                                                 key={check.assetId} 
@@ -346,68 +347,97 @@ const ReportEditorModal: React.FC<{
                                                         </div>
   
                                                         {activeBorrows.length > 0 && (
-                                                            <div className={`mt-3 p-3 rounded-xl border flex flex-col gap-2 animate-fade-in ${
-                                                                hasOverdueBorrow 
-                                                                    ? 'bg-red-500/10 dark:bg-red-950/20 border-red-500/30' 
-                                                                    : 'bg-amber-500/15 dark:bg-amber-500/5 border-amber-500/30'
-                                                            }`}>
-                                                                <div className="flex items-center justify-between gap-2 border-b border-dashed border-slate-200/50 dark:border-base-800 pb-1.5">
-                                                                    <span className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
-                                                                        hasOverdueBorrow ? 'text-red-700 dark:text-red-400 font-extrabold' : 'text-amber-700 dark:text-amber-400'
-                                                                    }`}>
-                                                                        💎 ยืมใช้งาน ({activeBorrows.length} ชิ้น)
-                                                                    </span>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            const updated = [...highValueChecks];
-                                                                            if (check.trackQuantity) {
-                                                                                updated[index].currentQuantity = expectedPresentQty;
-                                                                                updated[index].isPresent = expectedPresentQty > 0;
-                                                                            } else {
-                                                                                updated[index].isPresent = false;
-                                                                            }
-                                                                            const borrowers = activeBorrows.map(b => b.borrowerName).join(', ');
-                                                                            updated[index].note = `ถูกยืมโดย ${borrowers}`;
-                                                                            setHighValueChecks(updated);
-                                                                        }}
-                                                                        className={`px-2 py-1 text-[10px] font-black rounded-lg transition-all shrink-0 uppercase tracking-wide shadow-sm text-white ${
-                                                                            hasOverdueBorrow ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600'
-                                                                        }`}
-                                                                    >
-                                                                        {check.trackQuantity ? `ปรับเหลือ ${expectedPresentQty} ชิ้น` : 'เซ็ตไม่อยู่'}
-                                                                    </button>
-                                                                </div>
-                                                                <div className="space-y-2 max-h-[120px] overflow-y-auto no-scrollbar">
-                                                                    {activeBorrows.map((b, bIdx) => {
-                                                                        const isBOverdue = b.expectedReturnDate <= todayStr;
-                                                                        return (
-                                                                            <div key={b.id || bIdx} className="text-[11.5px] leading-relaxed flex flex-col gap-1 border-b border-slate-100 dark:border-base-850 last:border-none pb-2 last:pb-0">
-                                                                                <div className="flex items-center justify-between gap-2">
-                                                                                    <span className="font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1 truncate">
-                                                                                        👤 {b.borrowerName}
-                                                                                    </span>
-                                                                                    {isBOverdue ? (
-                                                                                        <span className="text-[9px] px-1.5 py-0.5 bg-red-600 text-white font-extrabold rounded-full animate-pulse shadow-sm shrink-0 flex items-center gap-0.5">
-                                                                                            เกินกำหนดส่งคืน ⚠️
-                                                                                        </span>
-                                                                                    ) : (
-                                                                                        <span className="text-[9px] px-1.5 py-0.5 bg-amber-500 text-white font-bold rounded-full shrink-0">
-                                                                                            กำลังยืม
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                                <div className="flex justify-between text-[10px] font-semibold pl-4 text-slate-500 dark:text-slate-400 gap-2">
-                                                                                    <span>📅 ยืมเมื่อ: {b.borrowDate}</span>
-                                                                                    <span className={isBOverdue ? "text-red-600 font-black animate-pulse" : "text-slate-700 dark:text-slate-300 font-bold"}>
-                                                                                        ↩️ กำหนดคืน: {b.expectedReturnDate}
-                                                                                    </span>
-                                                                                </div>
+                                                            check.isConsumable ? (
+                                                                <div className="mt-3 p-3 rounded-xl border border-slate-100 dark:border-base-800 bg-slate-50/50 dark:bg-base-900/40 flex flex-col gap-2 animate-fade-in text-xs">
+                                                                    <div className="flex items-center justify-between border-b border-dashed border-slate-200/50 dark:border-base-850 pb-1.5">
+                                                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                                                                            📋 ประวัติผู้เบิกใช้งาน ({activeBorrows.length} รายการ)
+                                                                        </span>
+                                                                        {activeBorrows.length > 1 && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => setExpandedAssets(prev => ({ ...prev, [check.assetId]: !prev[check.assetId] }))}
+                                                                                className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5"
+                                                                            >
+                                                                                {expandedAssets[check.assetId] ? '▲ ซ่อนประวัติ' : '▼ ขยายดูประวัติ'}
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="space-y-1.5 max-h-[160px] overflow-y-auto no-scrollbar">
+                                                                        {activeBorrows.slice(0, expandedAssets[check.assetId] ? undefined : 1).map((b, bIdx) => (
+                                                                            <div key={b.id || bIdx} className="flex items-center justify-between text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-100/30 dark:border-base-850/40 last:border-none pb-1.5 last:pb-0 pt-0.5">
+                                                                                <span className="truncate">👤 {b.borrowerName}</span>
+                                                                                <span className="text-[10.5px] text-slate-400 dark:text-slate-500 font-medium shrink-0">
+                                                                                    📅 เบิกเมื่อ: {b.borrowDate}
+                                                                                </span>
                                                                             </div>
-                                                                        );
-                                                                    })}
+                                                                        ))}
+                                                                    </div>
                                                                 </div>
-                                                            </div>
+                                                            ) : (
+                                                                <div className={`mt-3 p-3 rounded-xl border flex flex-col gap-2 animate-fade-in ${
+                                                                    hasOverdueBorrow 
+                                                                        ? 'bg-red-500/10 dark:bg-red-950/20 border-red-500/30' 
+                                                                        : 'bg-amber-500/15 dark:bg-amber-500/5 border-amber-500/30'
+                                                                }`}>
+                                                                    <div className="flex items-center justify-between gap-2 border-b border-dashed border-slate-200/50 dark:border-base-800 pb-1.5">
+                                                                        <span className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                                                                            hasOverdueBorrow ? 'text-red-700 dark:text-red-400 font-extrabold' : 'text-amber-700 dark:text-amber-400'
+                                                                        }`}>
+                                                                            💎 ยืมใช้งาน ({activeBorrows.length} ชิ้น)
+                                                                        </span>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                const updated = [...highValueChecks];
+                                                                                if (check.trackQuantity) {
+                                                                                    updated[index].currentQuantity = expectedPresentQty;
+                                                                                    updated[index].isPresent = expectedPresentQty > 0;
+                                                                                } else {
+                                                                                    updated[index].isPresent = false;
+                                                                                }
+                                                                                const borrowers = activeBorrows.map(b => b.borrowerName).join(', ');
+                                                                                updated[index].note = `ถูกยืมโดย ${borrowers}`;
+                                                                                setHighValueChecks(updated);
+                                                                            }}
+                                                                            className={`px-2 py-1 text-[10px] font-black rounded-lg transition-all shrink-0 uppercase tracking-wide shadow-sm text-white ${
+                                                                                hasOverdueBorrow ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600'
+                                                                            }`}
+                                                                        >
+                                                                            {check.trackQuantity ? `ปรับเหลือ ${expectedPresentQty} ชิ้น` : 'เซ็ตไม่อยู่'}
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="space-y-2 max-h-[120px] overflow-y-auto no-scrollbar">
+                                                                        {activeBorrows.map((b, bIdx) => {
+                                                                            const isBOverdue = b.expectedReturnDate <= todayStr;
+                                                                            return (
+                                                                                <div key={b.id || bIdx} className="text-[11.5px] leading-relaxed flex flex-col gap-1 border-b border-slate-100 dark:border-base-850 last:border-none pb-2 last:pb-0">
+                                                                                    <div className="flex items-center justify-between gap-2">
+                                                                                        <span className="font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1 truncate">
+                                                                                            👤 {b.borrowerName}
+                                                                                        </span>
+                                                                                        {isBOverdue ? (
+                                                                                            <span className="text-[9px] px-1.5 py-0.5 bg-red-600 text-white font-extrabold rounded-full animate-pulse shadow-sm shrink-0 flex items-center gap-0.5">
+                                                                                                เกินกำหนดส่งคืน ⚠️
+                                                                                            </span>
+                                                                                        ) : (
+                                                                                            <span className="text-[9px] px-1.5 py-0.5 bg-amber-500 text-white font-bold rounded-full shrink-0">
+                                                                                                กำลังยืม
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <div className="flex justify-between text-[10px] font-semibold pl-4 text-slate-500 dark:text-slate-400 gap-2">
+                                                                                        <span>📅 ยืมเมื่อ: {b.borrowDate}</span>
+                                                                                        <span className={isBOverdue ? "text-red-600 font-black animate-pulse" : "text-slate-700 dark:text-slate-300 font-bold"}>
+                                                                                            ↩️ กำหนดคืน: {b.expectedReturnDate}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            )
                                                         )}
                                                     </div>
                                                 </div>

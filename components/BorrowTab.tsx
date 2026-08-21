@@ -5,7 +5,8 @@ import {
     deleteBorrowRecord, 
     getEquipments, 
     getTesters,
-    getAppSettings
+    getAppSettings,
+    saveAppSettings
 } from '../services/dataService';
 import type { BorrowRecord, Equipment, Tester, AppSettings, HighValueAsset } from '../types';
 import { 
@@ -534,6 +535,24 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                 assetId: editingRecord.assetId || ''
             };
 
+            if (!editingRecord.id && recordToSave.isHighValue && recordToSave.assetId) {
+                const currentSettings = await getAppSettings();
+                if (currentSettings && currentSettings.highValueAssets) {
+                    const updatedAssets = currentSettings.highValueAssets.map((asset: HighValueAsset) => {
+                        if (asset.id === recordToSave.assetId && asset.trackQuantity) {
+                            const currentQty = asset.initialQuantity ?? 1;
+                            return {
+                                ...asset,
+                                initialQuantity: Math.max(0, currentQty - 1)
+                            };
+                        }
+                        return asset;
+                    });
+                    await saveAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
+                    setAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
+                }
+            }
+
             await saveBorrowRecord(recordToSave);
             showNotification(editingRecord.id ? "แก้ไขบันทึกการยืมเรียบร้อย" : "บันทึกการยืมอุปกรณ์สำเร็จ");
             setIsBorrowModalOpen(false);
@@ -592,6 +611,27 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                     ? (selectedRecordForReturn.notes ? `${selectedRecordForReturn.notes}\n[ส่งคืน: ${returnNotes.trim()}]` : `[ส่งคืน: ${returnNotes.trim()}]`)
                     : selectedRecordForReturn.notes
             };
+
+            if (selectedRecordForReturn.isHighValue && selectedRecordForReturn.assetId) {
+                const currentSettings = await getAppSettings();
+                if (currentSettings && currentSettings.highValueAssets) {
+                    const asset = currentSettings.highValueAssets.find((a: HighValueAsset) => a.id === selectedRecordForReturn.assetId);
+                    if (asset && !asset.isConsumable && asset.trackQuantity) {
+                        const updatedAssets = currentSettings.highValueAssets.map((a: HighValueAsset) => {
+                            if (a.id === selectedRecordForReturn.assetId) {
+                                return {
+                                    ...a,
+                                    initialQuantity: (a.initialQuantity ?? 1) + 1
+                                };
+                            }
+                            return a;
+                        });
+                        await saveAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
+                        setAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
+                    }
+                }
+            }
+
             await saveBorrowRecord(updatedRecord);
             showNotification("บันทึกการคืนอุปกรณ์สำเร็จ");
             setIsReturnModalOpen(false);
@@ -616,6 +656,23 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
         if (!recordToDelete || !recordToDelete.id) return;
         setIsSubmitting(true);
         try {
+            if (recordToDelete.isHighValue && recordToDelete.assetId && recordToDelete.status !== 'returned') {
+                const currentSettings = await getAppSettings();
+                if (currentSettings && currentSettings.highValueAssets) {
+                    const updatedAssets = currentSettings.highValueAssets.map((asset: HighValueAsset) => {
+                        if (asset.id === recordToDelete.assetId && asset.trackQuantity) {
+                            return {
+                                ...asset,
+                                initialQuantity: (asset.initialQuantity ?? 1) + 1
+                            };
+                        }
+                        return asset;
+                    });
+                    await saveAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
+                    setAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
+                }
+            }
+
             await deleteBorrowRecord(recordToDelete.id);
             showNotification("ลบประวัติการยืมเรียบร้อยแล้ว");
             setIsDeleteModalOpen(false);
