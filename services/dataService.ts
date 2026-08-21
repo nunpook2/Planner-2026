@@ -791,13 +791,14 @@ export const getAppSettings = async (): Promise<any> => {
     const doc = await safeGet(docRef);
     if (doc.exists) {
         const data = doc.data();
-        if (data.highValueAssets === undefined) {
+        if (data.highValueAssets === undefined && !data.highValueAssetsInitialized) {
             data.highValueAssets = DEFAULT_HIGH_VALUE_ASSETS;
+            data.highValueAssetsInitialized = true;
             await docRef.set(data, { merge: true });
         }
         return data;
     } else {
-        const initial = { highValueAssets: DEFAULT_HIGH_VALUE_ASSETS };
+        const initial = { highValueAssets: DEFAULT_HIGH_VALUE_ASSETS, highValueAssetsInitialized: true };
         await docRef.set(initial);
         return initial;
     }
@@ -806,7 +807,7 @@ export const getAppSettings = async (): Promise<any> => {
 export const saveAppSettings = async (settings: any): Promise<void> => {
     if (!firestore) return;
     const docRef = getCollection('system').doc('appSettings');
-    await docRef.set(settings, { merge: true });
+    await docRef.set({ ...settings, highValueAssetsInitialized: true }, { merge: true });
 };
 
 // --- Method Walkthrough System ---

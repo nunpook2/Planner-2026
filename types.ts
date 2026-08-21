@@ -343,5 +343,7 @@ export interface BorrowRecord {
     returnPhotoUrl?: string; // Photo taken during return (Base64)
     returnedBy?: string; // Name of person who returned it
     returnReceiverName?: string; // Name of internal employee who accepted the return
+    isHighValue?: boolean; // True if it's a high-value asset from settings
+    assetId?: string; // High value asset reference ID if applicable
 }
 

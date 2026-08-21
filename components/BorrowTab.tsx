@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
     getBorrowRecords, 
     saveBorrowRecord, 
     deleteBorrowRecord, 
     getEquipments, 
-    getTesters 
+    getTesters,
+    getAppSettings
 } from '../services/dataService';
-import type { BorrowRecord, Equipment, Tester } from '../types';
+import type { BorrowRecord, Equipment, Tester, AppSettings, HighValueAsset } from '../types';
 import { 
     PlusIcon, 
     PencilIcon, 
@@ -26,6 +27,7 @@ import {
 
 interface BorrowTabProps {
     testers: Tester[];
+    appSettings?: AppSettings | null;
     onBorrowUpdated?: () => void;
     isIsolatedView?: boolean;
     onExitIsolated?: () => void;
@@ -33,6 +35,7 @@ interface BorrowTabProps {
 
 export const BorrowTab: React.FC<BorrowTabProps> = ({ 
     testers: initialTesters, 
+    appSettings: propAppSettings,
     onBorrowUpdated,
     isIsolatedView = false,
     onExitIsolated
@@ -40,8 +43,11 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
     const [records, setRecords] = useState<BorrowRecord[]>([]);
     const [equipments, setEquipments] = useState<Equipment[]>([]);
     const [testers, setTesters] = useState<Tester[]>(initialTesters);
+    const [appSettings, setAppSettings] = useState<AppSettings | null>(propAppSettings || null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const activeHighValueAssets = appSettings?.highValueAssets?.filter(asset => asset.isActive) || [];
     
     // Collapsible Monitor Dashboard
     const [showMonitorDashboard, setShowMonitorDashboard] = useState(false);
@@ -60,18 +66,6 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
     const [borrowStep, setBorrowStep] = useState(1);
     const [returnStep, setReturnStep] = useState(1);
 
-    useEffect(() => {
-        if (isBorrowModalOpen) {
-            setBorrowStep(1);
-        }
-    }, [isBorrowModalOpen]);
-
-    useEffect(() => {
-        if (isReturnModalOpen) {
-            setReturnStep(1);
-        }
-    }, [isReturnModalOpen]);
-
     // Editing / Selected States
     const [editingRecord, setEditingRecord] = useState<Partial<BorrowRecord> | null>(null);
     const [selectedRecordForReturn, setSelectedRecordForReturn] = useState<BorrowRecord | null>(null);
@@ -84,6 +78,98 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
     const [returnedBy, setReturnedBy] = useState('');
     const [returnReceiverName, setReturnReceiverName] = useState('');
     const [activeLightboxImage, setActiveLightboxImage] = useState<string | null>(null);
+
+    const isInitializedRef = useRef(false);
+
+    // Initial draft restore on mount
+    useEffect(() => {
+        // Restore borrow draft
+        const savedIsOpen = localStorage.getItem('borrow_draft_is_open');
+        if (savedIsOpen === 'true') {
+            const savedRecord = localStorage.getItem('borrow_draft_editing_record');
+            const savedStep = localStorage.getItem('borrow_draft_step');
+            if (savedRecord) {
+                try {
+                    const parsedRecord = JSON.parse(savedRecord);
+                    setEditingRecord(parsedRecord);
+                    setIsBorrowModalOpen(true);
+                    if (savedStep) {
+                        setBorrowStep(Number(savedStep));
+                    }
+                } catch (e) {
+                    console.error("Failed to parse borrow draft", e);
+                }
+            }
+        }
+
+        // Restore return draft
+        const savedReturnIsOpen = localStorage.getItem('return_draft_is_open');
+        if (savedReturnIsOpen === 'true') {
+            const savedRecord = localStorage.getItem('return_draft_record');
+            const savedStep = localStorage.getItem('return_draft_step');
+            const savedDate = localStorage.getItem('return_draft_date');
+            const savedNotes = localStorage.getItem('return_draft_notes');
+            const savedPhoto = localStorage.getItem('return_draft_photo');
+            const savedBy = localStorage.getItem('return_draft_returned_by');
+            const savedReceiver = localStorage.getItem('return_draft_receiver');
+
+            if (savedRecord) {
+                try {
+                    const parsedRecord = JSON.parse(savedRecord);
+                    setSelectedRecordForReturn(parsedRecord);
+                    setIsReturnModalOpen(true);
+                    if (savedStep) setReturnStep(Number(savedStep));
+                    if (savedDate) setReturnDate(savedDate);
+                    if (savedNotes) setReturnNotes(savedNotes);
+                    if (savedPhoto) setReturnPhotoUrl(savedPhoto);
+                    if (savedBy) setReturnedBy(savedBy);
+                    if (savedReceiver) setReturnReceiverName(savedReceiver);
+                } catch (e) {
+                    console.error("Failed to parse return draft", e);
+                }
+            }
+        }
+
+        isInitializedRef.current = true;
+    }, []);
+
+    // Auto-save borrow draft
+    useEffect(() => {
+        if (!isInitializedRef.current) return;
+        if (isBorrowModalOpen && editingRecord) {
+            localStorage.setItem('borrow_draft_is_open', 'true');
+            localStorage.setItem('borrow_draft_editing_record', JSON.stringify(editingRecord));
+            localStorage.setItem('borrow_draft_step', String(borrowStep));
+        } else {
+            localStorage.removeItem('borrow_draft_is_open');
+            localStorage.removeItem('borrow_draft_editing_record');
+            localStorage.removeItem('borrow_draft_step');
+        }
+    }, [isBorrowModalOpen, editingRecord, borrowStep]);
+
+    // Auto-save return draft
+    useEffect(() => {
+        if (!isInitializedRef.current) return;
+        if (isReturnModalOpen && selectedRecordForReturn) {
+            localStorage.setItem('return_draft_is_open', 'true');
+            localStorage.setItem('return_draft_record', JSON.stringify(selectedRecordForReturn));
+            localStorage.setItem('return_draft_step', String(returnStep));
+            localStorage.setItem('return_draft_date', returnDate);
+            localStorage.setItem('return_draft_notes', returnNotes);
+            localStorage.setItem('return_draft_photo', returnPhotoUrl);
+            localStorage.setItem('return_draft_returned_by', returnedBy);
+            localStorage.setItem('return_draft_receiver', returnReceiverName);
+        } else {
+            localStorage.removeItem('return_draft_is_open');
+            localStorage.removeItem('return_draft_record');
+            localStorage.removeItem('return_draft_step');
+            localStorage.removeItem('return_draft_date');
+            localStorage.removeItem('return_draft_notes');
+            localStorage.removeItem('return_draft_photo');
+            localStorage.removeItem('return_draft_returned_by');
+            localStorage.removeItem('return_draft_receiver');
+        }
+    }, [isReturnModalOpen, selectedRecordForReturn, returnStep, returnDate, returnNotes, returnPhotoUrl, returnedBy, returnReceiverName]);
 
     // Collapsible & Scanner States
     const [expandedRecordIds, setExpandedRecordIds] = useState<Record<string, boolean>>({});
@@ -140,15 +226,19 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            const [fetchedRecords, fetchedEquips, fetchedTesters] = await Promise.all([
+            const [fetchedRecords, fetchedEquips, fetchedTesters, fetchedSettings] = await Promise.all([
                 getBorrowRecords().catch(() => []),
                 getEquipments().catch(() => []),
-                getTesters().catch(() => [])
+                getTesters().catch(() => []),
+                getAppSettings().catch(() => null)
             ]);
             setRecords(fetchedRecords);
             setEquipments(fetchedEquips);
             if (fetchedTesters.length > 0) {
                 setTesters(fetchedTesters);
+            }
+            if (fetchedSettings) {
+                setAppSettings(fetchedSettings);
             }
         } catch (error) {
             console.error("Error fetching borrow data:", error);
@@ -305,6 +395,35 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
     const returnedCount = processedRecords.filter(r => r.status === 'returned').length;
     const overdueCount = processedRecords.filter(r => r.status === 'overdue').length;
 
+    // Helper handlers to close modals with confirmation warn if they have dirty/unsaved fields
+    const handleCloseBorrowModal = () => {
+        const hasFilledData = !!editingRecord?.equipmentName?.trim() || 
+                              !!editingRecord?.borrowerName?.trim() || 
+                              !!editingRecord?.borrowPhotoUrl;
+        
+        if (hasFilledData) {
+            const confirmClose = window.confirm("คุณมีข้อมูลที่กรอกไว้และรูปภาพก่อนยืม ต้องการยกเลิกและปิดหน้านี้ใช่หรือไม่? (ข้อมูลร่างจะถูกลบ)");
+            if (!confirmClose) return;
+        }
+        
+        setIsBorrowModalOpen(false);
+        setEditingRecord(null);
+    };
+
+    const handleCloseReturnModal = () => {
+        const hasFilledData = !!returnedBy?.trim() || 
+                              !!returnNotes?.trim() || 
+                              !!returnPhotoUrl;
+        
+        if (hasFilledData) {
+            const confirmClose = window.confirm("คุณมีข้อมูลตรวจนับหรือรูปภาพสภาพส่งคืนที่ระบุไว้ ต้องการยกเลิกและปิดใช่หรือไม่?");
+            if (!confirmClose) return;
+        }
+        
+        setIsReturnModalOpen(false);
+        setSelectedRecordForReturn(null);
+    };
+
     // Open Modal for New Borrow
     const handleOpenNewBorrow = () => {
         const today = new Date();
@@ -316,6 +435,7 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
         defaultReturnDate.setDate(today.getDate() + 3);
         const defaultReturnStr = defaultReturnDate.toISOString().split('T')[0];
 
+        setBorrowStep(1);
         setEditingRecord({
             equipmentId: 'other',
             equipmentName: '',
@@ -328,13 +448,16 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
             guarantorName: '',
             notes: '',
             borrowPhotoUrl: '',
-            returnPhotoUrl: ''
+            returnPhotoUrl: '',
+            isHighValue: false,
+            assetId: ''
         });
         setIsBorrowModalOpen(true);
     };
 
     // Open Modal for Edit
     const handleOpenEdit = (record: BorrowRecord) => {
+        setBorrowStep(1);
         setEditingRecord({ ...record });
         setIsBorrowModalOpen(true);
     };
@@ -406,7 +529,9 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                 returnPhotoUrl: editingRecord.returnPhotoUrl || '',
                 createdAt: editingRecord.createdAt || new Date().toISOString(),
                 returnedBy: editingRecord.returnedBy || '',
-                returnReceiverName: editingRecord.returnReceiverName || ''
+                returnReceiverName: editingRecord.returnReceiverName || '',
+                isHighValue: editingRecord.isHighValue || false,
+                assetId: editingRecord.assetId || ''
             };
 
             await saveBorrowRecord(recordToSave);
@@ -425,6 +550,7 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
 
     // Open Return Confirmation Modal
     const handleOpenReturn = (record: BorrowRecord) => {
+        setReturnStep(1);
         setSelectedRecordForReturn(record);
         setReturnDate(new Date().toISOString().split('T')[0]);
         setReturnNotes('');
@@ -502,6 +628,308 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const renderRecordCard = (record: BorrowRecord) => {
+        const isExpanded = expandedRecordIds[record.id!] || false;
+        const isOverdue = record.status === 'overdue';
+        const isReturned = record.status === 'returned';
+
+        return (
+            <div 
+                key={record.id}
+                className={`bg-white dark:bg-base-900 border rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md ${
+                    isExpanded 
+                        ? 'ring-2 ring-primary-500/25 border-primary-500/50 dark:border-primary-500/50' 
+                        : isOverdue 
+                            ? 'border-rose-200 dark:border-rose-950/60 bg-rose-50/5 dark:bg-rose-950/5 hover:border-rose-350' 
+                            : 'border-slate-200 dark:border-base-800 hover:border-slate-300 dark:hover:border-base-700'
+                }`}
+            >
+                {/* Header Row - Clickable to toggle expand */}
+                <div 
+                    onClick={() => toggleRecordExpand(record.id!)}
+                    className="p-4 sm:p-5 flex items-center justify-between gap-4 cursor-pointer select-none active:bg-slate-50 dark:active:bg-base-950/20"
+                >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                        {/* Status Icon Indicator */}
+                        <div className={`p-2.5 rounded-xl shrink-0 ${
+                            isReturned 
+                                ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' 
+                                : isOverdue 
+                                    ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 animate-pulse' 
+                                    : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'
+                        }`}>
+                            {isReturned ? (
+                                <CheckCircleIcon className="h-5 w-5" />
+                            ) : isOverdue ? (
+                                <AlertTriangleIcon className="h-5 w-5 animate-bounce" />
+                            ) : (
+                                <ClockIcon className="h-5 w-5" />
+                            )}
+                        </div>
+
+                        {/* Name & Quick Metadata */}
+                        <div className="min-w-0 space-y-1">
+                            <h3 className="text-sm font-black text-slate-800 dark:text-white leading-tight truncate flex items-center gap-1.5">
+                                {record.isHighValue && <span className="text-xs">💎</span>}
+                                <span>{record.equipmentName}</span>
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                                <span>👤 ผู้ยืม: <strong className="text-slate-700 dark:text-slate-200 font-bold">{record.borrowerName}</strong></span>
+                                <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wide ${
+                                    record.borrowerType === 'internal' 
+                                        ? 'bg-blue-100/70 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' 
+                                        : 'bg-indigo-100/70 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-300'
+                                }`}>
+                                    {record.borrowerType === 'internal' ? 'ภายใน' : 'ภายนอก'}
+                                </span>
+                                <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
+                                <span>📞 {record.borrowerPhone}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Status Pill Badge & Toggle Chevron */}
+                    <div className="flex items-center gap-3 shrink-0">
+                        <div className="hidden md:flex flex-col items-end text-[10px] font-bold text-slate-400 uppercase mr-1">
+                            <span>{isReturned ? 'คืนเครื่องมือแล้วเมื่อ' : 'กำหนดส่งคืน'}</span>
+                            <span className={`text-[11px] font-black mt-0.5 ${
+                                isReturned 
+                                    ? 'text-emerald-600 dark:text-emerald-400' 
+                                    : isOverdue 
+                                        ? 'text-rose-600 dark:text-rose-400' 
+                                        : 'text-slate-600 dark:text-slate-300'
+                            }`}>
+                                {isReturned 
+                                    ? new Date(record.actualReturnDate!).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+                                    : new Date(record.expectedReturnDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+                                }
+                            </span>
+                        </div>
+
+                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            isReturned 
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' 
+                                : isOverdue 
+                                    ? 'bg-rose-100 text-rose-850 dark:bg-rose-900/30 dark:text-rose-300 animate-pulse' 
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                        }`}>
+                            {isReturned ? 'คืนแล้ว' : isOverdue ? 'เลยกำหนด ⚠️' : 'กำลังยืม'}
+                        </span>
+
+                        <div className="p-1 text-slate-400 dark:text-slate-500 rounded-lg hover:bg-slate-50 dark:hover:bg-base-800 transition-all">
+                            <ChevronDownIcon className={`h-5 w-5 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-primary-500' : ''}`} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Expanded Panel Details */}
+                {isExpanded && (
+                    <div className="px-5 pb-5 border-t border-slate-100 dark:border-base-800 bg-slate-50/40 dark:bg-base-950/15 animate-fade-in text-xs">
+                        
+                        {/* Overdue alert banner if item is overdue */}
+                        {isOverdue && (
+                            <div className="mt-4 mb-1 p-3 bg-rose-500/10 border border-rose-500/20 text-rose-800 dark:text-rose-300 rounded-xl flex items-center gap-2 font-black text-xs leading-relaxed">
+                                <AlertTriangleIcon className="h-5 w-5 shrink-0 text-rose-500" />
+                                <span>แจ้งเตือนค้างส่งคืนเครื่องมือทดสอบเลยกำหนด! กรุณาโทรติดต่อ {record.borrowerPhone} เพื่อรีบเร่งรัดติดตามการส่งคืนเครื่องมือโดยด่วน</span>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-4">
+                            
+                            {/* Card Column 1 */}
+                            <div className="space-y-3 bg-white dark:bg-base-900/40 p-4 rounded-xl border border-slate-100 dark:border-base-850">
+                                <h4 className="font-black text-slate-800 dark:text-white border-b border-slate-100 dark:border-base-800 pb-1 flex items-center gap-1">
+                                    👤 ข้อมูลรายละเอียดผู้ยืม
+                                </h4>
+                                <div className="space-y-2">
+                                    <div>
+                                        <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">ชื่อผู้ทำเรื่องยืม</span>
+                                        <span className="font-semibold text-slate-700 dark:text-slate-300 mt-1 block">{record.borrowerName}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">ประเภทสังกัด</span>
+                                        <span className="font-semibold text-slate-700 dark:text-slate-300 mt-1 block">
+                                            {record.borrowerType === 'internal' ? 'พนักงาน/เจ้าหน้าที่ภายในห้องปฏิบัติการ' : 'บุคคลภายนอก/หน่วยงานภายนอก'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">ช่องทางการติดต่อ (เบอร์โทร)</span>
+                                        <span className="font-semibold text-slate-700 dark:text-slate-300 mt-1 block">{record.borrowerPhone}</span>
+                                    </div>
+                                    {record.borrowerType === 'external' && (
+                                        <div>
+                                            <span className="text-[10px] text-indigo-500 font-black block uppercase leading-none">พนักงานภายในผู้รับรองการยืม</span>
+                                            <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block">👤 {record.guarantorName || 'ไม่ระบุผู้รับรอง (กรุณาแก้ไข)'}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Card Column 2 */}
+                            <div className="space-y-3 bg-white dark:bg-base-900/40 p-4 rounded-xl border border-slate-100 dark:border-base-850">
+                                <h4 className="font-black text-slate-800 dark:text-white border-b border-slate-100 dark:border-base-800 pb-1 flex items-center gap-1">
+                                    📅 กำหนดการและประวัติส่งคืน
+                                </h4>
+                                <div className="space-y-2">
+                                    <div>
+                                        <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">วันที่และเวลาที่ยืมอุปกรณ์</span>
+                                        <span className="font-semibold text-slate-700 dark:text-slate-300 mt-1 block">
+                                            {new Date(record.borrowDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })} ({record.borrowTime} น.)
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">กำหนดส่งคืนอุปกรณ์ทดสอบ</span>
+                                        <span className="font-black text-slate-800 dark:text-slate-200 mt-1 block">
+                                            {new Date(record.expectedReturnDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="pt-2 border-t border-slate-100 dark:border-base-800">
+                                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-black block uppercase leading-none">สถานะปัจจุบัน</span>
+                                        {isReturned ? (
+                                            <div className="space-y-1 mt-1.5 text-xs text-slate-600 dark:text-slate-400">
+                                                <p className="font-black text-emerald-700 dark:text-emerald-400">✓ ส่งคืนเครื่องมือสำเร็จ</p>
+                                                <p className="text-[10px]">ส่งคืนเมื่อ: {new Date(record.actualReturnDate!).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                                                <p className="text-[10px]">ผู้นำอุปกรณ์มาคืน: <strong>{record.returnedBy || record.borrowerName}</strong></p>
+                                                {record.returnReceiverName && (
+                                                    <p className="text-[10px]">เจ้าหน้าที่ผู้ตรวจรับคืน: <strong>{record.returnReceiverName}</strong></p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="mt-1.5">
+                                                <p className={`font-black uppercase tracking-wide ${isOverdue ? 'text-rose-600 animate-pulse' : 'text-amber-600'}`}>
+                                                    {isOverdue ? '⚠️ ค้างคืนเลยกำหนดส่ง' : '⌛ อยู่ในระหว่างการยืมใช้งาน'}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Card Column 3 */}
+                            <div className="space-y-3 bg-white dark:bg-base-900/40 p-4 rounded-xl border border-slate-100 dark:border-base-850">
+                                <h4 className="font-black text-slate-800 dark:text-white border-b border-slate-100 dark:border-base-800 pb-1 flex items-center gap-1">
+                                    📸 หลักฐานและรูปสภาพเครื่องมือ
+                                </h4>
+                                <div className="grid grid-cols-2 gap-2.5">
+                                    <div>
+                                        <span className="text-[9px] text-slate-400 font-black block uppercase leading-none mb-1">สภาพก่อนยืม</span>
+                                        {record.borrowPhotoUrl ? (
+                                            <div 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setActiveLightboxImage(record.borrowPhotoUrl || null);
+                                                }}
+                                                className="relative rounded-lg overflow-hidden border border-slate-150 dark:border-base-800 bg-slate-900/5 dark:bg-base-950/40 h-20 flex items-center justify-center group cursor-zoom-in"
+                                            >
+                                                <img 
+                                                    src={record.borrowPhotoUrl} 
+                                                    alt="Borrow condition" 
+                                                    className="h-full w-full object-contain group-hover:scale-105 transition-all duration-200"
+                                                    referrerPolicy="no-referrer"
+                                                />
+                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                    <span className="text-[9px] bg-black/70 text-white font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+                                                        🔍 คลิกขยาย
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="h-20 bg-slate-100/70 dark:bg-base-950/40 rounded-lg flex flex-col items-center justify-center border border-dashed border-slate-200 text-[10px] text-slate-400 font-bold uppercase">
+                                                ไม่มีภาพถ่าย
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <span className="text-[9px] text-slate-400 font-black block uppercase leading-none mb-1">สภาพหลังคืน</span>
+                                        {record.returnPhotoUrl ? (
+                                            <div 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setActiveLightboxImage(record.returnPhotoUrl || null);
+                                                }}
+                                                className="relative rounded-lg overflow-hidden border border-slate-150 dark:border-base-800 bg-slate-900/5 dark:bg-base-950/40 h-20 flex items-center justify-center group cursor-zoom-in"
+                                            >
+                                                <img 
+                                                    src={record.returnPhotoUrl} 
+                                                    alt="Return condition" 
+                                                    className="h-full w-full object-contain group-hover:scale-105 transition-all duration-200"
+                                                    referrerPolicy="no-referrer"
+                                                />
+                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                    <span className="text-[9px] bg-black/70 text-white font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+                                                        🔍 คลิกขยาย
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="h-20 bg-slate-100/70 dark:bg-base-950/40 rounded-lg flex flex-col items-center justify-center border border-dashed border-slate-200 text-[10px] text-slate-400 font-bold uppercase">
+                                                ไม่มีภาพถ่าย
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Note / Remarks Row */}
+                        {record.notes && (
+                            <div className="mt-4 p-3 bg-white dark:bg-base-900/40 border border-slate-150 dark:border-base-850 rounded-xl">
+                                <span className="text-[10px] text-slate-400 font-black block uppercase">📝 หมายเหตุเพิ่มเติมประกอบรายการ</span>
+                                <p className="text-slate-600 dark:text-slate-300 font-semibold mt-1 whitespace-pre-line text-[11px] leading-relaxed">
+                                    {record.notes}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Action footer inside collapsible drawer */}
+                        <div className="mt-4 pt-3.5 border-t border-slate-150 dark:border-base-800 flex justify-between items-center">
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenDelete(record);
+                                }}
+                                className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-650 hover:text-white text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 dark:hover:bg-rose-900/60 rounded-xl font-bold transition-all flex items-center gap-1.5 text-xs"
+                                title="ลบประวัติการยืม-คืนเครื่องมือนี้"
+                            >
+                                <TrashIcon className="h-4 w-4" />
+                                <span>ลบรายการ</span>
+                            </button>
+
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenEdit(record);
+                                    }}
+                                    className="px-4 py-1.5 border border-slate-200 hover:border-slate-300 dark:border-base-700 dark:hover:border-base-600 text-slate-700 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-100/60 dark:hover:bg-base-800 transition-all flex items-center gap-1.5 text-xs"
+                                >
+                                    <PencilIcon className="h-3.5 w-3.5" />
+                                    <span>แก้ไขข้อมูลยืม</span>
+                                </button>
+
+                                {!isReturned && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenReturn(record);
+                                        }}
+                                        className="px-5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black shadow-sm transition-all flex items-center gap-1.5 hover:translate-y-[-1px] active:translate-y-[0px] text-xs"
+                                    >
+                                        <CheckCircleIcon className="h-3.5 w-3.5" />
+                                        <span>ส่งคืนอุปกรณ์</span>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                    </div>
+                )}
+            </div>
+        );
     };
 
     return (
@@ -796,308 +1224,51 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                         </div>
                     </div>
 
-                    {/* RENDER DYNAMIC ACCORDION CARDS */}
-                    <div className="space-y-3.5">
-                        {filteredRecords.map((record) => {
-                            const isExpanded = expandedRecordIds[record.id!] || false;
-                            const isOverdue = record.status === 'overdue';
-                            const isReturned = record.status === 'returned';
-
-                            return (
-                                <div 
-                                    key={record.id}
-                                    className={`bg-white dark:bg-base-900 border rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md ${
-                                        isExpanded 
-                                            ? 'ring-2 ring-primary-500/25 border-primary-500/50 dark:border-primary-500/50' 
-                                            : isOverdue 
-                                                ? 'border-rose-200 dark:border-rose-950/60 bg-rose-50/5 dark:bg-rose-950/5 hover:border-rose-350' 
-                                                : 'border-slate-200 dark:border-base-800 hover:border-slate-300 dark:hover:border-base-700'
-                                    }`}
-                                >
-                                    {/* Header Row - Clickable to toggle expand */}
-                                    <div 
-                                        onClick={() => toggleRecordExpand(record.id!)}
-                                        className="p-4 sm:p-5 flex items-center justify-between gap-4 cursor-pointer select-none active:bg-slate-50 dark:active:bg-base-950/20"
-                                    >
-                                        <div className="flex items-center gap-3.5 min-w-0">
-                                            {/* Status Icon Indicator */}
-                                            <div className={`p-2.5 rounded-xl shrink-0 ${
-                                                isReturned 
-                                                    ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' 
-                                                    : isOverdue 
-                                                        ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 animate-pulse' 
-                                                        : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'
-                                            }`}>
-                                                {isReturned ? (
-                                                    <CheckCircleIcon className="h-5 w-5" />
-                                                ) : isOverdue ? (
-                                                    <AlertTriangleIcon className="h-5 w-5 animate-bounce" />
-                                                ) : (
-                                                    <ClockIcon className="h-5 w-5" />
-                                                )}
-                                            </div>
-
-                                            {/* Name & Quick Metadata */}
-                                            <div className="min-w-0 space-y-1">
-                                                <h3 className="text-sm font-black text-slate-800 dark:text-white leading-tight truncate">
-                                                    {record.equipmentName}
-                                                </h3>
-                                                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                                                    <span>👤 ผู้ยืม: <strong className="text-slate-700 dark:text-slate-200 font-bold">{record.borrowerName}</strong></span>
-                                                    <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
-                                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wide ${
-                                                        record.borrowerType === 'internal' 
-                                                            ? 'bg-blue-100/70 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' 
-                                                            : 'bg-indigo-100/70 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-300'
-                                                    }`}>
-                                                        {record.borrowerType === 'internal' ? 'ภายใน' : 'ภายนอก'}
-                                                    </span>
-                                                    <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
-                                                    <span>📞 {record.borrowerPhone}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Status Pill Badge & Toggle Chevron */}
-                                        <div className="flex items-center gap-3 shrink-0">
-                                            <div className="hidden md:flex flex-col items-end text-[10px] font-bold text-slate-400 uppercase mr-1">
-                                                <span>{isReturned ? 'คืนเครื่องมือแล้วเมื่อ' : 'กำหนดส่งคืน'}</span>
-                                                <span className={`text-[11px] font-black mt-0.5 ${
-                                                    isReturned 
-                                                        ? 'text-emerald-600 dark:text-emerald-400' 
-                                                        : isOverdue 
-                                                            ? 'text-rose-600 dark:text-rose-400' 
-                                                            : 'text-slate-600 dark:text-slate-300'
-                                                }`}>
-                                                    {isReturned 
-                                                        ? new Date(record.actualReturnDate!).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
-                                                        : new Date(record.expectedReturnDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
-                                                    }
-                                                </span>
-                                            </div>
-
-                                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                                                isReturned 
-                                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' 
-                                                    : isOverdue 
-                                                        ? 'bg-rose-100 text-rose-850 dark:bg-rose-900/30 dark:text-rose-300 animate-pulse' 
-                                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
-                                            }`}>
-                                                {isReturned ? 'คืนแล้ว' : isOverdue ? 'เลยกำหนด ⚠️' : 'กำลังยืม'}
-                                            </span>
-
-                                            <div className="p-1 text-slate-400 dark:text-slate-500 rounded-lg hover:bg-slate-50 dark:hover:bg-base-800 transition-all">
-                                                <ChevronDownIcon className={`h-5 w-5 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-primary-500' : ''}`} />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Expanded Panel Details */}
-                                    {isExpanded && (
-                                        <div className="px-5 pb-5 border-t border-slate-100 dark:border-base-800 bg-slate-50/40 dark:bg-base-950/15 animate-fade-in text-xs">
-                                            
-                                            {/* Overdue alert banner if item is overdue */}
-                                            {isOverdue && (
-                                                <div className="mt-4 mb-1 p-3 bg-rose-500/10 border border-rose-500/20 text-rose-800 dark:text-rose-300 rounded-xl flex items-center gap-2 font-black text-xs leading-relaxed">
-                                                    <AlertTriangleIcon className="h-5 w-5 shrink-0 text-rose-500" />
-                                                    <span>แจ้งเตือนค้างส่งคืนเครื่องมือทดสอบเลยกำหนด! กรุณาโทรติดต่อ {record.borrowerPhone} เพื่อรีบเร่งรัดติดตามการส่งคืนเครื่องมือโดยด่วน</span>
-                                                </div>
-                                            )}
-
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-4">
-                                                
-                                                {/* Card Column 1 */}
-                                                <div className="space-y-3 bg-white dark:bg-base-900/40 p-4 rounded-xl border border-slate-100 dark:border-base-850">
-                                                    <h4 className="font-black text-slate-800 dark:text-white border-b border-slate-100 dark:border-base-800 pb-1 flex items-center gap-1">
-                                                        👤 ข้อมูลรายละเอียดผู้ยืม
-                                                    </h4>
-                                                    <div className="space-y-2">
-                                                        <div>
-                                                            <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">ชื่อผู้ทำเรื่องยืม</span>
-                                                            <span className="font-semibold text-slate-700 dark:text-slate-300 mt-1 block">{record.borrowerName}</span>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">ประเภทสังกัด</span>
-                                                            <span className="font-semibold text-slate-700 dark:text-slate-300 mt-1 block">
-                                                                {record.borrowerType === 'internal' ? 'พนักงาน/เจ้าหน้าที่ภายในห้องปฏิบัติการ' : 'บุคคลภายนอก/หน่วยงานภายนอก'}
-                                                            </span>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">ช่องทางการติดต่อ (เบอร์โทร)</span>
-                                                            <span className="font-semibold text-slate-700 dark:text-slate-300 mt-1 block">{record.borrowerPhone}</span>
-                                                        </div>
-                                                        {record.borrowerType === 'external' && (
-                                                            <div>
-                                                                <span className="text-[10px] text-indigo-500 font-black block uppercase leading-none">พนักงานภายในผู้รับรองการยืม</span>
-                                                                <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block">👤 {record.guarantorName || 'ไม่ระบุผู้รับรอง (กรุณาแก้ไข)'}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {/* Card Column 2 */}
-                                                <div className="space-y-3 bg-white dark:bg-base-900/40 p-4 rounded-xl border border-slate-100 dark:border-base-850">
-                                                    <h4 className="font-black text-slate-800 dark:text-white border-b border-slate-100 dark:border-base-800 pb-1 flex items-center gap-1">
-                                                        📅 กำหนดการและประวัติส่งคืน
-                                                    </h4>
-                                                    <div className="space-y-2">
-                                                        <div>
-                                                            <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">วันที่และเวลาที่ยืมอุปกรณ์</span>
-                                                            <span className="font-semibold text-slate-700 dark:text-slate-300 mt-1 block">
-                                                                {new Date(record.borrowDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })} ({record.borrowTime} น.)
-                                                            </span>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">กำหนดส่งคืนอุปกรณ์ทดสอบ</span>
-                                                            <span className="font-black text-slate-800 dark:text-slate-200 mt-1 block">
-                                                                {new Date(record.expectedReturnDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
-                                                            </span>
-                                                        </div>
-                                                        
-                                                        <div className="pt-2 border-t border-slate-100 dark:border-base-800">
-                                                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-black block uppercase leading-none">สถานะปัจจุบัน</span>
-                                                            {isReturned ? (
-                                                                <div className="space-y-1 mt-1.5 text-xs text-slate-600 dark:text-slate-400">
-                                                                    <p className="font-black text-emerald-700 dark:text-emerald-400">✓ ส่งคืนเครื่องมือสำเร็จ</p>
-                                                                    <p className="text-[10px]">ส่งคืนเมื่อ: {new Date(record.actualReturnDate!).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                                                                    <p className="text-[10px]">ผู้นำอุปกรณ์มาคืน: <strong>{record.returnedBy || record.borrowerName}</strong></p>
-                                                                    {record.returnReceiverName && (
-                                                                        <p className="text-[10px]">เจ้าหน้าที่ผู้ตรวจรับคืน: <strong>{record.returnReceiverName}</strong></p>
-                                                                    )}
-                                                                </div>
-                                                            ) : (
-                                                                <div className="mt-1.5">
-                                                                    <p className={`font-black uppercase tracking-wide ${isOverdue ? 'text-rose-600 animate-pulse' : 'text-amber-600'}`}>
-                                                                        {isOverdue ? '⚠️ ค้างคืนเลยกำหนดส่ง' : '⌛ อยู่ในระหว่างการยืมใช้งาน'}
-                                                                    </p>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Card Column 3 */}
-                                                <div className="space-y-3 bg-white dark:bg-base-900/40 p-4 rounded-xl border border-slate-100 dark:border-base-850">
-                                                    <h4 className="font-black text-slate-800 dark:text-white border-b border-slate-100 dark:border-base-800 pb-1 flex items-center gap-1">
-                                                        📸 หลักฐานและรูปสภาพเครื่องมือ
-                                                    </h4>
-                                                    <div className="grid grid-cols-2 gap-2.5">
-                                                        <div>
-                                                            <span className="text-[9px] text-slate-400 font-black block uppercase leading-none mb-1">สภาพก่อนยืม</span>
-                                                            {record.borrowPhotoUrl ? (
-                                                                <div 
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setActiveLightboxImage(record.borrowPhotoUrl || null);
-                                                                    }}
-                                                                    className="relative rounded-lg overflow-hidden border border-slate-150 dark:border-base-800 bg-slate-900/5 dark:bg-base-950/40 h-20 flex items-center justify-center group cursor-zoom-in"
-                                                                >
-                                                                    <img 
-                                                                        src={record.borrowPhotoUrl} 
-                                                                        alt="Borrow condition" 
-                                                                        className="h-full w-full object-contain group-hover:scale-105 transition-all duration-200"
-                                                                        referrerPolicy="no-referrer"
-                                                                    />
-                                                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                                                        <span className="text-[9px] bg-black/70 text-white font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
-                                                                            🔍 คลิกขยาย
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="h-20 bg-slate-100/70 dark:bg-base-950/40 rounded-lg flex flex-col items-center justify-center border border-dashed border-slate-200 text-[10px] text-slate-400 font-bold uppercase">
-                                                                    ไม่มีภาพถ่าย
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-[9px] text-slate-400 font-black block uppercase leading-none mb-1">สภาพหลังคืน</span>
-                                                            {record.returnPhotoUrl ? (
-                                                                <div 
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setActiveLightboxImage(record.returnPhotoUrl || null);
-                                                                    }}
-                                                                    className="relative rounded-lg overflow-hidden border border-slate-150 dark:border-base-800 bg-slate-900/5 dark:bg-base-950/40 h-20 flex items-center justify-center group cursor-zoom-in"
-                                                                >
-                                                                    <img 
-                                                                        src={record.returnPhotoUrl} 
-                                                                        alt="Return condition" 
-                                                                        className="h-full w-full object-contain group-hover:scale-105 transition-all duration-200"
-                                                                        referrerPolicy="no-referrer"
-                                                                    />
-                                                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                                                        <span className="text-[9px] bg-black/70 text-white font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
-                                                                            🔍 คลิกขยาย
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="h-20 bg-slate-100/70 dark:bg-base-950/40 rounded-lg flex flex-col items-center justify-center border border-dashed border-slate-200 text-[10px] text-slate-400 font-bold uppercase">
-                                                                    ไม่มีภาพถ่าย
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Note / Remarks Row */}
-                                            {record.notes && (
-                                                <div className="mt-4 p-3 bg-white dark:bg-base-900/40 border border-slate-150 dark:border-base-850 rounded-xl">
-                                                    <span className="text-[10px] text-slate-400 font-black block uppercase">📝 หมายเหตุเพิ่มเติมประกอบรายการ</span>
-                                                    <p className="text-slate-600 dark:text-slate-300 font-semibold mt-1 whitespace-pre-line text-[11px] leading-relaxed">
-                                                        {record.notes}
-                                                    </p>
-                                                </div>
-                                            )}
-
-                                            {/* Action footer inside collapsible drawer */}
-                                            <div className="mt-4 pt-3.5 border-t border-slate-150 dark:border-base-800 flex justify-between items-center">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleOpenDelete(record);
-                                                    }}
-                                                    className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-650 hover:text-white text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 dark:hover:bg-rose-900/60 rounded-xl font-bold transition-all flex items-center gap-1.5 text-xs"
-                                                    title="ลบประวัติการยืม-คืนเครื่องมือนี้"
-                                                >
-                                                    <TrashIcon className="h-4 w-4" />
-                                                    <span>ลบรายการ</span>
-                                                </button>
-
-                                                <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleOpenEdit(record);
-                                                        }}
-                                                        className="px-4 py-1.5 border border-slate-200 hover:border-slate-300 dark:border-base-700 dark:hover:border-base-600 text-slate-700 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-100/60 dark:hover:bg-base-800 transition-all flex items-center gap-1.5 text-xs"
-                                                    >
-                                                        <PencilIcon className="h-3.5 w-3.5" />
-                                                        <span>แก้ไขข้อมูลยืม</span>
-                                                    </button>
-
-                                                    {!isReturned && (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleOpenReturn(record);
-                                                            }}
-                                                            className="px-5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black shadow-sm transition-all flex items-center gap-1.5 hover:translate-y-[-1px] active:translate-y-[0px] text-xs"
-                                                        >
-                                                            <CheckCircleIcon className="h-3.5 w-3.5" />
-                                                            <span>ส่งคืนอุปกรณ์</span>
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                        </div>
-                                    )}
+                    {/* RENDER DYNAMIC CATEGORIZED ACCORDION CARDS */}
+                    <div className="space-y-8">
+                        {/* 1. High-Value Cabinet Assets */}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-base-800">
+                                <span className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                    💎 รายการอุปกรณ์มูลค่าสูงในตู้ควบคุม ({filteredRecords.filter(r => r.isHighValue).length})
+                                </span>
+                                <span className="px-2.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/25 text-indigo-600 dark:text-indigo-400 text-[10px] font-black rounded-lg border border-indigo-100 dark:border-indigo-900/40">
+                                    ตู้อุปกรณ์มูลค่าสูง (Cabinet)
+                                </span>
+                            </div>
+                            
+                            {filteredRecords.filter(r => r.isHighValue).length === 0 ? (
+                                <div className="text-center py-8 text-slate-400 dark:text-slate-500 font-semibold border border-dashed border-slate-200 dark:border-base-800 rounded-2xl bg-slate-50/20 dark:bg-base-950/5">
+                                    ไม่มีรายการยืมเครื่องมือในหมวดตู้อุปกรณ์มูลค่าสูงในขณะนี้
                                 </div>
-                            );
-                        })}
+                            ) : (
+                                <div className="space-y-3.5">
+                                    {filteredRecords.filter(r => r.isHighValue).map(renderRecordCard)}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 2. General/Other Assets */}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-base-800">
+                                <span className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                    🔧 รายการอุปกรณ์ทั่วไป/เครื่องมืออื่นๆ ({filteredRecords.filter(r => !r.isHighValue).length})
+                                </span>
+                                <span className="px-2.5 py-0.5 bg-slate-50 dark:bg-base-850 text-slate-500 dark:text-slate-400 text-[10px] font-black rounded-lg border border-slate-200/60 dark:border-base-800">
+                                    อุปกรณ์ภายนอกทั่วไป (General)
+                                </span>
+                            </div>
+
+                            {filteredRecords.filter(r => !r.isHighValue).length === 0 ? (
+                                <div className="text-center py-8 text-slate-400 dark:text-slate-500 font-semibold border border-dashed border-slate-200 dark:border-base-800 rounded-2xl bg-slate-50/20 dark:bg-base-950/5">
+                                    ไม่มีรายการยืมเครื่องมือในหมวดอุปกรณ์ทั่วไปในขณะนี้
+                                </div>
+                            ) : (
+                                <div className="space-y-3.5">
+                                    {filteredRecords.filter(r => !r.isHighValue).map(renderRecordCard)}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -1111,20 +1282,17 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
 
                 return (
                     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-                        <div className="relative bg-white dark:bg-base-900 rounded-[2.5rem] border border-slate-200 dark:border-base-800 shadow-2xl max-w-md w-full overflow-hidden transition-all duration-300">
+                        <div className="relative bg-white dark:bg-base-900 rounded-[2.5rem] border border-slate-200 dark:border-base-800 shadow-2xl max-w-xl w-full overflow-hidden transition-all duration-300">
                             
                             {/* Title Bar with Modern Stepper Header */}
                             <div className="px-6 py-5 border-b border-slate-100 dark:border-base-850 bg-slate-50/50 dark:bg-base-950/20">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                                    <h3 className="text-base md:text-lg font-black text-slate-800 dark:text-white uppercase tracking-tight flex items-center gap-2">
                                         {editingRecord.id ? "📝 แก้ไขข้อมูลยืมอุปกรณ์" : "📦 บันทึกยืมเครื่องมือใหม่"}
                                     </h3>
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            setIsBorrowModalOpen(false);
-                                            setEditingRecord(null);
-                                        }}
+                                        onClick={handleCloseBorrowModal}
                                         className="p-1.5 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-all rounded-full hover:bg-slate-100 dark:hover:bg-base-800"
                                     >
                                         <XCircleIcon className="h-5 w-5" />
@@ -1166,7 +1334,7 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                                         3
                                     </button>
                                 </div>
-                                <div className="flex justify-between w-full max-w-xs mx-auto text-[9px] font-black uppercase text-slate-400 dark:text-slate-500 px-1 mt-1">
+                                <div className="flex justify-between w-full max-w-xs mx-auto text-xs font-black uppercase text-slate-500 dark:text-slate-400 px-1 mt-1">
                                     <span className={borrowStep === 1 ? "text-indigo-600 dark:text-indigo-400 font-extrabold" : ""}>เครื่องมือที่ยืม</span>
                                     <span className={borrowStep === 2 ? "text-indigo-600 dark:text-indigo-400 font-extrabold" : ""}>ข้อมูลผู้ยืม</span>
                                     <span className={borrowStep === 3 ? "text-indigo-600 dark:text-indigo-400 font-extrabold" : ""}>วันเวลา & สภาพ</span>
@@ -1188,17 +1356,89 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                                         
                                         <div className="space-y-1.5">
                                             <label className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
-                                                🛠️ อุปกรณ์ที่ยืม <span className="text-rose-500">*</span>
+                                                📦 ประเภทอุปกรณ์หลัก / แหล่งจัดเก็บ <span className="text-rose-500">*</span>
                                             </label>
-                                            <input
-                                                type="text"
-                                                placeholder="ระบุชื่อเครื่องมือ (เช่น สว่านไฟฟ้า, บันได, มัลติมิเตอร์...)"
-                                                value={editingRecord.equipmentName || ''}
-                                                onChange={(e) => setEditingRecord({ ...editingRecord, equipmentName: e.target.value })}
-                                                className="w-full px-4 py-3.5 bg-slate-50 dark:bg-base-850 border border-slate-200 dark:border-base-750 rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white"
-                                                required
-                                            />
+                                            <div className="grid grid-cols-2 bg-slate-100 dark:bg-base-950 p-1.5 rounded-2xl border border-slate-200/60 dark:border-base-800">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditingRecord({ ...editingRecord, isHighValue: true, equipmentName: '', assetId: '' })}
+                                                    className={`py-3 rounded-xl text-xs font-black transition-all ${
+                                                        editingRecord.isHighValue 
+                                                            ? 'bg-white dark:bg-base-700 text-indigo-600 dark:text-indigo-400 shadow-md' 
+                                                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                                    }`}
+                                                >
+                                                    💎 ตู้อุปกรณ์มูลค่าสูง
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditingRecord({ ...editingRecord, isHighValue: false, equipmentName: '', assetId: '' })}
+                                                    className={`py-3 rounded-xl text-xs font-black transition-all ${
+                                                        !editingRecord.isHighValue 
+                                                            ? 'bg-white dark:bg-base-700 text-indigo-600 dark:text-indigo-400 shadow-md' 
+                                                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                                    }`}
+                                                >
+                                                    🔧 อุปกรณ์อื่นๆ ทั่วไป
+                                                </button>
+                                            </div>
                                         </div>
+
+                                        {editingRecord.isHighValue ? (
+                                            <div className="space-y-1.5">
+                                                <label className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                                                    💎 เลือกอุปกรณ์มูลค่าสูงในตู้ควบคุม <span className="text-rose-500">*</span>
+                                                </label>
+                                                <select
+                                                    value={editingRecord.assetId || ''}
+                                                    onChange={(e) => {
+                                                        const selectedId = e.target.value;
+                                                        const asset = activeHighValueAssets.find(a => a.id === selectedId);
+                                                        if (asset) {
+                                                            setEditingRecord({ 
+                                                                ...editingRecord, 
+                                                                assetId: selectedId, 
+                                                                equipmentName: `${asset.name} (${asset.code})` 
+                                                            });
+                                                        } else {
+                                                            setEditingRecord({ 
+                                                                ...editingRecord, 
+                                                                assetId: '', 
+                                                                equipmentName: '' 
+                                                            });
+                                                        }
+                                                    }}
+                                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-base-850 border border-slate-200 dark:border-base-750 rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white"
+                                                    required
+                                                >
+                                                    <option value="">-- กรุณาเลือกอุปกรณ์มูลค่าสูง --</option>
+                                                    {activeHighValueAssets.map(asset => (
+                                                        <option key={asset.id} value={asset.id}>
+                                                            {asset.name} [{asset.code}] ({asset.cabinet})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                {activeHighValueAssets.length === 0 && (
+                                                    <p className="text-[10px] text-rose-500 font-bold">
+                                                        * ไม่มีรายการอุปกรณ์มูลค่าสูงเปิดใช้งานอยู่ในระบบหน้าตั้งค่า
+                                                    </p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-1.5">
+                                                <label className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                                                    🛠️ พิมพ์ชื่ออุปกรณ์ทั่วไปที่ต้องการยืม <span className="text-rose-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="ระบุชื่อเครื่องมืออุปกรณ์ทั่วไป..."
+                                                    value={editingRecord.equipmentName || ''}
+                                                    onChange={(e) => setEditingRecord({ ...editingRecord, equipmentName: e.target.value })}
+                                                    className="w-full px-4 py-3.5 bg-slate-50 dark:bg-base-850 border border-slate-200 dark:border-base-750 rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white"
+                                                    required
+                                                />
+                                            </div>
+                                        )}
 
                                         <div className="space-y-1.5">
                                             <label className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
@@ -1461,10 +1701,7 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                                         <button
                                             key="borrow-cancel-btn"
                                             type="button"
-                                            onClick={() => {
-                                                setIsBorrowModalOpen(false);
-                                                setEditingRecord(null);
-                                            }}
+                                            onClick={handleCloseBorrowModal}
                                             className="px-4 py-3 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-xs font-black transition-all"
                                         >
                                             ยกเลิก
@@ -1518,20 +1755,17 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
 
                 return (
                     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-                        <div className="relative bg-white dark:bg-base-900 rounded-[2.5rem] border border-slate-200 dark:border-base-800 shadow-2xl max-w-md w-full overflow-hidden transition-all duration-300">
+                        <div className="relative bg-white dark:bg-base-900 rounded-[2.5rem] border border-slate-200 dark:border-base-800 shadow-2xl max-w-xl w-full overflow-hidden transition-all duration-300">
                             
                             {/* Title Bar with Step Indicator */}
                             <div className="px-6 py-5 border-b border-slate-100 dark:border-base-850 bg-slate-50/50 dark:bg-base-950/20">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-tight flex items-center gap-2">
+                                    <h3 className="text-base md:text-lg font-black text-slate-800 dark:text-white uppercase tracking-tight flex items-center gap-2">
                                         🟢 บันทึกการส่งคืนเครื่องมือ
                                     </h3>
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            setIsReturnModalOpen(false);
-                                            setSelectedRecordForReturn(null);
-                                        }}
+                                        onClick={handleCloseReturnModal}
                                         className="p-1.5 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-all rounded-full hover:bg-slate-100 dark:hover:bg-base-800"
                                     >
                                         <XCircleIcon className="h-5 w-5" />
@@ -1756,10 +1990,7 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                                         <button
                                             key="return-cancel-btn"
                                             type="button"
-                                            onClick={() => {
-                                                setIsReturnModalOpen(false);
-                                                setSelectedRecordForReturn(null);
-                                            }}
+                                            onClick={handleCloseReturnModal}
                                             className="px-4 py-3 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-xs font-black transition-all"
                                         >
                                             ยกเลิก

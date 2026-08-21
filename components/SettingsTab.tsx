@@ -1227,7 +1227,15 @@ const HighValueAssetsManager: React.FC<{
 };
 
 const SettingsTab: React.FC<{ testers: Tester[]; onRefreshTesters: () => void; onTasksUpdated: () => void; appSettings?: AppSettings | null; onSettingsUpdated?: () => void; }> = (props) => {
-    const [activeSubTab, setActiveSubTab] = useState<'team' | 'mappings' | 'columns' | 'ui' | 'highValueAssets' | 'qrcode' | 'danger'>('ui');
+    const [activeSubTab, setActiveSubTab] = useState<'team' | 'mappings' | 'columns' | 'ui' | 'highValueAssets' | 'qrcode' | 'danger'>(() => {
+        try {
+            const saved = localStorage.getItem('settings_active_subtab');
+            if (saved && ['team', 'mappings', 'columns', 'ui', 'highValueAssets', 'qrcode', 'danger'].includes(saved)) {
+                return saved as any;
+            }
+        } catch (e) {}
+        return 'ui';
+    });
     const [notification, setNotification] = useState<{ message: string; isError?: boolean } | null>(null);
     const [showCleanupModal, setShowCleanupModal] = useState(false);
     const [showWipeModal, setShowWipeModal] = useState(false);
@@ -1255,7 +1263,12 @@ const SettingsTab: React.FC<{ testers: Tester[]; onRefreshTesters: () => void; o
             <div><h2 className="text-2xl font-bold text-base-900 dark:text-base-100">Settings</h2><p className="text-base-500">Configure your workspace</p></div>
             <div className="flex p-1 bg-base-100 dark:bg-base-800 rounded-xl w-fit border border-base-200 dark:border-base-700 overflow-x-auto max-w-full">
                 {tabs.map(tab => (
-                    <button key={tab.id} onClick={() => setActiveSubTab(tab.id as any)} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 whitespace-nowrap ${activeSubTab === tab.id ? 'bg-white dark:bg-base-700 text-base-900 dark:text-white shadow-sm ring-1 ring-black/5' : `text-base-500 hover:text-base-700 dark:hover:text-base-300 ${tab.danger ? 'hover:text-red-600' : ''}`}`}>{tab.label}</button>
+                    <button key={tab.id} onClick={() => {
+                        setActiveSubTab(tab.id as any);
+                        try {
+                            localStorage.setItem('settings_active_subtab', tab.id);
+                        } catch (e) {}
+                    }} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 whitespace-nowrap ${activeSubTab === tab.id ? 'bg-white dark:bg-base-700 text-base-900 dark:text-white shadow-sm ring-1 ring-black/5' : `text-base-500 hover:text-base-700 dark:hover:text-base-300 ${tab.danger ? 'hover:text-red-600' : ''}`}`}>{tab.label}</button>
                 ))}
             </div>
 

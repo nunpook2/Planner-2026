@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { GoogleGenAI, Modality } from "@google/genai";
-import type { Tester, AssignedTask, RawTask, ShiftReport, DailySchedule, AssignedPrepareTask, CategorizedTask, AppSettings, HighValueCheck } from '../types';
+import type { Tester, AssignedTask, RawTask, ShiftReport, DailySchedule, AssignedPrepareTask, CategorizedTask, AppSettings, HighValueCheck, BorrowRecord } from '../types';
 import { TaskStatus, TaskCategory } from '../types';
 import { 
-    getAssignedTasks, getShiftReport, saveShiftReport, getDailySchedule, getAssignedPrepareTasks, getCategorizedTasks,
+    getAssignedTasks, getShiftReport, saveShiftReport, getDailySchedule, getAssignedPrepareTasks, getCategorizedTasks, getBorrowRecords,
 } from '../services/dataService';
 import { 
     CheckCircleIcon, AlertTriangleIcon, 
@@ -97,34 +97,77 @@ const ReportEditorModal: React.FC<{
     const [wasteLevel, setWasteLevel] = useState<'low' | 'medium' | 'high'>('low');
     const [note, setNote] = useState('');
     const [highValueChecks, setHighValueChecks] = useState<HighValueCheck[]>([]);
+    const [borrowRecords, setBorrowRecords] = useState<BorrowRecord[]>([]);
 
     useEffect(() => {
         if (isOpen) {
             setWasteLevel(report?.wasteLevel || 'low');
             setNote(report?.infrastructureNote || '');
             
-            // Prepare initial highValueChecks
-            const activeAssets = appSettings?.highValueAssets?.filter(a => a.isActive) || [];
-            const existingChecks = report?.highValueChecks || [];
-            
-            const initialChecks = activeAssets.map(asset => {
-                const existing = existingChecks.find(c => c.assetId === asset.id);
-                return {
-                    assetId: asset.id,
-                    assetName: asset.name,
-                    assetCode: asset.code,
-                    cabinet: asset.cabinet,
-                    isPresent: existing ? existing.isPresent : true,
-                    status: existing ? existing.status : 'normal',
-                    note: existing ? existing.note : '',
-                    checkedAt: existing ? existing.checkedAt : new Date().toISOString(),
-                    trackQuantity: asset.trackQuantity || false,
-                    initialQuantity: asset.initialQuantity || 1,
-                    currentQuantity: existing && existing.currentQuantity !== undefined ? existing.currentQuantity : (asset.initialQuantity || 1),
-                    isConsumable: asset.isConsumable || false
-                };
+            // Fetch active/all borrow records first, then prepare initial checks!
+            getBorrowRecords().then(records => {
+                const fetchedRecords = records || [];
+                setBorrowRecords(fetchedRecords);
+
+                const activeAssets = appSettings?.highValueAssets?.filter(a => a.isActive) || [];
+                const existingChecks = report?.highValueChecks || [];
+                
+                const initialChecks = activeAssets.map(asset => {
+                    const existing = existingChecks.find(c => c.assetId === asset.id);
+                    const activeBorrowsCount = fetchedRecords.filter(r => r.assetId === asset.id && r.status !== 'returned').length;
+                    const expectedPresentQty = Math.max(0, (asset.initialQuantity || 1) - activeBorrowsCount);
+
+                    let initialCurrentQty = asset.initialQuantity || 1;
+                    let initialIsPresent = true;
+
+                    if (existing && existing.currentQuantity !== undefined) {
+                        initialCurrentQty = existing.currentQuantity;
+                        initialIsPresent = existing.isPresent;
+                    } else {
+                        // Brand new report check -> auto-link to expected present quantity based on borrows!
+                        initialCurrentQty = expectedPresentQty;
+                        initialIsPresent = expectedPresentQty > 0;
+                    }
+
+                    return {
+                        assetId: asset.id,
+                        assetName: asset.name,
+                        assetCode: asset.code,
+                        cabinet: asset.cabinet,
+                        isPresent: initialIsPresent,
+                        status: existing ? existing.status : 'normal',
+                        note: existing ? existing.note : (activeBorrowsCount > 0 ? `ถูกยืมใช้งาน ${activeBorrowsCount} ชิ้น` : ''),
+                        checkedAt: existing ? existing.checkedAt : new Date().toISOString(),
+                        trackQuantity: asset.trackQuantity || false,
+                        initialQuantity: asset.initialQuantity || 1,
+                        currentQuantity: initialCurrentQty,
+                        isConsumable: asset.isConsumable || false
+                    };
+                });
+                setHighValueChecks(initialChecks);
+            }).catch(err => {
+                console.error("Failed to load borrow records in Shift report", err);
+                const activeAssets = appSettings?.highValueAssets?.filter(a => a.isActive) || [];
+                const existingChecks = report?.highValueChecks || [];
+                const initialChecks = activeAssets.map(asset => {
+                    const existing = existingChecks.find(c => c.assetId === asset.id);
+                    return {
+                        assetId: asset.id,
+                        assetName: asset.name,
+                        assetCode: asset.code,
+                        cabinet: asset.cabinet,
+                        isPresent: existing ? existing.isPresent : true,
+                        status: existing ? existing.status : 'normal',
+                        note: existing ? existing.note : '',
+                        checkedAt: existing ? existing.checkedAt : new Date().toISOString(),
+                        trackQuantity: asset.trackQuantity || false,
+                        initialQuantity: asset.initialQuantity || 1,
+                        currentQuantity: existing && existing.currentQuantity !== undefined ? existing.currentQuantity : (asset.initialQuantity || 1),
+                        isConsumable: asset.isConsumable || false
+                    };
+                });
+                setHighValueChecks(initialChecks);
             });
-            setHighValueChecks(initialChecks);
         }
     }, [isOpen, report, appSettings]);
 
@@ -141,8 +184,8 @@ const ReportEditorModal: React.FC<{
                         </span>
                         <div>
                             <h3 className="text-2xl md:text-3xl font-black tracking-tighter text-base-955 dark:text-white">Lab Shift Handover & Verification</h3>
-                            <p className="text-xs font-bold text-base-400 uppercase tracking-widest mt-1">
-                                {date} <span className="mx-2 text-base-200">|</span> <span className="text-primary-600">{shift.toUpperCase()} SHIFT</span>
+                            <p className="text-sm font-black text-primary-600 uppercase tracking-wider mt-1">
+                                {date} <span className="mx-2 text-base-300">|</span> <span>{shift.toUpperCase()} SHIFT</span>
                             </p>
                         </div>
                     </div>
@@ -165,8 +208,8 @@ const ReportEditorModal: React.FC<{
                                         <TrashIcon className="h-5 w-5" />
                                     </span>
                                     <div>
-                                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-base-400">Zone 1: Lab Waste Status</h4>
-                                        <p className="text-[11px] text-base-400 mt-0.5">ระบุปริมาณขยะเคมีและขยะชีวภาพประจำกะ</p>
+                                        <h4 className="text-base font-black uppercase tracking-wider text-base-700 dark:text-base-250">Zone 1: Lab Waste Status</h4>
+                                        <p className="text-xs text-base-500 dark:text-base-400 mt-0.5">ระบุปริมาณขยะเคมีและขยะชีวภาพประจำกะ</p>
                                     </div>
                                 </div>
                                 
@@ -186,11 +229,11 @@ const ReportEditorModal: React.FC<{
                                             }`}
                                         >
                                             <div className="flex flex-col">
-                                                <span className={`text-[9px] font-black uppercase tracking-widest ${wasteLevel === lv ? 'text-white/60' : 'text-base-400'}`}>
-                                                    Level Status
+                                                <span className={`text-xs font-black uppercase tracking-wider ${wasteLevel === lv ? 'text-white/80' : 'text-base-400'}`}>
+                                                    ระดับปริมาณขยะ (Waste Level)
                                                 </span>
-                                                <span className="text-lg font-black uppercase tracking-tight mt-0.5">
-                                                    {lv === 'low' ? 'Low / Safe' : lv === 'medium' ? 'Medium / Full' : 'High / Overflow'}
+                                                <span className="text-xl font-black uppercase tracking-tight mt-0.5">
+                                                    {lv === 'low' ? 'Low / Safe (น้อย)' : lv === 'medium' ? 'Medium / Full (ปานกลาง)' : 'High / Overflow (เต็ม/ล้น)'}
                                                 </span>
                                             </div>
                                             <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
@@ -214,8 +257,8 @@ const ReportEditorModal: React.FC<{
                                         <ChatAlt2Icon className="h-5 w-5" />
                                     </span>
                                     <div>
-                                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-base-400">Zone 3: Handover Notes</h4>
-                                        <p className="text-[11px] text-base-400 mt-0.5">บันทึกเหตุการณ์สำคัญ ข้อควรระวัง หรือสิ่งที่ต้องฝากกะถัดไป</p>
+                                        <h4 className="text-base font-black uppercase tracking-wider text-base-700 dark:text-base-250">Zone 3: Handover Notes</h4>
+                                        <p className="text-xs text-base-500 dark:text-base-400 mt-0.5">บันทึกเหตุการณ์สำคัญ ข้อควรระวัง หรือสิ่งที่ต้องฝากกะถัดไป</p>
                                     </div>
                                 </div>
                                 
@@ -226,6 +269,69 @@ const ReportEditorModal: React.FC<{
                                     rows={4} 
                                     className="w-full p-4 bg-white dark:bg-base-800 border-2 border-base-100 dark:border-base-700 rounded-[1.5rem] text-sm font-bold focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none dark:text-white resize-none transition-all placeholder:text-base-400"
                                 />
+                            </div>
+
+                            {/* Zone 4: Outstanding Borrowed Items */}
+                            <div className="bg-base-50/30 dark:bg-base-950/20 p-6 rounded-[2rem] border border-base-100 dark:border-base-800 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <span className="p-2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 rounded-xl">
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </span>
+                                        <div>
+                                            <h4 className="text-base font-black uppercase tracking-wider text-base-700 dark:text-base-250">Zone 4: รายการอุปกรณ์ที่ถูกยืม</h4>
+                                            <p className="text-xs text-base-500 dark:text-base-400 mt-0.5">เครื่องมือที่กำลังถูกยืมใช้งานและยังไม่ได้ส่งคืนในขณะนี้</p>
+                                        </div>
+                                    </div>
+                                    <span className="px-3 py-1 bg-amber-100/80 text-amber-800 text-xs font-black rounded-lg">
+                                        {borrowRecords.filter(r => r.status !== 'returned').length} รายการ
+                                    </span>
+                                </div>
+
+                                <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1 no-scrollbar">
+                                    {borrowRecords.filter(r => r.status !== 'returned').length === 0 ? (
+                                        <div className="text-center py-6 text-slate-400 dark:text-slate-500 font-semibold border border-dashed border-slate-200 dark:border-base-800 rounded-xl bg-white dark:bg-base-900/40 text-[11px]">
+                                            ไม่มีเครื่องมือหรืออุปกรณ์ค้างยืมในขณะนี้
+                                        </div>
+                                    ) : (
+                                        borrowRecords.filter(r => r.status !== 'returned').map((record) => {
+                                            const isOverdue = record.status === 'overdue' || new Date(record.expectedReturnDate) < new Date();
+                                            return (
+                                                <div 
+                                                    key={record.id}
+                                                    className={`p-3 rounded-xl border flex flex-col gap-1.5 transition-all text-xs bg-white dark:bg-base-900 ${
+                                                        isOverdue 
+                                                            ? 'border-rose-200 dark:border-rose-950 bg-rose-50/10 dark:bg-rose-950/5' 
+                                                            : 'border-slate-100 dark:border-base-800'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="font-black text-slate-800 dark:text-white truncate">
+                                                            {record.isHighValue ? '💎' : '🔧'} {record.equipmentName}
+                                                        </span>
+                                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black tracking-wide shrink-0 ${
+                                                            isOverdue 
+                                                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300' 
+                                                                : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30'
+                                                        }`}>
+                                                            {isOverdue ? 'เลยกำหนด ⚠️' : 'กำลังยืม'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
+                                                        <span>👤 ผู้ยืม: <strong className="text-slate-700 dark:text-slate-200">{record.borrowerName}</strong></span>
+                                                        <span>📞 {record.borrowerPhone}</span>
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium flex justify-between border-t border-slate-50 dark:border-base-850/40 pt-1 mt-0.5">
+                                                        <span>ยืมเมื่อ: {record.borrowDate} ({record.borrowTime} น.)</span>
+                                                        <span className={isOverdue ? 'text-rose-500 font-bold' : ''}>กำหนด: {record.expectedReturnDate}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             </div>
                         </div>
                         
@@ -239,28 +345,30 @@ const ReportEditorModal: React.FC<{
                                         </svg>
                                     </span>
                                     <div>
-                                        <h4 className="text-base font-black uppercase tracking-[0.2em] text-base-955 dark:text-white">Zone 2: อุปกรณ์มูลค่าสูง ({highValueChecks.length} รายการ)</h4>
-                                        <p className="text-xs text-base-400 mt-0.5">ตรวจนับสิ่งของและตรวจสอบสภาพอุปกรณ์ในตู้พิเศษเพื่อความถูกต้องครบถ้วน</p>
+                                        <h4 className="text-xl font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-400">Zone 2: ตรวจนับอุปกรณ์มูลค่าสูง ({highValueChecks.length} รายการ)</h4>
+                                        <p className="text-sm text-base-500 dark:text-base-300 mt-0.5 font-medium">ตรวจนับสิ่งของและตรวจสอบสภาพอุปกรณ์ในตู้พิเศษเพื่อความถูกต้องครบถ้วน</p>
                                     </div>
                                 </div>
                             </div>
-
-                            {highValueChecks.length === 0 ? (
-                                <div className="p-12 text-center bg-base-50/50 dark:bg-base-800 rounded-[2rem] border-2 border-dashed border-base-100 dark:border-base-700 flex-1 flex flex-col items-center justify-center">
-                                    <p className="text-base font-bold text-base-400">ยังไม่มีการตั้งค่าอุปกรณ์มูลค่าสูงในเมนูตั้งค่าระบบ</p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto pr-2 flex-1 max-h-[58vh] lg:max-h-[64vh] no-scrollbar">
-                                    {highValueChecks.map((check, index) => {
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto pr-1 flex-grow pb-8">
+                                {highValueChecks.map((check, index) => {
                                         const asset = appSettings?.highValueAssets?.find(a => a.id === check.assetId);
-                                        const isQtyMismatched = check.trackQuantity && !check.isConsumable && (check.currentQuantity !== undefined ? check.currentQuantity : (check.initialQuantity || 1)) < (check.initialQuantity || 1);
-                                        const isCardAbnormal = !check.isPresent || check.status === 'abnormal' || isQtyMismatched;
+                                        const activeBorrows = borrowRecords.filter(r => r.assetId === check.assetId && r.status !== 'returned');
+                                        const activeBorrow = activeBorrows[0];
+                                        const expectedPresentQty = Math.max(0, (check.initialQuantity || 1) - activeBorrows.length);
+                                        const todayStr = new Date().toISOString().split('T')[0];
+                                        const hasOverdueBorrow = activeBorrows.some(b => b.expectedReturnDate < todayStr);
+
+                                        // Mismatch only if current present quantity in lab is less than the expected non-borrowed quantity!
+                                        const isQtyMismatched = check.trackQuantity && !check.isConsumable && (check.currentQuantity !== undefined ? check.currentQuantity : (check.initialQuantity || 1)) < expectedPresentQty;
+                                        const isCardAbnormal = !check.isPresent || check.status === 'abnormal' || isQtyMismatched || hasOverdueBorrow;
                                         return (
                                             <div 
                                                 key={check.assetId} 
                                                 className={`p-5 rounded-[2rem] border-2 transition-all duration-300 space-y-4 flex flex-col justify-between shadow-sm ${
                                                     isCardAbnormal
-                                                        ? 'bg-rose-50/40 dark:bg-rose-950/15 border-rose-200 dark:border-rose-900/40 shadow-md shadow-rose-500/5' 
+                                                        ? 'bg-rose-50/10 dark:bg-rose-950/10 border-red-500 dark:border-red-500 shadow-md shadow-red-500/5 ring-1 ring-red-500/20' 
                                                         : 'bg-white dark:bg-base-800 border-base-100 dark:border-base-700 hover:border-base-200 dark:hover:border-base-600'
                                                 }`}
                                             >
@@ -299,18 +407,83 @@ const ReportEditorModal: React.FC<{
                                                                 </span>
                                                             )}
                                                         </div>
+  
+                                                        {activeBorrows.length > 0 && (
+                                                            <div className={`mt-3 p-3 rounded-xl border flex flex-col gap-2 animate-fade-in ${
+                                                                hasOverdueBorrow 
+                                                                    ? 'bg-red-500/10 dark:bg-red-950/20 border-red-500/30' 
+                                                                    : 'bg-amber-500/15 dark:bg-amber-500/5 border-amber-500/30'
+                                                            }`}>
+                                                                <div className="flex items-center justify-between gap-2 border-b border-dashed border-slate-200/50 dark:border-base-800 pb-1.5">
+                                                                    <span className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                                                                        hasOverdueBorrow ? 'text-red-700 dark:text-red-400 font-extrabold' : 'text-amber-700 dark:text-amber-400'
+                                                                    }`}>
+                                                                        💎 ยืมใช้งาน ({activeBorrows.length} ชิ้น)
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const updated = [...highValueChecks];
+                                                                            if (check.trackQuantity) {
+                                                                                updated[index].currentQuantity = expectedPresentQty;
+                                                                                updated[index].isPresent = expectedPresentQty > 0;
+                                                                            } else {
+                                                                                updated[index].isPresent = false;
+                                                                            }
+                                                                            const borrowers = activeBorrows.map(b => b.borrowerName).join(', ');
+                                                                            updated[index].note = `ถูกยืมโดย ${borrowers}`;
+                                                                            setHighValueChecks(updated);
+                                                                        }}
+                                                                        className={`px-2 py-1 text-[10px] font-black rounded-lg transition-all shrink-0 uppercase tracking-wide shadow-sm text-white ${
+                                                                            hasOverdueBorrow ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600'
+                                                                        }`}
+                                                                    >
+                                                                        {check.trackQuantity ? `ปรับเหลือ ${expectedPresentQty} ชิ้น` : 'เซ็ตไม่อยู่'}
+                                                                    </button>
+                                                                </div>
+                                                                <div className="space-y-2 max-h-[120px] overflow-y-auto no-scrollbar">
+                                                                    {activeBorrows.map((b, bIdx) => {
+                                                                        const isBOverdue = b.expectedReturnDate < todayStr;
+                                                                        return (
+                                                                            <div key={b.id || bIdx} className="text-[11.5px] leading-relaxed flex flex-col gap-1 border-b border-slate-100 dark:border-base-850 last:border-none pb-2 last:pb-0">
+                                                                                <div className="flex items-center justify-between gap-2">
+                                                                                    <span className="font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1 truncate">
+                                                                                        👤 {b.borrowerName}
+                                                                                    </span>
+                                                                                    {isBOverdue ? (
+                                                                                        <span className="text-[9px] px-1.5 py-0.5 bg-red-600 text-white font-extrabold rounded-full animate-pulse shadow-sm shrink-0 flex items-center gap-0.5">
+                                                                                            เกินกำหนดส่งคืน ⚠️
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <span className="text-[9px] px-1.5 py-0.5 bg-amber-500 text-white font-bold rounded-full shrink-0">
+                                                                                            กำลังยืม
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                                <div className="flex justify-between text-[10px] font-semibold pl-4 text-slate-500 dark:text-slate-400 gap-2">
+                                                                                    <span>📅 ยืมเมื่อ: {b.borrowDate}</span>
+                                                                                    <span className={isBOverdue ? "text-red-600 font-black animate-pulse" : "text-slate-700 dark:text-slate-300 font-bold"}>
+                                                                                        ↩️ กำหนดคืน: {b.expectedReturnDate}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
 
-                                                <div className="space-y-3 pt-3 border-t-2 border-base-50 dark:border-base-750">
+                                                <div className={`space-y-3 pt-3 border-t-2 ${isCardAbnormal ? 'border-red-500 dark:border-red-500/60 shadow-sm shadow-red-500/10' : 'border-base-50 dark:border-base-750'}`}>
                                                     <div className="grid grid-cols-2 gap-3">
                                                         {/* Storage presence state selector OR Quantity counter */}
                                                         {check.trackQuantity ? (
                                                             <div>
-                                                                <span className="text-[10px] font-black text-base-400 dark:text-base-500 uppercase tracking-widest block mb-1 text-center">
+                                                                <span className="text-xs font-black text-base-500 dark:text-base-400 uppercase tracking-wider block mb-1 text-center">
                                                                     จำนวน (ตรวจนับ)
                                                                 </span>
-                                                                <div className="flex items-center justify-between p-1 bg-base-50 dark:bg-base-900 rounded-xl border border-base-150 dark:border-base-700 h-[38px]">
+                                                                <div className="flex items-center justify-between p-1 bg-base-50 dark:bg-base-900 rounded-xl border border-base-150 dark:border-base-700 h-[44px]">
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => {
@@ -321,15 +494,15 @@ const ReportEditorModal: React.FC<{
                                                                             updated[index].isPresent = nextQty > 0;
                                                                             setHighValueChecks(updated);
                                                                         }}
-                                                                        className="w-8 h-8 flex items-center justify-center text-sm font-black text-base-500 hover:bg-base-200 dark:hover:bg-base-800 rounded-lg transition-all"
+                                                                        className="w-10 h-10 flex items-center justify-center text-lg font-black text-base-500 hover:bg-base-200 dark:hover:bg-base-800 rounded-lg transition-all"
                                                                     >
                                                                         -
                                                                     </button>
-                                                                    <div className="flex items-baseline justify-center gap-0.5 min-w-0 px-1">
-                                                                        <span className={`text-sm font-black ${isQtyMismatched ? 'text-rose-600 dark:text-rose-400 animate-pulse' : 'text-base-900 dark:text-white'}`}>
+                                                                    <div className="flex items-baseline justify-center gap-0.5 min-w-0 px-2">
+                                                                        <span className={`text-base font-black ${isQtyMismatched ? 'text-rose-600 dark:text-rose-400 animate-pulse' : 'text-base-900 dark:text-white'}`}>
                                                                             {check.currentQuantity ?? check.initialQuantity ?? 1}
                                                                         </span>
-                                                                        <span className="text-[10px] text-base-400 font-bold">
+                                                                        <span className="text-xs text-base-400 font-bold">
                                                                             /{check.initialQuantity ?? 1}
                                                                         </span>
                                                                     </div>
@@ -343,7 +516,7 @@ const ReportEditorModal: React.FC<{
                                                                             updated[index].isPresent = nextQty > 0;
                                                                             setHighValueChecks(updated);
                                                                         }}
-                                                                        className="w-8 h-8 flex items-center justify-center text-sm font-black text-base-500 hover:bg-base-200 dark:hover:bg-base-800 rounded-lg transition-all"
+                                                                        className="w-10 h-10 flex items-center justify-center text-lg font-black text-base-500 hover:bg-base-200 dark:hover:bg-base-800 rounded-lg transition-all"
                                                                     >
                                                                         +
                                                                     </button>
@@ -445,8 +618,7 @@ const ReportEditorModal: React.FC<{
                                         );
                                     })}
                                 </div>
-                            )}
-                        </div>
+                            </div>
 
                     </div>
                 </div>

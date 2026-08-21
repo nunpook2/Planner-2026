@@ -228,6 +228,7 @@ const App: React.FC = () => {
             case 'borrow': return (
                 <BorrowTab 
                     testers={testers} 
+                    appSettings={appSettings}
                     onBorrowUpdated={triggerTaskRefresh} 
                     isIsolatedView={isIsolatedView}
                     onExitIsolated={() => {
