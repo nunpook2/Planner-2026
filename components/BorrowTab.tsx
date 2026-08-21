@@ -538,18 +538,21 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
             if (!editingRecord.id && recordToSave.isHighValue && recordToSave.assetId) {
                 const currentSettings = await getAppSettings();
                 if (currentSettings && currentSettings.highValueAssets) {
-                    const updatedAssets = currentSettings.highValueAssets.map((asset: HighValueAsset) => {
-                        if (asset.id === recordToSave.assetId && asset.trackQuantity) {
-                            const currentQty = asset.initialQuantity ?? 1;
-                            return {
-                                ...asset,
-                                initialQuantity: Math.max(0, currentQty - 1)
-                            };
-                        }
-                        return asset;
-                    });
-                    await saveAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
-                    setAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
+                    const targetAsset = currentSettings.highValueAssets.find((a: HighValueAsset) => a.id === recordToSave.assetId);
+                    if (targetAsset && targetAsset.isConsumable && targetAsset.trackQuantity) {
+                        const updatedAssets = currentSettings.highValueAssets.map((asset: HighValueAsset) => {
+                            if (asset.id === recordToSave.assetId) {
+                                const currentQty = asset.initialQuantity ?? 1;
+                                return {
+                                    ...asset,
+                                    initialQuantity: Math.max(0, currentQty - 1)
+                                };
+                            }
+                            return asset;
+                        });
+                        await saveAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
+                        setAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
+                    }
                 }
             }
 
@@ -612,26 +615,6 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                     : selectedRecordForReturn.notes
             };
 
-            if (selectedRecordForReturn.isHighValue && selectedRecordForReturn.assetId) {
-                const currentSettings = await getAppSettings();
-                if (currentSettings && currentSettings.highValueAssets) {
-                    const asset = currentSettings.highValueAssets.find((a: HighValueAsset) => a.id === selectedRecordForReturn.assetId);
-                    if (asset && !asset.isConsumable && asset.trackQuantity) {
-                        const updatedAssets = currentSettings.highValueAssets.map((a: HighValueAsset) => {
-                            if (a.id === selectedRecordForReturn.assetId) {
-                                return {
-                                    ...a,
-                                    initialQuantity: (a.initialQuantity ?? 1) + 1
-                                };
-                            }
-                            return a;
-                        });
-                        await saveAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
-                        setAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
-                    }
-                }
-            }
-
             await saveBorrowRecord(updatedRecord);
             showNotification("บันทึกการคืนอุปกรณ์สำเร็จ");
             setIsReturnModalOpen(false);
@@ -656,23 +639,6 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
         if (!recordToDelete || !recordToDelete.id) return;
         setIsSubmitting(true);
         try {
-            if (recordToDelete.isHighValue && recordToDelete.assetId && recordToDelete.status !== 'returned') {
-                const currentSettings = await getAppSettings();
-                if (currentSettings && currentSettings.highValueAssets) {
-                    const updatedAssets = currentSettings.highValueAssets.map((asset: HighValueAsset) => {
-                        if (asset.id === recordToDelete.assetId && asset.trackQuantity) {
-                            return {
-                                ...asset,
-                                initialQuantity: (asset.initialQuantity ?? 1) + 1
-                            };
-                        }
-                        return asset;
-                    });
-                    await saveAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
-                    setAppSettings({ ...currentSettings, highValueAssets: updatedAssets });
-                }
-            }
-
             await deleteBorrowRecord(recordToDelete.id);
             showNotification("ลบประวัติการยืมเรียบร้อยแล้ว");
             setIsDeleteModalOpen(false);
