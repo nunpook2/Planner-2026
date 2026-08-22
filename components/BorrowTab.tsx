@@ -366,8 +366,13 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
     // Calculate dynamic status for a record
     const getRecordStatus = (record: BorrowRecord): 'borrowed' | 'returned' | 'overdue' => {
         if (record.actualReturnDate) return 'returned';
+        if (record.isConsumable) return 'borrowed';
+        if (record.isHighValue && record.assetId) {
+            const asset = activeHighValueAssets.find(a => a.id === record.assetId);
+            if (asset?.isConsumable) return 'borrowed';
+        }
         const today = new Date().toISOString().split('T')[0];
-        if (record.expectedReturnDate < today) return 'overdue';
+        if (record.expectedReturnDate && record.expectedReturnDate < today) return 'overdue';
         return 'borrowed';
     };
 
@@ -512,6 +517,11 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
 
         setIsSubmitting(true);
         try {
+            const selectedAsset = editingRecord.isHighValue && editingRecord.assetId 
+                ? activeHighValueAssets.find(a => a.id === editingRecord.assetId)
+                : null;
+            const isConsumable = selectedAsset?.isConsumable || false;
+
             const recordToSave: BorrowRecord = {
                 id: editingRecord.id,
                 equipmentId: 'other',
@@ -521,7 +531,7 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                 borrowerPhone: editingRecord.borrowerPhone.trim(),
                 borrowDate: editingRecord.borrowDate || new Date().toISOString().split('T')[0],
                 borrowTime: editingRecord.borrowTime || '08:00',
-                expectedReturnDate: editingRecord.expectedReturnDate || new Date().toISOString().split('T')[0],
+                expectedReturnDate: isConsumable ? '' : (editingRecord.expectedReturnDate || new Date().toISOString().split('T')[0]),
                 actualReturnDate: editingRecord.actualReturnDate || '',
                 guarantorName: editingRecord.borrowerType === 'external' ? editingRecord.guarantorName?.trim() : '',
                 status: editingRecord.status || 'borrowed',
@@ -532,7 +542,8 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                 returnedBy: editingRecord.returnedBy || '',
                 returnReceiverName: editingRecord.returnReceiverName || '',
                 isHighValue: editingRecord.isHighValue || false,
-                assetId: editingRecord.assetId || ''
+                assetId: editingRecord.assetId || '',
+                isConsumable: isConsumable
             };
 
             if (!editingRecord.id && recordToSave.isHighValue && recordToSave.assetId) {
@@ -717,17 +728,21 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                     {/* Status Pill Badge & Toggle Chevron */}
                     <div className="flex items-center gap-3 shrink-0">
                         <div className="hidden md:flex flex-col items-end text-[10px] font-bold text-slate-400 uppercase mr-1">
-                            <span>{isReturned ? 'คืนเครื่องมือแล้วเมื่อ' : 'กำหนดส่งคืน'}</span>
+                            <span>{isReturned ? 'คืนเครื่องมือแล้วเมื่อ' : record.isConsumable ? 'สถานะการเบิก' : 'กำหนดส่งคืน'}</span>
                             <span className={`text-[11px] font-black mt-0.5 ${
                                 isReturned 
                                     ? 'text-emerald-600 dark:text-emerald-400' 
                                     : isOverdue 
                                         ? 'text-rose-600 dark:text-rose-400' 
-                                        : 'text-slate-600 dark:text-slate-300'
+                                        : record.isConsumable
+                                            ? 'text-indigo-600 dark:text-indigo-400'
+                                            : 'text-slate-600 dark:text-slate-300'
                             }`}>
                                 {isReturned 
                                     ? new Date(record.actualReturnDate!).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
-                                    : new Date(record.expectedReturnDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+                                    : record.isConsumable
+                                        ? 'ใช้หมดไป (ไม่ต้องคืน) ♻️'
+                                        : new Date(record.expectedReturnDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
                                 }
                             </span>
                         </div>
@@ -737,9 +752,11 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' 
                                 : isOverdue 
                                     ? 'bg-rose-100 text-rose-850 dark:bg-rose-900/30 dark:text-rose-300 animate-pulse' 
-                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                                    : record.isConsumable
+                                        ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300'
+                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
                         }`}>
-                            {isReturned ? 'คืนแล้ว' : isOverdue ? 'เลยกำหนด ⚠️' : 'กำลังยืม'}
+                            {isReturned ? 'คืนแล้ว' : isOverdue ? 'เลยกำหนด ⚠️' : record.isConsumable ? 'เบิกใช้งาน ♻️' : 'กำลังยืม'}
                         </span>
 
                         <div className="p-1 text-slate-400 dark:text-slate-500 rounded-lg hover:bg-slate-50 dark:hover:bg-base-800 transition-all">
@@ -803,12 +820,21 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                                             {new Date(record.borrowDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })} ({record.borrowTime} น.)
                                         </span>
                                     </div>
-                                    <div>
-                                        <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">กำหนดส่งคืนอุปกรณ์ทดสอบ</span>
-                                        <span className="font-black text-slate-800 dark:text-slate-200 mt-1 block">
-                                            {new Date(record.expectedReturnDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
-                                        </span>
-                                    </div>
+                                    {record.isConsumable ? (
+                                        <div>
+                                            <span className="text-[10px] text-indigo-500 font-bold block uppercase leading-none">ชนิดทรัพย์สินมูลค่าสูง</span>
+                                            <span className="font-black text-indigo-700 dark:text-indigo-400 mt-1 block">
+                                                ♻️ สิ้นเปลือง (ใช้แล้วหมดไป ไม่ต้องส่งคืน)
+                                            </span>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">กำหนดส่งคืนอุปกรณ์ทดสอบ</span>
+                                            <span className="font-black text-slate-800 dark:text-slate-200 mt-1 block">
+                                                {new Date(record.expectedReturnDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                            </span>
+                                        </div>
+                                    )}
                                     
                                     <div className="pt-2 border-t border-slate-100 dark:border-base-800">
                                         <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-black block uppercase leading-none">สถานะปัจจุบัน</span>
@@ -934,7 +960,7 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                                     <span>แก้ไขข้อมูลยืม</span>
                                 </button>
 
-                                {!isReturned && (
+                                {!isReturned && !record.isConsumable && (
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -1637,15 +1663,26 @@ export const BorrowTab: React.FC<BorrowTabProps> = ({
                                                 </div>
                                             </div>
 
-                                            <div className="space-y-1 pt-2.5 border-t border-slate-200/50 dark:border-base-800">
-                                                <label className="text-[10px] font-bold text-slate-400 block">🏁 วันกำหนดส่งคืน</label>
-                                                <input
-                                                    type="date"
-                                                    value={editingRecord.expectedReturnDate || ''}
-                                                    onChange={(e) => setEditingRecord({ ...editingRecord, expectedReturnDate: e.target.value })}
-                                                    className="w-full px-3 py-2.5 bg-white dark:bg-base-800 border border-slate-200 dark:border-base-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                                                />
-                                            </div>
+                                            {editingRecord.isHighValue && editingRecord.assetId && activeHighValueAssets.find(a => a.id === editingRecord.assetId)?.isConsumable ? (
+                                                <div className="pt-2.5 border-t border-slate-200/50 dark:border-base-800 text-center py-2 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-xl px-2">
+                                                    <p className="text-xs font-black text-indigo-700 dark:text-indigo-400 flex items-center justify-center gap-1">
+                                                        ♻️ ทรัพย์สินใช้สิ้นเปลือง (ไม่ต้องกำหนดส่งคืน)
+                                                    </p>
+                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
+                                                        เบิกแล้วของหมดไป สต็อกจะปรับลดให้อัตโนมัติ
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-1 pt-2.5 border-t border-slate-200/50 dark:border-base-800">
+                                                    <label className="text-[10px] font-bold text-slate-400 block">🏁 วันกำหนดส่งคืน</label>
+                                                    <input
+                                                        type="date"
+                                                        value={editingRecord.expectedReturnDate || ''}
+                                                        onChange={(e) => setEditingRecord({ ...editingRecord, expectedReturnDate: e.target.value })}
+                                                        className="w-full px-3 py-2.5 bg-white dark:bg-base-800 border border-slate-200 dark:border-base-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="space-y-1.5">

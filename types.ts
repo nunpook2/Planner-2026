@@ -301,9 +301,21 @@ export interface HighValueAsset {
     isConsumable?: boolean;
 }
 
+export interface HighValueAssetImportRecord {
+    id: string;
+    assetId: string;
+    assetName: string;
+    assetCode: string;
+    quantity: number;
+    importDate: string; // YYYY-MM-DD
+    note?: string;
+    createdAt: string;
+}
+
 export interface AppSettings {
     tabLabels?: Record<string, string>;
     highValueAssets?: HighValueAsset[];
+    highValueAssetImports?: HighValueAssetImportRecord[];
 }
 
 // --- Method Walkthrough System ---
@@ -345,5 +357,6 @@ export interface BorrowRecord {
     returnReceiverName?: string; // Name of internal employee who accepted the return
     isHighValue?: boolean; // True if it's a high-value asset from settings
     assetId?: string; // High value asset reference ID if applicable
+    isConsumable?: boolean; // True if it's a consumable asset
 }
 

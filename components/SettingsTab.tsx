@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { Tester, TestMapping, AppSettings, HighValueAsset } from '../types';
+import type { Tester, TestMapping, AppSettings, HighValueAsset, HighValueAssetImportRecord } from '../types';
 import { 
     addTester, deleteTester, updateTester, runCleanup, clearAllTaskData, getTestMappings, addTestMapping, updateTestMapping, deleteTestMapping, saveAppSettings 
 } from '../services/dataService';
-import { TrashIcon, UploadIcon, PencilIcon, CheckCircleIcon, XCircleIcon, AlertTriangleIcon, PlusIcon, DragHandleIcon, CogIcon } from './common/Icons';
+import { TrashIcon, UploadIcon, PencilIcon, CheckCircleIcon, XCircleIcon, AlertTriangleIcon, PlusIcon, DragHandleIcon, CogIcon, ClockIcon, InformationCircleIcon, ChevronDownIcon } from './common/Icons';
 
 declare const XLSX: any;
 
@@ -794,6 +794,69 @@ const HighValueAssetsManager: React.FC<{
     const [dragActive, setDragActive] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // States for High Value Assets Import (Restock)
+    const [importingAsset, setImportingAsset] = useState<HighValueAsset | null>(null);
+    const [importQty, setImportQty] = useState<number>(1);
+    const [importNote, setImportNote] = useState<string>('');
+    const [importDate, setImportDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+
+    const handleSaveImport = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!importingAsset) return;
+        if (importQty <= 0) {
+            setNotification({ message: 'โปรดระบุจำนวนที่ต้องการนำเข้าให้มากกว่า 0', isError: true });
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            // Update the asset quantity
+            const updatedAssets = assets.map(a => {
+                if (a.id === importingAsset.id) {
+                    return {
+                        ...a,
+                        initialQuantity: (a.initialQuantity ?? 0) + importQty
+                    };
+                }
+                return a;
+            });
+
+            // Add the import record
+            const newImportRecord: HighValueAssetImportRecord = {
+                id: 'imp_' + Date.now(),
+                assetId: importingAsset.id,
+                assetName: importingAsset.name,
+                assetCode: importingAsset.code,
+                quantity: importQty,
+                importDate: importDate,
+                note: importNote.trim() || undefined,
+                createdAt: new Date().toISOString()
+            };
+
+            const currentImports = appSettings?.highValueAssetImports || [];
+            const updatedImports = [newImportRecord, ...currentImports];
+
+            await saveAppSettings({
+                ...appSettings,
+                highValueAssets: updatedAssets,
+                highValueAssetImports: updatedImports
+            });
+
+            setNotification({ message: `นำเข้าอุปกรณ์ ${importingAsset.name} (+${importQty} ชิ้น) สำเร็จ` });
+            setIsImportModalOpen(false);
+            setImportingAsset(null);
+            setImportQty(1);
+            setImportNote('');
+            if (onSettingsUpdated) onSettingsUpdated();
+        } catch (error) {
+            setNotification({ message: 'เกิดข้อผิดพลาดในการนำเข้าสินค้า', isError: true });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     useEffect(() => {
         if (appSettings?.highValueAssets) {
             setAssets(appSettings.highValueAssets);
@@ -1168,13 +1231,30 @@ const HighValueAssetsManager: React.FC<{
                                 )}
                             </div>
 
-                            <div className="flex justify-between items-center mt-6 pt-4 border-t border-base-100 dark:border-base-700">
-                                <button
-                                    onClick={() => handleToggleActive(asset)}
-                                    className={`text-xs font-bold transition-colors ${asset.isActive ? 'text-base-400 hover:text-base-600' : 'text-primary-600 hover:text-primary-700'}`}
-                                >
-                                    {asset.isActive ? 'ปิดชั่วคราว' : 'เปิดใช้งาน'}
-                                </button>
+                            <div className="flex justify-between items-center mt-6 pt-4 border-t border-base-100 dark:border-base-700 gap-2">
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => handleToggleActive(asset)}
+                                        className={`text-xs font-bold transition-colors ${asset.isActive ? 'text-base-400 hover:text-base-600' : 'text-primary-600 hover:text-primary-700'}`}
+                                    >
+                                        {asset.isActive ? 'ปิดชั่วคราว' : 'เปิดใช้งาน'}
+                                    </button>
+
+                                    {asset.isActive && asset.trackQuantity && (
+                                        <button
+                                            onClick={() => {
+                                                setImportingAsset(asset);
+                                                setImportQty(1);
+                                                setImportNote('');
+                                                setIsImportModalOpen(true);
+                                            }}
+                                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/40 rounded-lg text-[10px] font-black transition-all flex items-center gap-0.5 shadow-sm border border-indigo-100 dark:border-indigo-900/30"
+                                            title="นำเข้าของเพิ่มสต็อก"
+                                        >
+                                            📥 นำเข้าของ
+                                        </button>
+                                    )}
+                                </div>
                                 <div className="flex items-center gap-1">
                                     <button
                                         onClick={() => {
@@ -1222,6 +1302,175 @@ const HighValueAssetsManager: React.FC<{
                 confirmText="ยืนยันการลบ" 
                 confirmColor="bg-red-600" 
             />
+
+            {/* IMPORT MODAL (RESTOCK) */}
+            {isImportModalOpen && importingAsset && (
+                <div className="fixed inset-0 z-50 overflow-y-auto bg-base-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-base-800 rounded-3xl w-full max-w-md shadow-2xl border border-base-100 dark:border-base-700 p-6 space-y-5 animate-scale-up">
+                        <div className="flex justify-between items-start">
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-primary-600 block">📥 นำเข้าของ / เติมสต็อกทรัพย์สิน</span>
+                                <h3 className="text-lg font-black text-slate-800 dark:text-white leading-tight">นำเข้าอุปกรณ์เพิ่มสต็อก</h3>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    setIsImportModalOpen(false);
+                                    setImportingAsset(null);
+                                }}
+                                className="p-1.5 hover:bg-base-100 dark:hover:bg-base-700 rounded-xl text-base-400 hover:text-base-600 dark:text-base-500 transition-all"
+                            >
+                                <XCircleIcon className="h-6 w-6" />
+                            </button>
+                        </div>
+
+                        <div className="bg-indigo-50/50 dark:bg-indigo-950/20 p-4 rounded-2xl border border-indigo-100/50 dark:border-indigo-900/20 text-xs space-y-1">
+                            <p className="font-bold text-indigo-900 dark:text-indigo-300">📦 ข้อมูลทรัพย์สินในระบบ:</p>
+                            <p className="text-slate-600 dark:text-slate-400 font-semibold">ชื่อ: <span className="text-slate-800 dark:text-slate-200">{importingAsset.name}</span></p>
+                            <p className="text-slate-600 dark:text-slate-400 font-semibold">รหัส (Code): <span className="text-slate-800 dark:text-slate-200">{importingAsset.code}</span></p>
+                            <p className="text-slate-600 dark:text-slate-400 font-semibold">สต็อกเดิม: <span className="text-slate-800 dark:text-slate-200 font-black">{importingAsset.initialQuantity ?? 0} ชิ้น</span></p>
+                        </div>
+
+                        <form onSubmit={handleSaveImport} className="space-y-4">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-black text-slate-400 block">📊 จำนวนที่นำเข้าเพิ่ม <span className="text-rose-500">*</span></label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    required
+                                    value={importQty}
+                                    onChange={(e) => setImportQty(Math.max(1, parseInt(e.target.value) || 1))}
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-base-950/40 border border-slate-200 dark:border-base-700 rounded-xl text-sm font-semibold text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-black text-slate-400 block">📅 วันที่นำเข้า</label>
+                                <input
+                                    type="date"
+                                    required
+                                    value={importDate}
+                                    onChange={(e) => setImportDate(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-base-950/40 border border-slate-200 dark:border-base-700 rounded-xl text-sm font-semibold text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-black text-slate-400 block">📝 หมายเหตุ / ล็อตนำเข้า (ระบุสั้นๆ)</label>
+                                <input
+                                    type="text"
+                                    placeholder="เช่น ล็อต ส.ค. 69 / จัดซื้อชุดใหม่"
+                                    value={importNote}
+                                    onChange={(e) => setImportNote(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-base-950/40 border border-slate-200 dark:border-base-700 rounded-xl text-sm font-semibold text-slate-800 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-3">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsImportModalOpen(false);
+                                        setImportingAsset(null);
+                                    }}
+                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSaving}
+                                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs shadow-md transition-all disabled:opacity-50"
+                                >
+                                    {isSaving ? 'กำลังบันทึก...' : '📥 ยืนยันการนำเข้า'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* IMPORT/RESTOCK HISTORY */}
+            <div className="mt-8 bg-white dark:bg-base-800 rounded-2xl border border-slate-100 dark:border-base-700/60 p-5 space-y-4 shadow-sm">
+                <button
+                    onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+                    className="w-full flex items-center justify-between font-black text-slate-800 dark:text-white"
+                >
+                    <div className="flex items-center gap-2">
+                        <span className="text-lg">📝 ประวัติการนำเข้าของ / สั่งซื้อเติมสต็อก</span>
+                        <span className="bg-indigo-50 text-indigo-700 dark:bg-indigo-950/55 dark:text-indigo-400 text-xs px-2.5 py-0.5 rounded-full font-bold">
+                            {appSettings?.highValueAssetImports?.length || 0} รายการ
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-indigo-600 font-bold">
+                        <span>{isHistoryExpanded ? 'ย่อหน้าต่างประวัติ' : 'ขยายดูประวัติ'}</span>
+                        <ChevronDownIcon className={`h-4 w-4 transition-transform duration-300 ${isHistoryExpanded ? 'rotate-180' : ''}`} />
+                    </div>
+                </button>
+
+                {isHistoryExpanded && (
+                    <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-base-700 animate-fade-in">
+                        {appSettings?.highValueAssetImports && appSettings.highValueAssetImports.length > 0 ? (
+                            <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-base-750">
+                                <table className="w-full text-xs text-left text-slate-600 dark:text-slate-300">
+                                    <thead className="bg-slate-50 dark:bg-base-900/60 text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+                                        <tr>
+                                            <th className="px-4 py-3">วันที่นำเข้า</th>
+                                            <th className="px-4 py-3">อุปกรณ์ / รหัส</th>
+                                            <th className="px-4 py-3 text-right">จำนวนที่นำเข้าเพิ่ม</th>
+                                            <th className="px-4 py-3">หมายเหตุ / รายละเอียด</th>
+                                            <th className="px-4 py-3 text-right">การกระทำ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-base-750">
+                                        {appSettings.highValueAssetImports.map((record) => (
+                                            <tr key={record.id} className="hover:bg-slate-50/50 dark:hover:bg-base-900/10 transition-colors font-semibold">
+                                                <td className="px-4 py-3.5 whitespace-nowrap text-slate-500 dark:text-slate-400">
+                                                    📅 {new Date(record.importDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })}
+                                                </td>
+                                                <td className="px-4 py-3.5">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-slate-800 dark:text-white">{record.assetName}</span>
+                                                        <span className="text-[10px] text-slate-400">{record.assetCode}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3.5 text-right font-black text-indigo-600 dark:text-indigo-400">
+                                                    +{record.quantity} ชิ้น
+                                                </td>
+                                                <td className="px-4 py-3.5 text-slate-500 dark:text-slate-400">
+                                                    {record.note || '-'}
+                                                </td>
+                                                <td className="px-4 py-3.5 text-right">
+                                                    <button
+                                                        onClick={async () => {
+                                                            if (window.confirm(`ยืนยันการลบประวัตินำเข้าของ ${record.assetName} ใช่หรือไม่? (หมายเหตุ: การลบจะไม่ไปตัดจำนวนสต็อกปัจจุบัน)`)) {
+                                                                const updatedImports = (appSettings.highValueAssetImports || []).filter(i => i.id !== record.id);
+                                                                await saveAppSettings({
+                                                                    ...appSettings,
+                                                                    highValueAssetImports: updatedImports
+                                                                });
+                                                                setNotification({ message: 'ลบประวัติการนำเข้าของเรียบร้อยแล้ว' });
+                                                                if (onSettingsUpdated) onSettingsUpdated();
+                                                            }
+                                                        }}
+                                                        className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20 p-1.5 rounded-lg transition-colors inline-flex items-center gap-1"
+                                                        title="ลบรายการประวัตินี้"
+                                                    >
+                                                        <TrashIcon className="h-3.5 w-3.5" />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-slate-400 italic">
+                                ยังไม่มีข้อมูลประวัติการนำเข้า/เติมสต็อกอุปกรณ์ใดๆ ในระบบ
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
