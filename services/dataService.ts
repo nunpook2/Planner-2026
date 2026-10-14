@@ -611,8 +611,56 @@ export const INITIAL_EQUIPMENTS: Equipment[] = [
                     { id: 'log-4', date: '2026-10-12', action: 'เปิดใบขอซื้อ PR-69-10902 ส่งฝ่ายจัดซื้อและผู้บริหารอนุมัติ', actor: 'PORNTHAK', stage: 'pr_repair' }
                 ]
             },
-            history: []
+            history: [
+                {
+                    id: 'hist-pds-1002-res-1',
+                    equipmentId: 'eq-pds-1002',
+                    equipmentNo: 'PDS-1002',
+                    equipmentName: 'LUMOS',
+                    reportedDate: '2025-08-10',
+                    reportedBy: 'PORNTHAK',
+                    symptom: 'สัญญาณเลเซอร์บอกพิกัดอ่อนลง ไม่สามารถ Autofocus บนผิวตัวอย่างสีเข้มได้',
+                    rootCause: 'ฝุ่นเกาะที่หน้าเลนส์สะท้อนและชุดกระจกโฟกัสภายใน',
+                    impactLevel: 'Moderate',
+                    stage: 'repaired_verified',
+                    vendorOrTechnician: 'Bruker Service Engineer',
+                    quotationNo: 'QT-2025-4421',
+                    repairPrNo: 'PR-68-08119',
+                    costEstimate: 18000,
+                    targetResolutionDate: '2025-08-20',
+                    resolvedDate: '2025-08-18',
+                    resolutionNote: 'ทำความสะอาดชุด Optical assembly และตั้งค่า Calibration Alignment ผ่านเกณฑ์มาตรฐาน 100%'
+                }
+            ]
         },
+        history: [
+            {
+                id: 'hist-pds-1002-1',
+                date: '2025-11-20',
+                type: 'calibration',
+                title: 'สอบเทียบประจำปี 2025 (Annual Calibration)',
+                description: 'สอบเทียบค่า Wavenumber Accuracy & Repeatability ด้วย Polystyrene Standard Film',
+                technician: 'Bruker Service Engineer',
+                vendor: 'Bruker Thailand Ltd.',
+                docRef: 'CERT-2025-BR991',
+                result: 'Pass',
+                resolutionNote: 'ค่าความคลาดเคลื่อน ±0.4 cm⁻¹ อยู่ในเกณฑ์มาตรฐาน'
+            },
+            {
+                id: 'hist-pds-1002-2',
+                date: '2025-06-15',
+                type: 'repair',
+                title: 'เปลี่ยนหลอดไฟกำเนิดสัญญาณ Infrared Source',
+                description: 'สัญญาณ IR อ่อนลงจากการหมดอายุการใช้งานของ Globar Source ตามรอบชั่วโมงการทำงาน',
+                partsReplaced: 'Mid-IR Ceramic Source Lamp (P/N 102938)',
+                technician: 'สมศักดิ์ ช่างเทคนิคภายนอก',
+                vendor: 'Bruker Thailand',
+                cost: 28500,
+                docRef: 'PR-68-06214',
+                result: 'Resolved',
+                resolutionNote: 'เปลี่ยนแหล่งกำเนิดแสงใหม่และปรับ Alignment เรียบร้อย วัดค่า Energy ผ่าน 100%'
+            }
+        ],
         subEquipments: []
     },
     {
@@ -825,6 +873,7 @@ const normalizeEquipment = (raw: any): Equipment => {
             certDelivered: false,
             result: 'Pending'
         },
+        history: Array.isArray(raw.history) ? raw.history : [],
         subEquipments: (raw.subEquipments || []).map((s: any) => ({
             ...s,
             id: s.id || 'sub_' + Math.random().toString(36).substr(2, 9),
@@ -869,6 +918,28 @@ export const getEquipments = async (): Promise<Equipment[]> => {
             });
             if (list.length > 0) {
                 rawList = list;
+                // Merge with local backup so user mutations (like resolve breakdown) take precedence over stale server docs
+                const backup = localStorage.getItem('backup_equipments');
+                if (backup) {
+                    try {
+                        const localList = JSON.parse(backup);
+                        if (Array.isArray(localList)) {
+                            const localMap = new Map<string, any>();
+                            localList.forEach((e: any) => {
+                                if (e.equipmentNo) localMap.set(String(e.equipmentNo).trim(), e);
+                                if (e.id) localMap.set(String(e.id), e);
+                            });
+                            rawList = rawList.map(serverEq => {
+                                const keyNo = String(serverEq.equipmentNo || serverEq.code || '').trim();
+                                const localEq = (keyNo ? localMap.get(keyNo) : null) || (serverEq.id ? localMap.get(serverEq.id) : null);
+                                if (localEq) {
+                                    return { ...serverEq, ...localEq };
+                                }
+                                return serverEq;
+                            });
+                        }
+                    } catch (e) {}
+                }
             } else {
                 const backup = localStorage.getItem('backup_equipments');
                 if (backup) {
@@ -964,10 +1035,25 @@ export const saveEquipment = async (equipment: Omit<Equipment, 'id'> & { id?: st
     try {
         const backupStr = localStorage.getItem('backup_equipments') || '[]';
         let list = JSON.parse(backupStr) as Equipment[];
-        if (equipment.id) {
-            list = list.map(e => e.id === equipment.id ? { ...e, ...equipment } : e);
+        const targetEqNo = equipment.equipmentNo ? String(equipment.equipmentNo).trim() : '';
+        const targetId = equipment.id ? String(equipment.id) : '';
+        
+        const existingIdx = list.findIndex(e => 
+            (targetId && String(e.id) === targetId) || 
+            (targetEqNo && String(e.equipmentNo || '').trim() === targetEqNo)
+        );
+
+        if (existingIdx >= 0) {
+            list[existingIdx] = { 
+                ...list[existingIdx], 
+                ...equipment, 
+                id: list[existingIdx].id || targetId || 'eq_local_' + Math.random().toString(36).substr(2, 9)
+            };
         } else {
-            list.push({ ...equipment, id: 'eq_local_' + Math.random().toString(36).substr(2, 9) } as Equipment);
+            list.push({ 
+                ...equipment, 
+                id: targetId || 'eq_local_' + Math.random().toString(36).substr(2, 9) 
+            } as Equipment);
         }
         safeSetItem('backup_equipments', JSON.stringify(list));
     } catch (e) {
@@ -975,11 +1061,23 @@ export const saveEquipment = async (equipment: Omit<Equipment, 'id'> & { id?: st
     }
 
     const { id, ...data } = equipment;
-    const cleanData = Object.fromEntries(Object.entries(data).filter(([_, v]) => v !== undefined));
-    if (id && !String(id).startsWith('eq_local_')) {
-        await getCollection('equipments').doc(id).set(cleanData);
-    } else {
-        await getCollection('equipments').add(cleanData);
+    // Deep clean all undefined values at any level to prevent Firestore setDoc crashes
+    const cleanData = JSON.parse(JSON.stringify(data));
+
+    if (firestore) {
+        try {
+            const writePromise = (id && !String(id).startsWith('eq_local_'))
+                ? getCollection('equipments').doc(id).set(cleanData)
+                : getCollection('equipments').add(cleanData);
+            
+            // Timeout after 2000ms so Firestore never freezes the application UI
+            await Promise.race([
+                writePromise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 2000))
+            ]);
+        } catch (err) {
+            console.warn("Firestore saveEquipment warning, data preserved in local backup:", err);
+        }
     }
 };
 

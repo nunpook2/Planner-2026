@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import type { Equipment, EquipmentSubComponent, TrackingWorkflowStatus, Tester } from '../types';
+import type { Equipment, EquipmentSubComponent, TrackingWorkflowStatus, Tester, BreakdownRecord } from '../types';
 import { saveEquipment, deleteEquipment } from '../services/dataService';
 import { 
     PlusIcon, SearchIcon, PencilIcon, TrashIcon, CheckCircleIcon, 
     XCircleIcon, AlertTriangleIcon, ChevronDownIcon, ClockIcon, SparklesIcon 
 } from './common/Icons';
 import { MONTH_KEYS, MONTH_INFO_MAP, normalizeMonth, formatMonthName, formatFrequency, isToleranceString } from '../utils/monthUtils';
+import EquipmentHistoryModal from './EquipmentHistoryModal';
 
 interface EquipmentTabProps {
     testers?: Tester[];
@@ -52,6 +53,19 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
         trackingStatus: TrackingWorkflowStatus;
     } | null>(null);
 
+    // Quick resolve breakdown state in EquipmentTab
+    const [equipmentToResolve, setEquipmentToResolve] = useState<Equipment | null>(null);
+    const [isResolvingQuick, setIsResolvingQuick] = useState(false);
+    const [resolveToast, setResolveToast] = useState<string | null>(null);
+
+    // Dedicated equipment history & service logbook modal state
+    const [selectedEquipmentForHistory, setSelectedEquipmentForHistory] = useState<Equipment | null>(null);
+
+    const activeEquipmentForHistory = useMemo(() => {
+        if (!selectedEquipmentForHistory) return null;
+        return equipments.find(e => e.id === selectedEquipmentForHistory.id || e.equipmentNo === selectedEquipmentForHistory.equipmentNo) || selectedEquipmentForHistory;
+    }, [selectedEquipmentForHistory, equipments]);
+
     // Initial load
     React.useEffect(() => {
         loadData();
@@ -61,6 +75,57 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
         const { getEquipments } = await import('../services/dataService');
         const data = await getEquipments();
         setEquipments(data || []);
+    };
+
+    const handleResolveEquipmentInTab = async (eq: Equipment) => {
+        if (!eq) return;
+        setIsResolvingQuick(true);
+        try {
+            const { saveEquipment } = await import('../services/dataService');
+            const curInc = eq.breakdownStatus?.currentIncident;
+            const resolveDate = new Date().toISOString().split('T')[0];
+
+            const resolvedIncident: BreakdownRecord = curInc ? {
+                ...curInc,
+                stage: 'repaired_verified',
+                resolvedDate: resolveDate,
+                resolutionNote: curInc.resolutionNote || 'ตรวจรับการซ่อมแซมสมบูรณ์ เครื่องกลับคืนสู่สภาพพร้อมใช้งานปกติ 100%'
+            } : {
+                id: `inc_res_${Date.now()}`,
+                equipmentId: eq.id,
+                equipmentNo: eq.equipmentNo,
+                equipmentName: eq.equipmentName,
+                reportedDate: resolveDate,
+                reportedBy: eq.owner,
+                symptom: 'แก้ไขแล้ว',
+                impactLevel: 'Low',
+                stage: 'repaired_verified',
+                resolvedDate: resolveDate,
+                resolutionNote: 'ตรวจรับการซ่อมแซมสมบูรณ์ เครื่องกลับคืนสู่สภาพพร้อมใช้งานปกติ 100%'
+            };
+
+            const updated: Equipment = {
+                ...eq,
+                status: 'ready',
+                breakdownStatus: {
+                    isBroken: false,
+                    history: [resolvedIncident, ...(eq.breakdownStatus?.history || [])]
+                }
+            };
+            delete (updated.breakdownStatus as any).currentIncident;
+
+            await saveEquipment(updated);
+            await loadData();
+            setEquipmentToResolve(null);
+            setResolveToast(`เครื่องมือ ${eq.equipmentNo} (${eq.equipmentName}) ซ่อมเสร็จสมบูรณ์และคืนสภาพพร้อมใช้งาน (🟢 Ready 100%) เรียบร้อยแล้ว!`);
+            setTimeout(() => setResolveToast(null), 5000);
+            onEquipmentUpdated();
+        } catch (err) {
+            console.error("Error resolving equipment:", err);
+            setResolveToast("เกิดข้อผิดพลาดในการบันทึก: " + (err as Error).message);
+        } finally {
+            setIsResolvingQuick(false);
+        }
     };
 
     const toggleExpand = (id: string) => {
@@ -209,8 +274,8 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
     const handleSaveEquipment = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingEquip?.equipmentNo || !editingEquip?.equipmentName) return;
-
         const cleanNo = editingEquip.equipmentNo.trim();
+        const isReady = editingEquip.status === 'ready' || !editingEquip.status;
         const newRecord: Equipment = {
             id: editingEquip.id || `eq_${Date.now()}`,
             equipmentNo: cleanNo,
@@ -220,7 +285,33 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
             owner: editingEquip.owner || 'PORNTHAK',
             department: editingEquip.department || 'PCRD Lab',
             location: editingEquip.location || '',
-            status: 'ready',
+            status: isReady ? 'ready' : 'issue',
+            breakdownStatus: isReady ? {
+                isBroken: false,
+                history: editingEquip.breakdownStatus?.currentIncident ? [
+                    {
+                        ...editingEquip.breakdownStatus.currentIncident,
+                        stage: 'repaired_verified',
+                        resolvedDate: new Date().toISOString().split('T')[0],
+                        resolutionNote: 'ตรวจรับการซ่อมแซมสมบูรณ์ คืนสภาพพร้อมใช้งานปกติ 100%'
+                    },
+                    ...(editingEquip.breakdownStatus?.history || [])
+                ] : (editingEquip.breakdownStatus?.history || [])
+            } : (editingEquip.breakdownStatus || {
+                isBroken: true,
+                currentIncident: {
+                    id: `inc_${Date.now()}`,
+                    equipmentId: editingEquip.id || '',
+                    equipmentNo: cleanNo,
+                    equipmentName: editingEquip.equipmentName.trim(),
+                    reportedDate: new Date().toISOString().split('T')[0],
+                    reportedBy: editingEquip.owner || 'PORNTHAK',
+                    symptom: 'ระบุสถานะชำรุดจากการตั้งค่า',
+                    impactLevel: 'Moderate',
+                    stage: 'reported'
+                },
+                history: []
+            }),
             pm: {
                 freqYear: editingEquip.pm?.freqYear || 1,
                 lastPM: normalizeMonth(editingEquip.pm?.lastPM) || 'Nov',
@@ -248,10 +339,16 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
             subEquipments: editingEquip.subEquipments || []
         };
 
+        if (isReady && (newRecord.breakdownStatus as any)?.currentIncident) {
+            delete (newRecord.breakdownStatus as any).currentIncident;
+        }
+
         await saveEquipment(newRecord);
         await loadData();
         setIsEditModalOpen(false);
         setEditingEquip(null);
+        setResolveToast(`บันทึกข้อมูลเครื่องมือ ${cleanNo} เรียบร้อยแล้ว`);
+        setTimeout(() => setResolveToast(null), 4000);
         onEquipmentUpdated();
     };
 
@@ -340,6 +437,23 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
 
                 <div className="flex items-center gap-2.5 flex-wrap">
                     <button
+                        type="button"
+                        onClick={() => {
+                            if (equipments.length > 0) {
+                                const defaultEq = equipments.find(e => !e.equipmentNo?.includes('/') && (e.status === 'issue' || e.breakdownStatus?.isBroken)) 
+                                    || equipments.find(e => !e.equipmentNo?.includes('/')) 
+                                    || equipments[0];
+                                setSelectedEquipmentForHistory(defaultEq);
+                            }
+                        }}
+                        className="px-4 py-3 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold rounded-2xl text-xs uppercase tracking-wider flex items-center gap-2 border border-indigo-200 dark:border-indigo-800 transition-all active:scale-95 shadow-xs cursor-pointer"
+                        title="เปิดหน้าต่างสมุดบันทึกประวัติเครื่องมือทั้งหมด (ประวัติแจ้งซ่อม, แจ้งชำรุด, PM, สอบเทียบ)"
+                    >
+                        <ClockIcon className="h-4 w-4" />
+                        <span>📜 สมุดบันทึกประวัติเครื่องมือ</span>
+                    </button>
+
+                    <button
                         onClick={() => {
                             setEditingEquip({
                                 equipmentNo: '',
@@ -352,7 +466,7 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
                             });
                             setIsEditModalOpen(true);
                         }}
-                        className="px-5 py-3 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-2xl text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-primary-500/20 transition-all active:scale-95"
+                        className="px-5 py-3 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-2xl text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-primary-500/20 transition-all active:scale-95 cursor-pointer"
                     >
                         <PlusIcon className="h-4 w-4" />
                         <span>เพิ่มเครื่องมือหลักใหม่</span>
@@ -361,6 +475,21 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
             </div>
 
             {/* SYSTEM GUIDE BANNER (EXPLAINS WHAT EACH TAB DOES) */}
+            {resolveToast && (
+                <div className="p-4 bg-emerald-500 text-white rounded-2xl flex items-center justify-between gap-3 shadow-lg shadow-emerald-500/20 animate-fade-in">
+                    <div className="flex items-center gap-2.5 font-black text-xs">
+                        <CheckCircleIcon className="h-5 w-5 shrink-0" />
+                        <span>{resolveToast}</span>
+                    </div>
+                    <button
+                        onClick={() => setResolveToast(null)}
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold"
+                    >
+                        ปิด
+                    </button>
+                </div>
+            )}
+
             <div className="bg-slate-50 dark:bg-base-950/40 p-4 rounded-2xl border border-slate-200/80 dark:border-base-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-3">
                     <span className="text-lg">💡</span>
@@ -524,15 +653,29 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
                                             {/* Equipment Name */}
                                             <td className="px-4 py-3">
                                                 <div className="flex flex-col">
-                                                    <div className="flex items-center gap-1.5">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
                                                         <span className="font-bold text-slate-900 dark:text-white text-sm">
                                                             {eq.equipmentName}
                                                         </span>
                                                         {(eq.status === 'issue' || eq.breakdownStatus?.isBroken) && (
-                                                            <span className="text-[9px] font-black px-1.5 py-0.2 bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 rounded-md">
-                                                                🚨 เครื่องเสีย
-                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setEquipmentToResolve(eq)}
+                                                                className="text-[10px] font-black px-2 py-0.5 bg-rose-100 hover:bg-rose-200 text-rose-700 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 dark:text-rose-300 rounded-md border border-rose-300 dark:border-rose-800 transition-all active:scale-95 flex items-center gap-1 cursor-pointer shadow-xs hover:shadow-sm"
+                                                                title="คลิกเพื่อคืนสภาพพร้อมใช้งาน (Resolve 🟢)"
+                                                            >
+                                                                <span>🚨 เครื่องเสีย (คลิกคืนสภาพ 🟢)</span>
+                                                            </button>
                                                         )}
+                                                        {/* Quick History badge trigger */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSelectedEquipmentForHistory(eq)}
+                                                            className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/40 cursor-pointer"
+                                                            title="คลิกเพื่อเปิดหน้าต่างดูและบันทึกประวัติเครื่องมือนี้"
+                                                        >
+                                                            <span>📜 ดูประวัติ {((eq.history?.length || 0) + (eq.breakdownStatus?.history?.length || 0) + (eq.breakdownStatus?.currentIncident ? 1 : 0)) > 0 ? `(${((eq.history?.length || 0) + (eq.breakdownStatus?.history?.length || 0) + (eq.breakdownStatus?.currentIncident ? 1 : 0))})` : ''}</span>
+                                                        </button>
                                                     </div>
                                                     {eq.location && (
                                                         <span className="text-[10px] text-slate-400 font-semibold">{eq.location}</span>
@@ -653,7 +796,22 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
 
                                             {/* Action buttons */}
                                             <td className="px-4 py-3 text-right whitespace-nowrap">
-                                                <div className="flex items-center justify-end gap-1">
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    {/* Dedicated History Logbook Window Button */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSelectedEquipmentForHistory(eq)}
+                                                        className="px-2.5 py-1 text-indigo-700 dark:text-indigo-300 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 rounded-lg text-[10px] font-black transition-all flex items-center gap-1 border border-indigo-200/60 dark:border-indigo-800/80 shadow-2xs hover:shadow-xs cursor-pointer"
+                                                        title="เปิดหน้าต่างดูและบันทึกประวัติเครื่องมือ (Logbook & Breakdown History)"
+                                                    >
+                                                        <span>📜 ประวัติ</span>
+                                                        {((eq.history?.length || 0) + (eq.breakdownStatus?.history?.length || 0) + (eq.breakdownStatus?.currentIncident ? 1 : 0)) > 0 && (
+                                                            <span className="px-1.5 py-0.2 text-[9px] bg-indigo-600 text-white rounded-full font-bold">
+                                                                {(eq.history?.length || 0) + (eq.breakdownStatus?.history?.length || 0) + (eq.breakdownStatus?.currentIncident ? 1 : 0)}
+                                                            </span>
+                                                        )}
+                                                    </button>
+
                                                     <button
                                                         onClick={() => {
                                                             const nextSubNum = (eq.subEquipments?.length || 0) + 1;
@@ -679,11 +837,25 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
                                                         <span>Sub</span>
                                                     </button>
                                                     <button
+                                                        type="button"
+                                                        onClick={() => setSelectedEquipmentForHistory(eq)}
+                                                        className="px-2 py-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 border border-indigo-200 dark:border-indigo-800/80 shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer"
+                                                        title={`เปิดหน้าต่างสมุดบันทึกประวัติเครื่องมือ / แจ้งซ่อม / แบ็คอัพ ${eq.equipmentNo}`}
+                                                    >
+                                                        <ClockIcon className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
+                                                        <span>ประวัติ</span>
+                                                        {((eq.history?.length || 0) + (eq.breakdownStatus?.history?.length || 0) + (eq.breakdownStatus?.currentIncident ? 1 : 0)) > 0 && (
+                                                            <span className="px-1 py-0.2 rounded-full text-[9px] font-black bg-indigo-600 text-white leading-none">
+                                                                {(eq.history?.length || 0) + (eq.breakdownStatus?.history?.length || 0) + (eq.breakdownStatus?.currentIncident ? 1 : 0)}
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                    <button
                                                         onClick={() => {
                                                             setEditingEquip(eq);
                                                             setIsEditModalOpen(true);
                                                         }}
-                                                        className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                                        className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                                                         title="แก้ไขข้อมูลเครื่องหลัก"
                                                     >
                                                         <PencilIcon className="h-4 w-4" />
@@ -804,6 +976,15 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
                                                     <td className="px-4 py-2.5 text-right whitespace-nowrap">
                                                         <div className="flex items-center justify-end gap-1">
                                                             <button
+                                                                type="button"
+                                                                onClick={() => setSelectedEquipmentForHistory(eq)}
+                                                                className="px-2 py-0.5 text-indigo-600 bg-white hover:bg-indigo-50 border border-indigo-200 dark:bg-base-900 dark:border-indigo-900/60 dark:hover:bg-indigo-950/40 rounded text-[10px] font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                                                                title={`เปิดแฟ้มประวัติเครื่องหลัก ${eq.equipmentNo}`}
+                                                            >
+                                                                <ClockIcon className="h-3 w-3" />
+                                                                <span>ประวัติ</span>
+                                                            </button>
+                                                            <button
                                                                 onClick={() => {
                                                                     setEditingSub({
                                                                         parentEqId: eq.id,
@@ -812,7 +993,7 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
                                                                     });
                                                                     setIsSubModalOpen(true);
                                                                 }}
-                                                                className="p-1 text-slate-400 hover:text-primary-600 rounded transition-colors"
+                                                                className="p-1 text-slate-400 hover:text-primary-600 rounded transition-colors cursor-pointer"
                                                                 title="แก้ไขเครื่องพ่วงย่อย"
                                                             >
                                                                 <PencilIcon className="h-3.5 w-3.5" />
@@ -1103,9 +1284,25 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
                                     {editingEquip.id ? 'แก้ไขเครื่องมือหลัก' : 'เพิ่มเครื่องมือหลักใหม่'}
                                 </h3>
                             </div>
-                            <button onClick={() => setIsEditModalOpen(false)} className="p-2 rounded-full hover:bg-slate-100">
-                                <XCircleIcon className="h-6 w-6 text-slate-400" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {editingEquip.id && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const found = equipments.find(e => e.id === editingEquip.id || e.equipmentNo === editingEquip.equipmentNo) || (editingEquip as Equipment);
+                                            setSelectedEquipmentForHistory(found);
+                                        }}
+                                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 rounded-xl text-xs font-bold border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                                        title="เปิดหน้าต่างสมุดบันทึกประวัติเครื่องนี้"
+                                    >
+                                        <ClockIcon className="h-3.5 w-3.5" />
+                                        <span>📜 ประวัติเครื่องนี้</span>
+                                    </button>
+                                )}
+                                <button onClick={() => setIsEditModalOpen(false)} className="p-2 rounded-full hover:bg-slate-100 cursor-pointer">
+                                    <XCircleIcon className="h-6 w-6 text-slate-400" />
+                                </button>
+                            </div>
                         </div>
 
                         <form onSubmit={handleSaveEquipment} className="space-y-4">
@@ -1144,6 +1341,46 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
                                     onChange={e => setEditingEquip({ ...editingEquip, equipmentName: e.target.value })}
                                     className="w-full mt-1 p-3 bg-slate-50 dark:bg-base-950/40 border border-slate-200 dark:border-base-700 rounded-xl text-xs font-bold dark:text-white"
                                 />
+                            </div>
+
+                            {/* Equipment Status Toggle */}
+                            <div className="p-3.5 bg-slate-50 dark:bg-base-950/40 rounded-2xl border border-slate-200 dark:border-base-700 space-y-2">
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                                    สถานะความพร้อมใช้งาน (Operational Status)
+                                </label>
+                                <div className="flex items-center gap-3">
+                                    <label className={`flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-black cursor-pointer transition-all ${
+                                        (editingEquip.status === 'ready' || !editingEquip.status)
+                                            ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-800 dark:text-emerald-200 ring-2 ring-emerald-500/20 shadow-xs'
+                                            : 'bg-white dark:bg-base-900 border-slate-200 dark:border-base-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
+                                    }`}>
+                                        <input
+                                            type="radio"
+                                            name="equipStatus"
+                                            value="ready"
+                                            checked={editingEquip.status === 'ready' || !editingEquip.status}
+                                            onChange={() => setEditingEquip({ ...editingEquip, status: 'ready' })}
+                                            className="sr-only"
+                                        />
+                                        <span>🟢 พร้อมใช้งานปกติ (Ready 100%)</span>
+                                    </label>
+
+                                    <label className={`flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-black cursor-pointer transition-all ${
+                                        editingEquip.status === 'issue'
+                                            ? 'bg-rose-50 dark:bg-rose-950/50 border-rose-500 text-rose-800 dark:text-rose-200 ring-2 ring-rose-500/20 shadow-xs'
+                                            : 'bg-white dark:bg-base-900 border-slate-200 dark:border-base-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
+                                    }`}>
+                                        <input
+                                            type="radio"
+                                            name="equipStatus"
+                                            value="issue"
+                                            checked={editingEquip.status === 'issue'}
+                                            onChange={() => setEditingEquip({ ...editingEquip, status: 'issue' })}
+                                            className="sr-only"
+                                        />
+                                        <span>🚨 ชำรุด / แจ้งซ่อม (Breakdown)</span>
+                                    </label>
+                                </div>
                             </div>
 
                             {/* PM Section */}
@@ -1548,6 +1785,79 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ onEquipmentUpdated }
                     </div>
                 </div>
             )}
+            {/* QUICK RESOLVE CONFIRMATION MODAL */}
+            {equipmentToResolve && (
+                <div 
+                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4 animate-fade-in"
+                    onClick={() => setEquipmentToResolve(null)}
+                >
+                    <div 
+                        className="bg-white dark:bg-base-900 rounded-3xl p-6 shadow-2xl max-w-md w-full border border-slate-200 dark:border-base-800 space-y-4"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center gap-3">
+                            <span className="text-3xl p-2.5 bg-emerald-100 dark:bg-emerald-950/60 rounded-2xl">🟢</span>
+                            <div>
+                                <h3 className="text-base font-black text-slate-900 dark:text-white">คืนสภาพเครื่องมือพร้อมใช้งาน</h3>
+                                <p className="text-xs text-slate-500 font-bold">{equipmentToResolve.equipmentNo} - {equipmentToResolve.equipmentName}</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-emerald-50/70 dark:bg-emerald-950/30 p-3.5 rounded-2xl border border-emerald-200/60 dark:border-emerald-900/40 space-y-1.5 text-xs">
+                            <p className="text-emerald-950 dark:text-emerald-200 font-bold">
+                                ยืนยันว่าเครื่องมือนี้ได้รับการ <strong>ซ่อมแซมเสร็จสมบูรณ์ ตรวจรับเรียบร้อยแล้ว</strong> ใช่หรือไม่?
+                            </p>
+                            <p className="text-emerald-700 dark:text-emerald-400 text-[11px]">
+                                ระบบจะปิดงานซ่อม บันทึกลงประวัติ และเปลี่ยนสถานะเครื่องกลับเป็น <strong className="underline">🟢 พร้อมใช้งานตามปกติ (Ready 100%)</strong> ทันที
+                            </p>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-base-800">
+                            <button
+                                type="button"
+                                onClick={() => setEquipmentToResolve(null)}
+                                className="px-4 py-2.5 bg-slate-100 dark:bg-base-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all"
+                            >
+                                ยกเลิก
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isResolvingQuick}
+                                onClick={() => handleResolveEquipmentInTab(equipmentToResolve)}
+                                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/30 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                            >
+                                {isResolvingQuick ? (
+                                    <>
+                                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        <span>กำลังบันทึก...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircleIcon className="h-4 w-4" />
+                                        <span>✅ ยืนยันคืนสภาพพร้อมใช้งาน (Resolve)</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* DEDICATED EQUIPMENT HISTORY & LOGBOOK MODAL */}
+            <EquipmentHistoryModal
+                isOpen={!!activeEquipmentForHistory}
+                equipment={activeEquipmentForHistory}
+                allEquipments={equipments.filter(e => !e.equipmentNo?.includes('/'))}
+                onSelectEquipment={(eq) => setSelectedEquipmentForHistory(eq)}
+                onClose={() => setSelectedEquipmentForHistory(null)}
+                onSaveEquipment={async (updated: Equipment) => {
+                    const { saveEquipment } = await import('../services/dataService');
+                    await saveEquipment(updated);
+                    await loadData();
+                    setSelectedEquipmentForHistory(updated);
+                    onEquipmentUpdated();
+                }}
+            />
         </div>
     );
 };

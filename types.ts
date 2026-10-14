@@ -51,12 +51,24 @@ export interface CategorizedTask {
     isPrep?: boolean;
 }
 
+export type EquipmentHistoryType = 'breakdown' | 'repair' | 'pm' | 'calibration' | 'inspection' | 'note';
+
 export interface EquipmentHistory {
     id: string;
     date: string;
+    type?: EquipmentHistoryType;
+    title?: string;
     description: string;
+    symptom?: string;
+    rootCause?: string;
     partsReplaced?: string;
     technician: string;
+    vendor?: string;
+    cost?: number;
+    docRef?: string;
+    result?: 'Pass' | 'Fail' | 'Resolved' | 'In Progress' | 'Pending';
+    resolutionNote?: string;
+    createdAt?: string;
 }
 
 export interface MaintenanceItem {

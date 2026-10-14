@@ -6,6 +6,7 @@ import {
     PlusIcon, PencilIcon, DocumentTextIcon, RefreshIcon, 
     XCircleIcon, BeakerIcon, InformationCircleIcon
 } from './common/Icons';
+import EquipmentHistoryModal from './EquipmentHistoryModal';
 
 interface BreakdownTabProps {
     equipments: Equipment[];
@@ -58,11 +59,16 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
     const [newActionActor, setNewActionActor] = useState('');
     const [isSavingLog, setIsSavingLog] = useState(false);
 
-    // Modals
+    // Modals & Feedback
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [selectedEquipmentForReport, setSelectedEquipmentForReport] = useState<string>('');
     const [isEditIncidentModalOpen, setIsEditIncidentModalOpen] = useState(false);
     const [activeIncidentForEdit, setActiveIncidentForEdit] = useState<BreakdownRecord | null>(null);
+    const [isResolving, setIsResolving] = useState(false);
+    const [resolveSuccessMessage, setResolveSuccessMessage] = useState<string | null>(null);
+
+    // Dedicated equipment history logbook modal state
+    const [historyModalEq, setHistoryModalEq] = useState<Equipment | null>(null);
 
     // Filter PRIMARY ONLY equipments (strictly no '/' in equipmentNo) & SORT NUMERICALLY FROM LOW TO HIGH
     const primaryEquipments = useMemo(() => {
@@ -159,42 +165,55 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
     }, [viewFilter, brokenEquipments, normalEquipments, primaryEquipments, selectedDept, searchQuery]);
 
     // Resolve Breakdown (Mark Fixed & Return to Green 🟢)
+    // Resolve Breakdown (Mark Fixed & Return to Green 🟢)
     const handleResolveBreakdown = async (eq: Equipment) => {
-        const curInc = eq.breakdownStatus?.currentIncident;
-        const resolveDate = new Date().toISOString().split('T')[0];
+        if (!eq) return;
+        setIsResolving(true);
+        try {
+            const curInc = eq.breakdownStatus?.currentIncident;
+            const resolveDate = new Date().toISOString().split('T')[0];
 
-        const resolvedIncident: BreakdownRecord = curInc ? {
-            ...curInc,
-            stage: 'repaired_verified',
-            resolvedDate: resolveDate,
-            resolutionNote: curInc.resolutionNote || 'ตรวจรับการซ่อมแซมสมบูรณ์ เครื่องกลับคืนสู่สภาพพร้อมใช้งานปกติ'
-        } : {
-            id: `inc_res_${Date.now()}`,
-            equipmentId: eq.id,
-            equipmentNo: eq.equipmentNo,
-            equipmentName: eq.equipmentName,
-            reportedDate: resolveDate,
-            reportedBy: eq.owner,
-            symptom: 'แก้ไขแล้ว',
-            impactLevel: 'Low',
-            stage: 'repaired_verified',
-            resolvedDate: resolveDate,
-            resolutionNote: 'ตรวจรับการซ่อมแซมสมบูรณ์ เครื่องกลับคืนสู่สภาพพร้อมใช้งานปกติ'
-        };
+            const resolvedIncident: BreakdownRecord = curInc ? {
+                ...curInc,
+                stage: 'repaired_verified',
+                resolvedDate: resolveDate,
+                resolutionNote: curInc.resolutionNote || 'ตรวจรับการซ่อมแซมสมบูรณ์ เครื่องกลับคืนสู่สภาพพร้อมใช้งานปกติ 100%'
+            } : {
+                id: `inc_res_${Date.now()}`,
+                equipmentId: eq.id,
+                equipmentNo: eq.equipmentNo,
+                equipmentName: eq.equipmentName,
+                reportedDate: resolveDate,
+                reportedBy: eq.owner,
+                symptom: 'แก้ไขแล้ว',
+                impactLevel: 'Low',
+                stage: 'repaired_verified',
+                resolvedDate: resolveDate,
+                resolutionNote: 'ตรวจรับการซ่อมแซมสมบูรณ์ เครื่องกลับคืนสู่สภาพพร้อมใช้งานปกติ 100%'
+            };
 
-        const updated: Equipment = {
-            ...eq,
-            status: 'ready',
-            breakdownStatus: {
-                isBroken: false,
-                currentIncident: undefined,
-                history: [resolvedIncident, ...(eq.breakdownStatus?.history || [])]
-            }
-        };
+            const updated: Equipment = {
+                ...eq,
+                status: 'ready',
+                breakdownStatus: {
+                    isBroken: false,
+                    history: [resolvedIncident, ...(eq.breakdownStatus?.history || [])]
+                }
+            };
+            // Cleanly remove currentIncident so it is never undefined
+            delete (updated.breakdownStatus as any).currentIncident;
 
-        await saveEquipment(updated);
-        setInspectedEquipment(null);
-        onEquipmentUpdated();
+            await saveEquipment(updated);
+            setInspectedEquipment(null);
+            setResolveSuccessMessage(`เครื่องมือ ${eq.equipmentNo} (${eq.equipmentName}) ซ่อมเสร็จสมบูรณ์และคืนสภาพพร้อมใช้งาน (🟢 Ready) เรียบร้อยแล้ว!`);
+            setTimeout(() => setResolveSuccessMessage(null), 6000);
+            onEquipmentUpdated();
+        } catch (err) {
+            console.error("Error resolving breakdown:", err);
+            setResolveSuccessMessage("เกิดข้อผิดพลาดในการบันทึกคืนสภาพ: " + (err as Error).message);
+        } finally {
+            setIsResolving(false);
+        }
     };
 
     // Advance Stage to Next Step
@@ -417,6 +436,22 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
                 </div>
             </div>
 
+            {/* RESOLVE SUCCESS TOAST BANNER */}
+            {resolveSuccessMessage && (
+                <div className="p-4 bg-emerald-500 text-white rounded-2xl font-black text-xs flex items-center justify-between gap-3 shadow-lg shadow-emerald-500/25 animate-fade-in">
+                    <div className="flex items-center gap-2">
+                        <CheckCircleIcon className="h-5 w-5 text-white shrink-0" />
+                        <span>{resolveSuccessMessage}</span>
+                    </div>
+                    <button
+                        onClick={() => setResolveSuccessMessage(null)}
+                        className="text-white/80 hover:text-white text-xs font-bold px-2 py-1 rounded-lg hover:bg-emerald-600"
+                    >
+                        ปิด
+                    </button>
+                </div>
+            )}
+
             {/* EXECUTIVE FILTER & DENSITY TOOLBAR */}
             <div className="bg-white dark:bg-base-900 px-4 py-2.5 rounded-2xl border border-slate-200/90 dark:border-base-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
                 {/* Status Toggle Filters */}
@@ -551,14 +586,24 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
                             const isBroken = eq.status === 'issue' || eq.breakdownStatus?.isBroken;
 
                             return (
-                                <button
+                                <div
                                     key={eq.id || `eq_${idx}`}
+                                    role="button"
+                                    tabIndex={0}
                                     onClick={() => {
                                         setInspectedEquipment(eq);
                                         setDetailTab('why_red');
                                         setIsFullScreenInspection(false);
                                     }}
-                                    className={`relative p-3.5 rounded-2xl border text-left transition-all duration-150 flex flex-col justify-between group active:scale-98 ${
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setInspectedEquipment(eq);
+                                            setDetailTab('why_red');
+                                            setIsFullScreenInspection(false);
+                                        }
+                                    }}
+                                    className={`relative p-3.5 rounded-2xl border text-left transition-all duration-150 flex flex-col justify-between group active:scale-98 cursor-pointer select-none ${
                                         isBroken
                                             ? 'bg-rose-50/95 dark:bg-rose-950/40 border-rose-400 dark:border-rose-800 ring-2 ring-rose-500/40 shadow-sm shadow-rose-500/10 hover:shadow-md hover:border-rose-500'
                                             : 'bg-slate-50/60 dark:bg-base-950/40 border-slate-200/90 dark:border-base-800/90 hover:bg-white dark:hover:bg-base-800 hover:border-emerald-300 dark:hover:border-emerald-700/60 hover:shadow-xs'
@@ -606,12 +651,27 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
                                         </div>
                                     </div>
 
-                                    {/* Bottom: Action hint */}
+                                    {/* Bottom: Action hint & Quick Resolve Button */}
                                     <div className="w-full pt-1.5 border-t border-slate-200/50 dark:border-base-800/60 flex items-center justify-between text-[10px]">
                                         {isBroken ? (
-                                            <span className="font-bold text-rose-600 dark:text-rose-400">
-                                                🚨 ดูสาเหตุ & สิ่งที่ทำไปแล้ว
-                                            </span>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <button
+                                                    type="button"
+                                                    disabled={isResolving}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleResolveBreakdown(eq);
+                                                    }}
+                                                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-md text-[9px] font-black shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+                                                    title="คลิกเพื่อคืนสภาพพร้อมใช้งานทันที"
+                                                >
+                                                    <CheckCircleIcon className="h-3 w-3" />
+                                                    <span>คืนสภาพ 🟢</span>
+                                                </button>
+                                                <span className="font-bold text-rose-600 dark:text-rose-400 text-[10px]">
+                                                    🚨 ชำรุด
+                                                </span>
+                                            </div>
                                         ) : (
                                             <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                                                 🟢 พร้อมใช้งาน
@@ -621,7 +681,7 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
                                             เจาะลึก ❯
                                         </span>
                                     </div>
-                                </button>
+                                </div>
                             );
                         })}
                     </div>
@@ -684,10 +744,25 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap text-center">
                                                 {isBroken ? (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black bg-rose-600 text-white animate-pulse shadow-xs">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                                                        <span>🚨 ผิดปกติ</span>
-                                                    </span>
+                                                    <div className="inline-flex items-center gap-1.5">
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white animate-pulse shadow-xs">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                                                            <span>🚨 ผิดปกติ</span>
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            disabled={isResolving}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleResolveBreakdown(eq);
+                                                            }}
+                                                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-lg text-[10px] font-black shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+                                                            title="คลิกเพื่อคืนสภาพพร้อมใช้งานทันที"
+                                                        >
+                                                            <CheckCircleIcon className="h-3 w-3" />
+                                                            <span>คืนสภาพ 🟢</span>
+                                                        </button>
+                                                    </div>
                                                 ) : (
                                                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                                                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -717,14 +792,24 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
                             const daysDown = isBroken ? getDaysDown(incident?.reportedDate) : 0;
 
                             return (
-                                <button
+                                <div
                                     key={eq.id || `eq_${idx}`}
+                                    role="button"
+                                    tabIndex={0}
                                     onClick={() => {
                                         setInspectedEquipment(eq);
                                         setDetailTab('why_red');
                                         setIsFullScreenInspection(false);
                                     }}
-                                    className={`relative p-4 rounded-2xl border text-left transition-all duration-150 flex flex-col justify-between group active:scale-98 ${
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setInspectedEquipment(eq);
+                                            setDetailTab('why_red');
+                                            setIsFullScreenInspection(false);
+                                        }
+                                    }}
+                                    className={`relative p-4 rounded-2xl border text-left transition-all duration-150 flex flex-col justify-between group active:scale-98 cursor-pointer select-none ${
                                         isBroken
                                             ? 'bg-rose-50/90 dark:bg-rose-950/40 border-rose-300 dark:border-rose-900 ring-2 ring-rose-500/30 shadow-sm'
                                             : 'bg-slate-50/50 dark:bg-base-950/40 border-slate-200/90 dark:border-base-800/90 hover:bg-white dark:hover:bg-base-800 hover:border-emerald-300'
@@ -766,9 +851,24 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
 
                                     <div className="w-full pt-2 border-t border-slate-200/50 dark:border-base-800 flex items-center justify-between text-[11px]">
                                         {isBroken ? (
-                                            <span className="text-rose-600 font-bold">
-                                                หยุดทำงาน {daysDown} วัน
-                                            </span>
+                                            <div className="flex items-center gap-1.5">
+                                                <button
+                                                    type="button"
+                                                    disabled={isResolving}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleResolveBreakdown(eq);
+                                                    }}
+                                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-lg text-[10px] font-black shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+                                                    title="คลิกเพื่อคืนสภาพพร้อมใช้งานทันที"
+                                                >
+                                                    <CheckCircleIcon className="h-3 w-3" />
+                                                    <span>คืนสภาพ 🟢</span>
+                                                </button>
+                                                <span className="text-rose-600 font-bold text-[10px]">
+                                                    หยุด {daysDown} วัน
+                                                </span>
+                                            </div>
                                         ) : (
                                             <span className="text-emerald-600 font-medium">
                                                 สถานะพร้อมใช้งานปกติ
@@ -778,7 +878,7 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
                                             คลิกเจาะลึก ❯
                                         </span>
                                     </div>
-                                </button>
+                                </div>
                             );
                         })}
                     </div>
@@ -875,7 +975,15 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
                                         </div>
 
                                         {/* Window Controls */}
-                                        <div className="flex items-center gap-1 shrink-0">
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => setHistoryModalEq(currentInspected)}
+                                                className="px-3 py-1.5 bg-white dark:bg-base-800 hover:bg-slate-100 dark:hover:bg-base-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-base-700 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                                                title="เปิดแฟ้มประวัติการซ่อมบำรุงและแจ้งซ่อมทั้งหมดของเครื่องนี้"
+                                            >
+                                                <span>📜 แฟ้มประวัติ</span>
+                                            </button>
                                             <button
                                                 onClick={() => setIsFullScreenInspection(!isFullScreenInspection)}
                                                 className="p-2 rounded-xl hover:bg-slate-200/60 dark:hover:bg-base-800 text-slate-500 transition-all text-xs font-bold"
@@ -923,6 +1031,41 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
 
                                     {/* MODAL / DRAWER BODY */}
                                     <div className="p-5 md:p-6 overflow-y-auto space-y-5 flex-1">
+                                        {/* RESOLVE CALLOUT BANNER FOR BROKEN EQUIPMENT */}
+                                        {isBroken && (
+                                            <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/30 border-2 border-emerald-300 dark:border-emerald-700/80 rounded-2xl flex items-center justify-between gap-4 flex-wrap shadow-xs">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-2xl p-2 bg-emerald-100 dark:bg-emerald-900/60 rounded-xl shrink-0">✅</span>
+                                                    <div>
+                                                        <h5 className="text-xs font-black text-emerald-950 dark:text-emerald-100">
+                                                            พบว่าเครื่องมือซ่อมเสร็จเรียบร้อยแล้วใช่หรือไม่?
+                                                        </h5>
+                                                        <p className="text-[11px] text-emerald-700 dark:text-emerald-300 mt-0.5">
+                                                            กดปุ่มนี้เพื่อปิดงานซ่อม บันทึกลงประวัติ และคืนสภาพเครื่องเป็น <strong className="underline">🟢 พร้อมใช้งานตามปกติ (Ready 100%)</strong>
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    disabled={isResolving}
+                                                    onClick={() => handleResolveBreakdown(currentInspected)}
+                                                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-black rounded-xl text-xs flex items-center gap-2 shadow-md shadow-emerald-600/30 active:scale-95 transition-all cursor-pointer shrink-0"
+                                                >
+                                                    {isResolving ? (
+                                                        <>
+                                                            <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                            <span>กำลังบันทึกคืนสภาพ...</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <CheckCircleIcon className="h-4 w-4" />
+                                                            <span>คลิกคืนสภาพพร้อมใช้งาน (Resolve) 🟢</span>
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        )}
+
                                         {isBroken && incident ? (
                                             <>
                                                 {/* TAB 1: มันแดงอะไร? (สาเหตุ & อาการ) */}
@@ -1213,11 +1356,21 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
 
                                             {isBroken && (
                                                 <button
+                                                    disabled={isResolving}
                                                     onClick={() => handleResolveBreakdown(currentInspected)}
-                                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs flex items-center gap-1.5 transition-all active:scale-95 shadow-md shadow-emerald-500/20"
+                                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-black rounded-xl text-xs flex items-center gap-1.5 transition-all active:scale-95 shadow-md shadow-emerald-500/20 cursor-pointer"
                                                 >
-                                                    <CheckCircleIcon className="h-4 w-4" />
-                                                    <span>✅ ซ่อมเสร็จแล้ว & คืนสภาพพร้อมใช้ (Resolve)</span>
+                                                    {isResolving ? (
+                                                        <>
+                                                            <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                            <span>กำลังบันทึกคืนสภาพ...</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <CheckCircleIcon className="h-4 w-4" />
+                                                            <span>✅ ซ่อมเสร็จแล้ว & คืนสภาพพร้อมใช้ (Resolve)</span>
+                                                        </>
+                                                    )}
                                                 </button>
                                             )}
 
@@ -1515,6 +1668,20 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
                     </div>
                 </div>
             )}
+
+            {/* DEDICATED EQUIPMENT HISTORY & LOGBOOK MODAL */}
+            <EquipmentHistoryModal
+                isOpen={!!historyModalEq}
+                equipment={historyModalEq}
+                allEquipments={equipments}
+                onSelectEquipment={(eq) => setHistoryModalEq(eq)}
+                onClose={() => setHistoryModalEq(null)}
+                onSaveEquipment={async (updated: Equipment) => {
+                    await saveEquipment(updated);
+                    setHistoryModalEq(updated);
+                    onEquipmentUpdated();
+                }}
+            />
         </div>
     );
 };
