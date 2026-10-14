@@ -2,6 +2,7 @@
 import { firestore } from './firebase';
 import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog, Booking, ProficiencyTest, ProficiencyRecord, SupportRequest, Walkthrough, BorrowRecord } from '../types';
 import { TaskCategory } from '../types';
+import { normalizeMonth, isToleranceString } from '../utils/monthUtils';
 
 // Export firestore for use in components
 export { firestore };
@@ -23,6 +24,28 @@ const safeGet = async (query: any) => {
     }
 };
 
+const safeSetItem = (key: string, value: string): void => {
+    try {
+        localStorage.setItem(key, value);
+    } catch (error: any) {
+        console.warn(`localStorage Quota Exceeded for key "${key}":`, error);
+        try {
+            if (value.startsWith('[') && value.endsWith(']')) {
+                const parsed = JSON.parse(value);
+                if (Array.isArray(parsed) && parsed.length > 100) {
+                    const trimmed = parsed.slice(0, 100);
+                    localStorage.setItem(key, JSON.stringify(trimmed));
+                    console.log(`Successfully saved a trimmed version (100 items) for key "${key}"`);
+                    return;
+                }
+            }
+        } catch (trimError) {
+            console.error("Failed to trim data for fallback storage:", trimError);
+        }
+        console.error(`Unable to save backup for key "${key}". Proceeding in-memory without breaking the application.`);
+    }
+};
+
 // --- Duplicate Prevention Service ---
 export const getAllExistingRequestIds = async (): Promise<Set<string>> => {
     if (!firestore) return new Set();
@@ -30,21 +53,18 @@ export const getAllExistingRequestIds = async (): Promise<Set<string>> => {
     const existingIds = new Set<string>();
 
     try {
-        // 1. Check Pool (Categorized Tasks)
         const poolSnapshot = await getCollection('categorizedTasks').select('id').get();
         poolSnapshot.forEach((doc: any) => {
             const data = doc.data();
             if (data.id) existingIds.add(String(data.id).trim().toUpperCase());
         });
 
-        // 2. Check Assigned Tasks (Testing)
         const assignedSnapshot = await getCollection('assignedTasks').select('requestId').get();
         assignedSnapshot.forEach((doc: any) => {
             const data = doc.data();
             if (data.requestId) existingIds.add(String(data.requestId).trim().toUpperCase());
         });
 
-        // 3. Check Assigned Tasks (Preparation)
         const prepSnapshot = await getCollection('assignedPrepareTasks').select('requestId').get();
         prepSnapshot.forEach((doc: any) => {
             const data = doc.data();
@@ -58,48 +78,988 @@ export const getAllExistingRequestIds = async (): Promise<Set<string>> => {
     return existingIds;
 };
 
+export const INITIAL_EQUIPMENTS: Equipment[] = [
+    {
+        id: 'eq-pdf-1-001',
+        equipmentNo: 'PDF 1-001',
+        equipmentName: 'Analytical Balance (เครื่องชั่งละเอียด 4 ตำแหน่ง)',
+        name: 'Analytical Balance (เครื่องชั่งละเอียด 4 ตำแหน่ง)',
+        code: 'PDF 1-001',
+        owner: 'PORNTHAK',
+        department: 'PCRD Lab',
+        location: 'Balance Room (ห้องชั่งน้ำหนัก)',
+        status: 'ready',
+        pm: {
+            freqYear: 1,
+            lastPM: 'Nov',
+            nextPM: 'Nov',
+            pmBy: 'Vender',
+            items: '1. ทำความสะอาด Chamber และจานชั่ง 2. ตรวจสอบระดับน้ำฟองอากาศ 3. ตรวจสอบระบบไฟฟ้าและ Linear response',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'Nov',
+            nextCal: 'Nov',
+            calBy: 'Vender (มว.)',
+            items: 'สอบเทียบมวลมาตรฐาน Class E2 (ช่วงการชั่ง 1g ถึง 200g)',
+            tolerance: '± 0.1 mg'
+        },
+        trackingStatus: {
+            quotationRequested: true,
+            quotationDate: '2026-09-25',
+            prIssued: true,
+            prNo: 'PR-69-10088',
+            vendorScheduled: true,
+            scheduledDate: '2026-11-05',
+            certReceived: false,
+            certDelivered: false,
+            result: 'Pending'
+        },
+        subEquipments: []
+    },
+    {
+        id: 'eq-pdf-1-002',
+        equipmentNo: 'PDF 1-002',
+        equipmentName: 'Density Meter (เครื่องวัดความหนาแน่นอัตโนมัติ)',
+        name: 'Density Meter (เครื่องวัดความหนาแน่นอัตโนมัติ)',
+        code: 'PDF 1-002',
+        owner: 'PORNTHAK',
+        department: 'PCRD Lab',
+        location: 'Physical Lab Room 1',
+        status: 'ready',
+        pm: {
+            freqYear: 1,
+            lastPM: 'Mar',
+            nextPM: 'Mar',
+            pmBy: 'Vender',
+            items: '1. เปลี่ยนซีลชุดท่อสูบสาร 2. ล้าง U-Tube Sensor 3. ตรวจสอบระบบ Peltier ควบคุมอุณหภูมิ',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'Mar',
+            nextCal: 'Mar',
+            calBy: 'Vender',
+            items: 'สอบเทียบความหนาแน่นด้วยสารมาตรฐาน Ultra-pure Water และ Dry Air ที่ 20°C',
+            tolerance: '± 0.0001 g/cm³'
+        },
+        trackingStatus: {
+            quotationRequested: true,
+            quotationDate: '2026-02-10',
+            prIssued: true,
+            prNo: 'PR-69-02119',
+            vendorScheduled: true,
+            scheduledDate: '2026-03-14',
+            certReceived: true,
+            certReceivedDate: '2026-03-20',
+            certDelivered: true,
+            certDeliveredDate: '2026-03-22',
+            result: 'Pass',
+            resultNote: 'ความหนาแน่นผ่านเกณฑ์มาตรฐาน ± 0.0001 g/cm³'
+        },
+        subEquipments: []
+    },
+    {
+        id: 'eq-pdf-1-003',
+        equipmentNo: 'PDF 1-003',
+        equipmentName: 'Universal Testing Machine (เครื่องทดสอบแรงดึง UTM)',
+        name: 'Universal Testing Machine (เครื่องทดสอบแรงดึง UTM)',
+        code: 'PDF 1-003',
+        owner: 'Channarong',
+        department: 'PCRD Lab',
+        location: 'Mechanical Testing Hall',
+        status: 'ready',
+        pm: {
+            freqYear: 1,
+            lastPM: 'Jun',
+            nextPM: 'Jun',
+            pmBy: 'Vender',
+            items: '1. หล่อลื่น Ball Screw แกนขับเคลื่อน 2. ตรวจสอบ Safety Limit Switch 3. ตรวจเช็คสายพานมอเตอร์',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'Jun',
+            nextCal: 'Jun',
+            calBy: 'Vender',
+            items: 'สอบเทียบ Load Cell 50 kN ตาม ISO 7500-1 และความเร็ว Crosshead Speed',
+            tolerance: '± 0.5% (Class 0.5)'
+        },
+        trackingStatus: {
+            quotationRequested: true,
+            quotationDate: '2026-05-12',
+            prIssued: true,
+            prNo: 'PR-69-05244',
+            vendorScheduled: true,
+            scheduledDate: '2026-06-18',
+            certReceived: true,
+            certReceivedDate: '2026-06-25',
+            certDelivered: true,
+            certDeliveredDate: '2026-06-28',
+            result: 'Pass',
+            resultNote: 'Load Cell Calibrated Pass (Class 0.5)'
+        },
+        subEquipments: []
+    },
+    {
+        id: 'eq-pdf-1-004',
+        equipmentNo: 'PDF 1-004',
+        equipmentName: 'Precision Hot Air Oven (ตู้อบความร้อนควบคุมอุณหภูมิ)',
+        name: 'Precision Hot Air Oven (ตู้อบความร้อนควบคุมอุณหภูมิ)',
+        code: 'PDF 1-004',
+        owner: 'Channarong',
+        department: 'PCRD Lab',
+        location: 'Thermal Analysis Room',
+        status: 'ready',
+        pm: {
+            freqYear: 1,
+            lastPM: 'Feb',
+            nextPM: 'Feb',
+            pmBy: 'Owner',
+            items: '1. ทำความสะอาดพัดลมกระจายลมร้อน 2. ตรวจเช็คขอบยางซีลประตู 3. ทดสอบระบบตัดไฟเตือน Over-temperature',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'Feb',
+            nextCal: 'Feb',
+            calBy: 'Vender',
+            items: 'สอบเทียบการกระจายอุณหภูมิ 9 จุด (9-Point Thermal Uniformity ที่ 105°C และ 150°C)',
+            tolerance: '± 2.0 °C'
+        },
+        trackingStatus: {
+            quotationRequested: true,
+            quotationDate: '2026-01-10',
+            prIssued: true,
+            prNo: 'PR-69-01140',
+            vendorScheduled: true,
+            scheduledDate: '2026-02-12',
+            certReceived: true,
+            certReceivedDate: '2026-02-18',
+            certDelivered: true,
+            certDeliveredDate: '2026-02-20',
+            result: 'Pass',
+            resultNote: 'การกระจายอุณหภูมิผ่านเกณฑ์ ± 2.0 °C'
+        },
+        subEquipments: []
+    },
+    {
+        id: 'eq-pdf-1-005',
+        equipmentNo: 'PDF 1-005',
+        equipmentName: 'pH / Conductivity Meter (เครื่องวัดค่ากรดด่างและการนำไฟฟ้า)',
+        name: 'pH / Conductivity Meter (เครื่องวัดค่ากรดด่างและการนำไฟฟ้า)',
+        code: 'PDF 1-005',
+        owner: 'PORNTHAK',
+        department: 'PCRD Lab',
+        location: 'Chemical Prep Room',
+        status: 'ready',
+        pm: {
+            freqYear: 2,
+            lastPM: 'Apr',
+            nextPM: 'Oct',
+            pmBy: 'Owner',
+            items: '1. ตรวจสอบระดับ Electrolyte 2. ทำความสะอาด Junction 3. ตรวจสอบสายนำสัญญาณ BNC',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'Apr',
+            nextCal: 'Apr',
+            calBy: 'Vender',
+            items: 'สอบเทียบสารละลายบัฟเฟอร์มาตรฐาน pH 4.01, 7.00, 10.01 และ Conductivity Standard 1413 µS/cm',
+            tolerance: 'pH ± 0.02 / Cond ± 1%'
+        },
+        trackingStatus: {
+            quotationRequested: false,
+            prIssued: false,
+            vendorScheduled: false,
+            certReceived: false,
+            certDelivered: false,
+            result: 'Pending'
+        },
+        subEquipments: []
+    },
+    {
+        id: 'eq-pdf-1-006',
+        equipmentNo: 'PDF 1-006',
+        equipmentName: 'Moisture Analyzer (เครื่องวิเคราะห์ความชื้นอัตโนมัติ)',
+        name: 'Moisture Analyzer (เครื่องวิเคราะห์ความชื้นอัตโนมัติ)',
+        code: 'PDF 1-006',
+        owner: 'PORNTHAK',
+        department: 'PCRD Lab',
+        location: 'Physical Lab Room 1',
+        status: 'ready',
+        pm: {
+            freqYear: 1,
+            lastPM: 'May',
+            nextPM: 'May',
+            pmBy: 'Vender',
+            items: '1. ทำความสะอาดชุดทำความร้อน Halogen Lamp 2. ตรวจเช็ค Temperature sensor 3. ตรวจสอบแผงควบคุมระบบสัมผัส',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'May',
+            nextCal: 'May',
+            calBy: 'Vender',
+            items: 'สอบเทียบระบบชั่งน้ำหนัก (Weight Calibration) และระบบควบคุมอุณหภูมิที่ 100°C, 160°C',
+            tolerance: '± 0.05% / ± 1.5°C'
+        },
+        trackingStatus: {
+            quotationRequested: true,
+            quotationDate: '2026-04-05',
+            prIssued: true,
+            prNo: 'PR-69-04188',
+            vendorScheduled: true,
+            scheduledDate: '2026-05-15',
+            certReceived: true,
+            certReceivedDate: '2026-05-22',
+            certDelivered: true,
+            certDeliveredDate: '2026-05-25',
+            result: 'Pass',
+            resultNote: 'ผลการสอบเทียบผ่านเกณฑ์มาตรฐาน'
+        },
+        subEquipments: []
+    },
+    {
+        id: 'eq-pdf-1-007',
+        equipmentNo: 'PDF 1-007',
+        equipmentName: 'Brookfield Viscometer (เครื่องวัดความหนืดของไหล)',
+        name: 'Brookfield Viscometer (เครื่องวัดความหนืดของไหล)',
+        code: 'PDF 1-007',
+        owner: 'Channarong',
+        department: 'PCRD Lab',
+        location: 'Rheology Lab',
+        status: 'ready',
+        pm: {
+            freqYear: 1,
+            lastPM: 'Jul',
+            nextPM: 'Jul',
+            pmBy: 'Vender',
+            items: '1. ตรวจสอบความเที่ยงตรงของแกนหมุน Spindle 2. หล่อลื่น Bearing 3. ตรวจสอบ Auto-zero calibration',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'Jul',
+            nextCal: 'Jul',
+            calBy: 'Vender',
+            items: 'สอบเทียบด้วยน้ำมันมาตรฐานความหนืด Certified Viscosity Standard Fluids (100 cP, 1000 cP)',
+            tolerance: '± 1.0% Full Scale'
+        },
+        trackingStatus: {
+            quotationRequested: true,
+            quotationDate: '2026-06-02',
+            prIssued: true,
+            prNo: 'PR-69-06312',
+            vendorScheduled: true,
+            scheduledDate: '2026-07-10',
+            certReceived: true,
+            certReceivedDate: '2026-07-18',
+            certDelivered: true,
+            certDeliveredDate: '2026-07-20',
+            result: 'Pass',
+            resultNote: 'ความหนืดผ่านเกณฑ์มาตรฐาน ± 1.0% FS'
+        },
+        subEquipments: []
+    },
+    {
+        id: 'eq-pdf-1-008',
+        equipmentNo: 'PDF 1-008',
+        equipmentName: 'DSC - Differential Scanning Calorimeter (เครื่องวิเคราะห์สมบัติทางความร้อน)',
+        name: 'DSC - Differential Scanning Calorimeter',
+        code: 'PDF 1-008',
+        owner: 'PORNTHAK',
+        department: 'PCRD Lab',
+        location: 'Thermal Analysis Suite',
+        status: 'ready',
+        pm: {
+            freqYear: 1,
+            lastPM: 'Aug',
+            nextPM: 'Aug',
+            pmBy: 'Vender',
+            items: '1. ทำความสะอาด Furnace Chamber 2. ตรวจสอบก๊าซหล่อเย็น N2 Purge flow 3. ตรวจสอบสัญญาณ Thermocouple Baseline',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'Aug',
+            nextCal: 'Aug',
+            calBy: 'Vender',
+            items: 'สอบเทียบ Temperature & Heat of Fusion ด้วย Indium และ Zinc Reference Standards',
+            tolerance: 'Temp ± 0.5 °C / Enthalpy ± 1.0%'
+        },
+        trackingStatus: {
+            quotationRequested: true,
+            quotationDate: '2026-07-05',
+            prIssued: true,
+            prNo: 'PR-69-07421',
+            vendorScheduled: true,
+            scheduledDate: '2026-08-14',
+            certReceived: false,
+            certDelivered: false,
+            result: 'Pending'
+        },
+        subEquipments: []
+    },
+    {
+        id: 'eq-pdf-1-009',
+        equipmentNo: 'PDF 1-009',
+        equipmentName: 'Color Spectrophotometer (เครื่องวัดสีและเฉดสีตัวอย่าง)',
+        name: 'Color Spectrophotometer',
+        code: 'PDF 1-009',
+        owner: 'Channarong',
+        department: 'PCRD Lab',
+        location: 'Optical Inspection Lab',
+        status: 'ready',
+        pm: {
+            freqYear: 1,
+            lastPM: 'Sep',
+            nextPM: 'Sep',
+            pmBy: 'Owner',
+            items: '1. ทำความสะอาด Integrating Sphere 2. ตรวจเช็ค White Tile มาตรฐาน 3. ตรวจสอบความเข้มแสง Xenon Flash Lamp',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'Sep',
+            nextCal: 'Sep',
+            calBy: 'Vender',
+            items: 'สอบเทียบค่าสีมาตรฐาน CIE L*a*b* และการทำซ้ำ (Repeatability) ด้วยแผ่นมาตรฐานมาตรฐาน',
+            tolerance: 'ΔE*ab ≤ 0.2'
+        },
+        trackingStatus: {
+            quotationRequested: true,
+            quotationDate: '2026-08-10',
+            prIssued: true,
+            prNo: 'PR-69-08190',
+            vendorScheduled: false,
+            certReceived: false,
+            certDelivered: false,
+            result: 'Pending'
+        },
+        subEquipments: []
+    },
+    {
+        id: 'eq-pdf-1-010',
+        equipmentNo: 'PDF 1-010',
+        equipmentName: 'Muffle Furnace 1100°C (เตาเผาอุณหภูมิสูงความแม่นยำสูง)',
+        name: 'Muffle Furnace 1100°C',
+        code: 'PDF 1-010',
+        owner: 'Channarong',
+        department: 'PCRD Lab',
+        location: 'Furnace Room',
+        status: 'ready',
+        pm: {
+            freqYear: 1,
+            lastPM: 'Oct',
+            nextPM: 'Oct',
+            pmBy: 'Owner',
+            items: '1. ตรวจสอบขดลวดความร้อน Heating Elements 2. ตรวจเช็คฉนวนกันความร้อน Ceramic Fiber 3. ตรวจสอบระบบเตือน Overheat',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'Oct',
+            nextCal: 'Oct',
+            calBy: 'Vender',
+            items: 'สอบเทียบความสม่ำเสมอของอุณหภูมิ (Temperature Uniformity) ที่ 500°C, 900°C',
+            tolerance: '± 5.0 °C'
+        },
+        trackingStatus: {
+            quotationRequested: true,
+            quotationDate: '2026-09-01',
+            prIssued: true,
+            prNo: 'PR-69-09022',
+            vendorScheduled: false,
+            certReceived: false,
+            certDelivered: false,
+            result: 'Pending'
+        },
+        subEquipments: []
+    },
+    {
+        id: 'eq-pds-1001',
+        equipmentNo: 'PDS-1001',
+        equipmentName: 'FTIR Tensor37 (เครื่องฟูเรียร์ทรานส์ฟอร์มอินฟราเรดสเปกโตรมิเตอร์)',
+        name: 'FTIR Tensor37',
+        code: 'PDS-1001',
+        owner: 'PORNTHAK',
+        department: 'PCRD Lab',
+        location: 'Spectroscopy Room A',
+        status: 'ready',
+        pm: {
+            freqYear: 1,
+            lastPM: 'Nov',
+            nextPM: 'Nov',
+            pmBy: 'Vender',
+            items: '1. ตรวจสอบ Laser Alignment 2. เปลี่ยน Desiccant Indicator 3. ตรวจสอบ Beam Splitter',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'Nov',
+            nextCal: 'Nov',
+            calBy: 'Vender',
+            items: 'Wavenumber Accuracy & Repeatability ด้วย Polystyrene Film Standard',
+            tolerance: '± 1.0 cm⁻¹'
+        },
+        trackingStatus: {
+            quotationRequested: true,
+            quotationDate: '2026-10-01',
+            prIssued: true,
+            prNo: 'PR-69-10042',
+            vendorScheduled: true,
+            scheduledDate: '2026-11-12',
+            certReceived: false,
+            certDelivered: false,
+            result: 'Pending'
+        },
+        subEquipments: [
+            {
+                id: 'sub-pds-1001-02',
+                equipmentNo: 'PDS-1001/02',
+                equipmentName: 'Specae-Heater (BC2)',
+                owner: 'PORNTHAK',
+                pm: {
+                    freqYear: 1,
+                    lastPM: 'Jan',
+                    nextPM: 'Jan',
+                    pmBy: 'Vender',
+                    items: '1. check สภาพเครื่อง ไม่แตกชำรุด 2. check สภาพสายไฟไม่ขาดชำรุด',
+                    tolerance: 'Pass/Fail'
+                },
+                cal: {
+                    freqYear: 1,
+                    lastCal: 'Jan',
+                    nextCal: 'Jan',
+                    calBy: 'Vender',
+                    items: 'Temp 3 จุด (100°C, 150°C, 200°C)',
+                    tolerance: '± 5°C'
+                },
+                trackingStatus: {
+                    quotationRequested: true,
+                    quotationDate: '2026-09-20',
+                    prIssued: true,
+                    prNo: 'PR-69-09881',
+                    vendorScheduled: false,
+                    certReceived: false,
+                    certDelivered: false,
+                    result: 'Pending'
+                }
+            }
+        ]
+    },
+    {
+        id: 'eq-pds-1002',
+        equipmentNo: 'PDS-1002',
+        equipmentName: 'LUMOS (FTIR Microscope กล้องจุลทรรศน์อินฟราเรด)',
+        name: 'LUMOS',
+        code: 'PDS-1002',
+        owner: 'PORNTHAK',
+        department: 'PCRD Lab',
+        location: 'Spectroscopy Room B',
+        pm: {
+            freqYear: 1,
+            lastPM: 'Nov',
+            nextPM: 'Nov',
+            pmBy: 'Vender',
+            items: '1. ตรวจสอบ Laser Alignment 2. ตรวจสอบ Infrared Detector 3. ทำความสะอาด Stage & Optical Path',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'Nov',
+            nextCal: 'Nov',
+            calBy: 'Vender',
+            items: 'Wavenumber Accuracy & Repeatability Calibration ด้วย Polystyrene Standard',
+            tolerance: '± 1.0 cm⁻¹'
+        },
+        trackingStatus: {
+            quotationRequested: false,
+            prIssued: false,
+            vendorScheduled: false,
+            certReceived: false,
+            certDelivered: false,
+            result: 'Pending'
+        },
+        status: 'issue',
+        breakdownStatus: {
+            isBroken: true,
+            currentIncident: {
+                id: 'inc-pds-1002-1',
+                equipmentId: 'eq-pds-1002',
+                equipmentNo: 'PDS-1002',
+                equipmentName: 'LUMOS',
+                reportedDate: '2026-10-09',
+                reportedBy: 'PORNTHAK',
+                symptom: 'ระบบเลเซอร์วัดตำแหน่งแกน Z Error ทำให้ไม่สามารถ Focus ได้',
+                rootCause: 'Optical sensor alignment เสื่อมสภาพจากการใช้งานต่อเนื่อง',
+                impactLevel: 'Critical',
+                stage: 'pr_repair',
+                vendorOrTechnician: 'Bruker Service Engineer',
+                quotationNo: 'QT-2026-8891',
+                repairPrNo: 'PR-69-10902',
+                costEstimate: 45000,
+                targetResolutionDate: '2026-10-25',
+                resolutionNote: 'รออนุมัติ PR เพื่อเบิกอะไหล่ Sensor จากต่างประเทศ',
+                actionLogs: [
+                    { id: 'log-1', date: '2026-10-09', action: 'รับแจ้งอาการเสีย: เลเซอร์แกน Z error ไม่สามารถ Focus ชิ้นงานได้', actor: 'PORNTHAK', stage: 'reported' },
+                    { id: 'log-2', date: '2026-10-10', action: 'วิศวกร Bruker ตรวจสอบหน้างาน พบ Optical sensor เสื่อมสภาพ ต้องสั่งอะไหล่ชุดใหม่', actor: 'Bruker Engineer', stage: 'investigating' },
+                    { id: 'log-3', date: '2026-10-11', action: 'ขอและได้รับใบเสนอราคา QT-2026-8891 (45,000 บาท)', actor: 'PORNTHAK', stage: 'quotation_repair' },
+                    { id: 'log-4', date: '2026-10-12', action: 'เปิดใบขอซื้อ PR-69-10902 ส่งฝ่ายจัดซื้อและผู้บริหารอนุมัติ', actor: 'PORNTHAK', stage: 'pr_repair' }
+                ]
+            },
+            history: []
+        },
+        subEquipments: []
+    },
+    {
+        id: 'eq-pds-1003',
+        equipmentNo: 'PDS-1003',
+        equipmentName: 'Optical Microscope (กล้องจุลทรรศน์แบบใช้แสง)',
+        name: 'Optical Microscope',
+        code: 'PDS-1003',
+        owner: 'PORNTHAK',
+        department: 'PCRD Lab',
+        location: 'Microscopy Suite',
+        status: 'ready',
+        pm: {
+            freqYear: 1,
+            lastPM: 'Apr',
+            nextPM: 'Apr',
+            pmBy: 'Vender',
+            items: '1. ทำความสะอาดเลนส์และกระจกสะท้อน 2. หล่อลื่นแกนปรับโฟกัส Fine/Coarse 3. ตรวจสอบระบบหลอดไฟส่องสว่าง',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: 1,
+            lastCal: 'Apr',
+            nextCal: 'Apr',
+            calBy: 'Vender',
+            items: 'สอบเทียบความถูกต้องของสเกลวัดขนาด (Stage Micrometer Calibration)',
+            tolerance: '± 5 µm'
+        },
+        trackingStatus: {
+            quotationRequested: true,
+            quotationDate: '2026-03-10',
+            prIssued: true,
+            prNo: 'PR-69-03412',
+            vendorScheduled: true,
+            scheduledDate: '2026-04-18',
+            certReceived: true,
+            certReceivedDate: '2026-04-25',
+            certDelivered: true,
+            certDeliveredDate: '2026-04-28',
+            result: 'Pass',
+            resultNote: 'ผลสอบเทียบผ่านเกณฑ์มาตรฐาน ± 5 µm'
+        },
+        subEquipments: []
+    },
+    {
+        id: 'eq-pds-1004',
+        equipmentNo: 'PDS-1004',
+        equipmentName: 'Melt Flow Index',
+        name: 'Melt Flow Index',
+        code: 'PDS-1004',
+        owner: 'Channarong',
+        department: 'PCRD Lab',
+        location: 'Polymer Testing Lab',
+        status: 'ready',
+        pm: {
+            freqYear: 1,
+            lastPM: 'Jan',
+            nextPM: 'Jan',
+            pmBy: 'Owner',
+            items: '1.ตรวจสอบสภาพสายไฟ 2.เช็ด ดูดฝุ่น ทำความสะอาดภายในและภายนอกเครื่อง 3.ตรวจสอบสายลมเข้าเครื่อง 4.ตรวจสภาพผิวใน Barrel , Piston',
+            tolerance: 'Pass/Fail'
+        },
+        cal: {
+            freqYear: '-',
+            lastCal: '-',
+            nextCal: '-',
+            calBy: '-',
+            items: '-',
+            tolerance: '-'
+        },
+        trackingStatus: {
+            quotationRequested: true,
+            quotationDate: '2026-09-15',
+            prIssued: true,
+            prNo: 'PR-69-09311',
+            vendorScheduled: false,
+            certReceived: false,
+            certDelivered: false,
+            result: 'Pending'
+        },
+        subEquipments: [
+            {
+                id: 'sub-pds-1004-01',
+                equipmentNo: 'PDS-1004/01',
+                equipmentName: 'Weight 400 g',
+                owner: 'Channarong',
+                cal: { freqYear: 1, lastCal: 'Jan', nextCal: 'Jan', calBy: 'Vender', items: 'Weight', tolerance: '±0.5%' },
+                trackingStatus: { quotationRequested: true, prIssued: true, vendorScheduled: false, certReceived: false, certDelivered: false, result: 'Pending' }
+            },
+            {
+                id: 'sub-pds-1004-02',
+                equipmentNo: 'PDS-1004/02',
+                equipmentName: 'Weight 2060 g',
+                owner: 'Channarong',
+                cal: { freqYear: 1, lastCal: 'Jan', nextCal: 'Jan', calBy: 'Vender', items: 'Weight', tolerance: '±0.5%' },
+                trackingStatus: { quotationRequested: true, prIssued: true, vendorScheduled: false, certReceived: false, certDelivered: false, result: 'Pending' }
+            },
+            {
+                id: 'sub-pds-1004-03',
+                equipmentNo: 'PDS-1004/03',
+                equipmentName: 'Weight 4900 g',
+                owner: 'Channarong',
+                cal: { freqYear: 1, lastCal: 'Jan', nextCal: 'Jan', calBy: 'Vender', items: 'Weight', tolerance: '±0.5%' },
+                trackingStatus: { quotationRequested: true, prIssued: true, vendorScheduled: false, certReceived: false, certDelivered: false, result: 'Pending' }
+            },
+            {
+                id: 'sub-pds-1004-04',
+                equipmentNo: 'PDS-1004/04',
+                equipmentName: 'Weight 5000 g',
+                owner: 'Channarong',
+                cal: { freqYear: 1, lastCal: 'Jan', nextCal: 'Jan', calBy: 'Vender', items: 'Weight', tolerance: '±0.5%' },
+                trackingStatus: { quotationRequested: true, prIssued: true, vendorScheduled: false, certReceived: false, certDelivered: false, result: 'Pending' }
+            },
+            {
+                id: 'sub-pds-1004-05',
+                equipmentNo: 'PDS-1004/05',
+                equipmentName: 'Weight 21500 g',
+                owner: 'Channarong',
+                cal: { freqYear: 1, lastCal: 'Jan', nextCal: 'Jan', calBy: 'Vender', items: 'Weight', tolerance: '±0.5%' },
+                trackingStatus: { quotationRequested: true, prIssued: true, vendorScheduled: false, certReceived: false, certDelivered: false, result: 'Pending' }
+            },
+            {
+                id: 'sub-pds-1004-06',
+                equipmentNo: 'PDS-1004/06',
+                equipmentName: 'Piston',
+                owner: 'Channarong',
+                cal: {
+                    freqYear: 1,
+                    lastCal: 'Jan',
+                    nextCal: 'Jan',
+                    calBy: 'Vender',
+                    items: 'เส้นผ่านศูนย์กลางหัวลูกสูบ (Head Diameter) & ความยาวของหัวลูกสูบ (Head Length)',
+                    tolerance: '9.474 mm ±0.007 mm / 6.35 mm ±0.10 mm (ISO 1133)'
+                },
+                trackingStatus: { quotationRequested: true, prIssued: true, vendorScheduled: false, certReceived: false, certDelivered: false, result: 'Pending' }
+            }
+        ]
+    }
+];
+
+const sanitizePmDetails = (pm: any, raw?: any) => {
+    let rawLastPM = pm?.lastPM || raw?.pmMonth || '';
+    let tolerance = pm?.tolerance || raw?.pmTolerance || 'Pass/Fail';
+    if (isToleranceString(rawLastPM)) {
+        if (!tolerance || tolerance === 'Pass/Fail') tolerance = String(rawLastPM);
+        rawLastPM = '';
+    }
+    let lastPM = normalizeMonth(rawLastPM);
+    let nextPM = normalizeMonth(pm?.nextPM || rawLastPM) || lastPM;
+    
+    // Check if explicitly no PM
+    const isNoPM = String(rawLastPM).trim() === '-' || String(pm?.freqYear).trim() === '-' || pm?.freqYear === 0;
+
+    return {
+        freqYear: isNoPM ? '-' : (pm?.freqYear ?? raw?.pmFreq ?? 1),
+        lastPM: isNoPM ? '-' : (lastPM || 'Nov'),
+        nextPM: isNoPM ? '-' : (nextPM || lastPM || 'Nov'),
+        pmBy: pm?.pmBy || raw?.pmBy || 'Vender',
+        items: pm?.items || raw?.pmItems || 'ตามรายการ Vender',
+        tolerance: tolerance || 'Pass/Fail'
+    };
+};
+
+const sanitizeCalDetails = (cal: any, raw?: any) => {
+    let rawLastCal = cal?.lastCal || raw?.calMonth || '';
+    let tolerance = cal?.tolerance || raw?.tolerance || '';
+
+    // If lastCal contains tolerance (e.g. ± 5 um), heal and move it into tolerance
+    if (isToleranceString(rawLastCal)) {
+        if (!tolerance || tolerance === 'Pass/Fail' || tolerance === '-') {
+            tolerance = String(rawLastCal);
+        }
+        rawLastCal = '';
+    }
+
+    let lastCal = normalizeMonth(rawLastCal);
+    let nextCal = normalizeMonth(cal?.nextCal || rawLastCal) || lastCal;
+
+    // Check if explicitly no Cal
+    const isNoCal = String(rawLastCal).trim() === '-' || String(cal?.freqYear).trim() === '-' || cal?.freqYear === 0;
+
+    return {
+        freqYear: isNoCal ? '-' : (cal?.freqYear ?? raw?.calFreq ?? 1),
+        lastCal: isNoCal ? '-' : (lastCal || 'Nov'),
+        nextCal: isNoCal ? '-' : (nextCal || lastCal || 'Nov'),
+        calBy: cal?.calBy || raw?.calBy || 'Vender',
+        items: cal?.items || raw?.calItems || 'ตามรายการ Vender',
+        tolerance: tolerance || 'Pass/Fail'
+    };
+};
+
+const normalizeEquipment = (raw: any): Equipment => {
+    return {
+        ...raw,
+        id: raw.id || 'eq_' + Math.random().toString(36).substr(2, 9),
+        equipmentNo: String(raw.equipmentNo || raw.code || raw.name || 'EQ-UNKNOWN'),
+        equipmentName: String(raw.equipmentName || raw.name || 'Unnamed Equipment'),
+        name: String(raw.equipmentName || raw.name || 'Unnamed Equipment'),
+        owner: String(raw.owner || raw.custodian || raw.custodianName || 'PORNTHAK'),
+        department: raw.department || 'PCRD Lab',
+        location: raw.location || '',
+        status: raw.status || 'ready',
+        pm: sanitizePmDetails(raw.pm, raw),
+        cal: sanitizeCalDetails(raw.cal, raw),
+        trackingStatus: raw.trackingStatus || {
+            quotationRequested: false,
+            prIssued: false,
+            vendorScheduled: false,
+            certReceived: false,
+            certDelivered: false,
+            result: 'Pending'
+        },
+        subEquipments: (raw.subEquipments || []).map((s: any) => ({
+            ...s,
+            id: s.id || 'sub_' + Math.random().toString(36).substr(2, 9),
+            equipmentNo: String(s.equipmentNo || s.code || 'SUB-EQ'),
+            equipmentName: String(s.equipmentName || s.name || 'Sub-Equipment'),
+            owner: String(s.owner || raw.owner || 'PORNTHAK'),
+            pm: s.pm ? sanitizePmDetails(s.pm) : undefined,
+            cal: s.cal ? sanitizeCalDetails(s.cal) : undefined,
+            trackingStatus: s.trackingStatus || {
+                quotationRequested: false,
+                prIssued: false,
+                vendorScheduled: false,
+                certReceived: false,
+                certDelivered: false,
+                result: 'Pending'
+            }
+        }))
+    };
+};
+
 // --- Equipment Management ---
 export const getEquipments = async (): Promise<Equipment[]> => {
-    if (!firestore) return [];
-    const snapshot = await safeGet(getCollection('equipments'));
-    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }) as Equipment);
+    let rawList: any[] = [];
+    if (!firestore) {
+        const backup = localStorage.getItem('backup_equipments');
+        if (backup) {
+            try {
+                const parsed = JSON.parse(backup);
+                if (Array.isArray(parsed) && parsed.length > 0) rawList = parsed;
+            } catch (e) {}
+        }
+        if (rawList.length === 0) rawList = INITIAL_EQUIPMENTS;
+    } else {
+        try {
+            const snapshot = await safeGet(getCollection('equipments'));
+            const list = snapshot.docs.map((doc: any) => {
+                const data = doc.data();
+                return {
+                    ...data,
+                    id: doc.id || data.id
+                };
+            });
+            if (list.length > 0) {
+                rawList = list;
+            } else {
+                const backup = localStorage.getItem('backup_equipments');
+                if (backup) {
+                    try {
+                        const parsed = JSON.parse(backup);
+                        if (Array.isArray(parsed) && parsed.length > 0) rawList = parsed;
+                    } catch (e) {}
+                }
+                if (rawList.length === 0) rawList = INITIAL_EQUIPMENTS;
+            }
+        } catch (err) {
+            (window as any).firestoreQuotaExceeded = true;
+            console.error("getEquipments error, loading backup:", err);
+            const backup = localStorage.getItem('backup_equipments');
+            if (backup) {
+                try {
+                    const parsed = JSON.parse(backup);
+                    if (Array.isArray(parsed) && parsed.length > 0) rawList = parsed;
+                } catch (e) {}
+            }
+            if (rawList.length === 0) rawList = INITIAL_EQUIPMENTS;
+        }
+    }
+
+    // Merge any missing standard master equipments (e.g. PDF 1-001 series) into list
+    const existingEqNos = new Set(rawList.map(e => String(e.equipmentNo || e.code || '').trim()));
+    INITIAL_EQUIPMENTS.forEach(initEq => {
+        if (!existingEqNos.has(initEq.equipmentNo)) {
+            rawList.push(initEq);
+            existingEqNos.add(initEq.equipmentNo);
+        }
+    });
+
+    // Normalize and strictly DEDUPLICATE by ID and Equipment Number
+    const normalized = rawList.map(normalizeEquipment);
+    const seenIds = new Set<string>();
+    const seenEqNos = new Map<string, Equipment>();
+    const uniqueList: Equipment[] = [];
+
+    for (let i = 0; i < normalized.length; i++) {
+        const eq = { ...normalized[i] };
+        const eqNo = String(eq.equipmentNo || '').trim();
+
+        // If duplicate primary equipment number, merge subEquipments
+        if (eqNo && !eqNo.includes('/') && seenEqNos.has(eqNo)) {
+            const existing = seenEqNos.get(eqNo)!;
+            if (eq.subEquipments && eq.subEquipments.length > 0) {
+                const existingSubNos = new Set((existing.subEquipments || []).map(s => s.equipmentNo));
+                const newSubs = eq.subEquipments.filter(s => !existingSubNos.has(s.equipmentNo));
+                existing.subEquipments = [...(existing.subEquipments || []), ...newSubs];
+            }
+            continue;
+        }
+
+        // Guarantee strictly unique ID
+        if (!eq.id || seenIds.has(eq.id)) {
+            eq.id = `eq_${i}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        }
+        seenIds.add(eq.id);
+
+        if (eqNo && !eqNo.includes('/')) {
+            seenEqNos.set(eqNo, eq);
+        }
+
+        // Guarantee sub-equipments have unique IDs
+        if (eq.subEquipments) {
+            const seenSubIds = new Set<string>();
+            eq.subEquipments = eq.subEquipments.map((sub, sIdx) => {
+                let subId = sub.id;
+                if (!subId || seenSubIds.has(subId)) {
+                    subId = `sub_${sIdx}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                }
+                seenSubIds.add(subId);
+                return { ...sub, id: subId };
+            });
+        }
+
+        uniqueList.push(eq);
+    }
+
+    // Sort naturally (e.g. PDF 1-001 ... PDF 1-005, PDS-1001 ... PDS-1004)
+    uniqueList.sort((a, b) => {
+        const noA = String(a.equipmentNo || '').trim();
+        const noB = String(b.equipmentNo || '').trim();
+        return noA.localeCompare(noB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    safeSetItem('backup_equipments', JSON.stringify(uniqueList));
+    return uniqueList;
 };
 
 export const saveEquipment = async (equipment: Omit<Equipment, 'id'> & { id?: string }): Promise<void> => {
+    try {
+        const backupStr = localStorage.getItem('backup_equipments') || '[]';
+        let list = JSON.parse(backupStr) as Equipment[];
+        if (equipment.id) {
+            list = list.map(e => e.id === equipment.id ? { ...e, ...equipment } : e);
+        } else {
+            list.push({ ...equipment, id: 'eq_local_' + Math.random().toString(36).substr(2, 9) } as Equipment);
+        }
+        safeSetItem('backup_equipments', JSON.stringify(list));
+    } catch (e) {
+        console.error("Error backing up equipment:", e);
+    }
+
     const { id, ...data } = equipment;
-    if (id) {
-        await getCollection('equipments').doc(id).set(data);
+    const cleanData = Object.fromEntries(Object.entries(data).filter(([_, v]) => v !== undefined));
+    if (id && !String(id).startsWith('eq_local_')) {
+        await getCollection('equipments').doc(id).set(cleanData);
     } else {
-        await getCollection('equipments').add(data);
+        await getCollection('equipments').add(cleanData);
     }
 };
 
 export const deleteEquipment = async (id: string): Promise<void> => {
+    try {
+        const backupStr = localStorage.getItem('backup_equipments') || '[]';
+        let list = JSON.parse(backupStr) as Equipment[];
+        list = list.filter(e => e.id !== id);
+        safeSetItem('backup_equipments', JSON.stringify(list));
+    } catch (e) {
+        console.error("Error deleting equipment from backup:", e);
+    }
     await getCollection('equipments').doc(id).delete();
 };
 
 export const batchImportEquipments = async (equipments: Omit<Equipment, 'id'>[]): Promise<void> => {
-    const batch = firestore.batch();
-    const collection = getCollection('equipments');
-    
-    // 1. Delete all existing
-    const snapshot = await collection.get();
-    snapshot.forEach((doc: any) => batch.delete(doc.ref));
-    
-    // 2. Add new
-    equipments.forEach(eq => {
-        const docRef = collection.doc();
-        batch.set(docRef, eq);
+    // Generate clean unique IDs
+    const seen = new Set<string>();
+    const cleanList = equipments.map((eq, i) => {
+        let id = (eq as any).id;
+        if (!id || seen.has(id)) {
+            id = `eq_${i}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        }
+        seen.add(id);
+        return {
+            ...eq,
+            id
+        };
     });
-    
-    await batch.commit();
+
+    try {
+        safeSetItem('backup_equipments', JSON.stringify(cleanList));
+    } catch (e) {}
+
+    if (!firestore) return;
+
+    try {
+        const collection = getCollection('equipments');
+        const snapshot = await collection.get();
+        
+        // Chunk deletes in batches of max 300
+        const batchSize = 300;
+        const deleteDocs = snapshot.docs;
+        for (let i = 0; i < deleteDocs.length; i += batchSize) {
+            const b = firestore.batch();
+            deleteDocs.slice(i, i + batchSize).forEach((d: any) => b.delete(d.ref));
+            await b.commit();
+        }
+
+        // Chunk sets in batches of max 300
+        for (let i = 0; i < cleanList.length; i += batchSize) {
+            const b = firestore.batch();
+            cleanList.slice(i, i + batchSize).forEach(item => {
+                const docRef = collection.doc(item.id);
+                b.set(docRef, item);
+            });
+            await b.commit();
+        }
+    } catch (err) {
+        console.warn("Firestore batch error, backup saved locally", err);
+    }
 };
 
 // --- Tester Management ---
 export const getTesters = async (): Promise<Tester[]> => {
-    if (!firestore) throw new Error("Database not initialized");
-    const snapshot = await safeGet(getCollection('analysts'));
-    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }) as Tester);
+    if (!firestore) {
+        const backup = localStorage.getItem('backup_testers');
+        return backup ? JSON.parse(backup) : [];
+    }
+    try {
+        const snapshot = await safeGet(getCollection('analysts'));
+        const list = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }) as Tester);
+        safeSetItem('backup_testers', JSON.stringify(list));
+        return list;
+    } catch (err) {
+        (window as any).firestoreQuotaExceeded = true;
+        console.error("getTesters error, loading backup:", err);
+        const backup = localStorage.getItem('backup_testers');
+        return backup ? JSON.parse(backup) : [];
+    }
 };
 
 export const addTester = async (name: string): Promise<Tester> => {
@@ -179,9 +1139,21 @@ export const getExistingScheduleDates = async (): Promise<string[]> => {
 
 // --- Assigned Task Management ---
 export const getAssignedTasks = async (): Promise<AssignedTask[]> => {
-    if (!firestore) throw new Error("Database not initialized");
-    const snapshot = await safeGet(getCollection('assignedTasks'));
-    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }) as AssignedTask);
+    if (!firestore) {
+        const backup = localStorage.getItem('backup_assignedTasks');
+        return backup ? JSON.parse(backup) : [];
+    }
+    try {
+        const snapshot = await safeGet(getCollection('assignedTasks'));
+        const list = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }) as AssignedTask);
+        safeSetItem('backup_assignedTasks', JSON.stringify(list));
+        return list;
+    } catch (err) {
+        (window as any).firestoreQuotaExceeded = true;
+        console.error("getAssignedTasks error, loading backup:", err);
+        const backup = localStorage.getItem('backup_assignedTasks');
+        return backup ? JSON.parse(backup) : [];
+    }
 };
 
 export const addAssignedTask = async (task: Omit<AssignedTask, 'id'>): Promise<void> => {
@@ -746,12 +1718,24 @@ export const deleteProficiencyRecord = async (id: string): Promise<void> => {
 };
 
 export const getSupportRequests = async (): Promise<SupportRequest[]> => {
-    if (!firestore) throw new Error("Database not initialized");
-    const snapshot = await safeGet(getCollection('supportRequests').orderBy('createdAt', 'desc'));
-    return snapshot.docs.map((doc: any) => ({
-        id: doc.id,
-        ...doc.data()
-    })) as SupportRequest[];
+    if (!firestore) {
+        const backup = localStorage.getItem('backup_supportRequests');
+        return backup ? JSON.parse(backup) : [];
+    }
+    try {
+        const snapshot = await safeGet(getCollection('supportRequests').orderBy('createdAt', 'desc'));
+        const list = snapshot.docs.map((doc: any) => ({
+            id: doc.id,
+            ...doc.data()
+        })) as SupportRequest[];
+        safeSetItem('backup_supportRequests', JSON.stringify(list));
+        return list;
+    } catch (err) {
+        (window as any).firestoreQuotaExceeded = true;
+        console.error("getSupportRequests error, loading backup:", err);
+        const backup = localStorage.getItem('backup_supportRequests');
+        return backup ? JSON.parse(backup) : [];
+    }
 };
 
 export const saveSupportRequest = async (request: SupportRequest): Promise<void> => {
@@ -786,25 +1770,54 @@ const DEFAULT_HIGH_VALUE_ASSETS = [
 ];
 
 export const getAppSettings = async (): Promise<any> => {
-    if (!firestore) return null;
+    if (!firestore) {
+        const backup = localStorage.getItem('backup_appSettings');
+        return backup ? JSON.parse(backup) : { highValueAssets: DEFAULT_HIGH_VALUE_ASSETS, highValueAssetsInitialized: true };
+    }
     const docRef = getCollection('system').doc('appSettings');
-    const doc = await safeGet(docRef);
-    if (doc.exists) {
-        const data = doc.data();
-        if (data.highValueAssets === undefined && !data.highValueAssetsInitialized) {
-            data.highValueAssets = DEFAULT_HIGH_VALUE_ASSETS;
-            data.highValueAssetsInitialized = true;
-            await docRef.set(data, { merge: true });
+    try {
+        const doc = await safeGet(docRef);
+        if (doc.exists) {
+            const data = doc.data();
+            if (data.highValueAssets === undefined) {
+                data.highValueAssets = DEFAULT_HIGH_VALUE_ASSETS;
+                data.highValueAssetsInitialized = true;
+                await docRef.set({ highValueAssets: DEFAULT_HIGH_VALUE_ASSETS, highValueAssetsInitialized: true }, { merge: true });
+            }
+            safeSetItem('backup_appSettings', JSON.stringify(data));
+            return data;
+        } else {
+            const initial = { highValueAssets: DEFAULT_HIGH_VALUE_ASSETS, highValueAssetsInitialized: true };
+            await docRef.set(initial);
+            safeSetItem('backup_appSettings', JSON.stringify(initial));
+            return initial;
         }
-        return data;
-    } else {
-        const initial = { highValueAssets: DEFAULT_HIGH_VALUE_ASSETS, highValueAssetsInitialized: true };
-        await docRef.set(initial);
-        return initial;
+    } catch (err: any) {
+        (window as any).firestoreQuotaExceeded = true;
+        console.error("getAppSettings error, loading backup:", err);
+        const backup = localStorage.getItem('backup_appSettings');
+        if (backup) {
+            try {
+                return JSON.parse(backup);
+            } catch (e) {
+                return { highValueAssets: DEFAULT_HIGH_VALUE_ASSETS, highValueAssetsInitialized: true };
+            }
+        }
+        return { highValueAssets: DEFAULT_HIGH_VALUE_ASSETS, highValueAssetsInitialized: true };
     }
 };
 
 export const saveAppSettings = async (settings: any): Promise<void> => {
+    // Save to backup first so local state is updated immediately
+    try {
+        const existingBackupStr = localStorage.getItem('backup_appSettings');
+        let existingBackup = existingBackupStr ? JSON.parse(existingBackupStr) : {};
+        const updatedBackup = { ...existingBackup, ...settings, highValueAssetsInitialized: true };
+        safeSetItem('backup_appSettings', JSON.stringify(updatedBackup));
+    } catch (e) {
+        console.error("Error writing backup_appSettings to localStorage:", e);
+    }
+
     if (!firestore) return;
     const docRef = getCollection('system').doc('appSettings');
     await docRef.set({ ...settings, highValueAssetsInitialized: true }, { merge: true });
@@ -866,22 +1879,49 @@ export const acknowledgeWalkthrough = async (walkthroughId: string, testerId: st
 
 // --- Equipment Borrow & Return Record System ---
 export const getBorrowRecords = async (): Promise<BorrowRecord[]> => {
-    if (!firestore) throw new Error("Database not initialized");
-    const snapshot = await safeGet(getCollection('borrowRecords').orderBy('createdAt', 'desc'));
-    return snapshot.docs.map((doc: any) => ({
-        id: doc.id,
-        ...doc.data()
-    })) as BorrowRecord[];
+    if (!firestore) {
+        const backup = localStorage.getItem('backup_borrowRecords');
+        return backup ? JSON.parse(backup) : [];
+    }
+    try {
+        const snapshot = await safeGet(getCollection('borrowRecords').orderBy('createdAt', 'desc'));
+        const records = snapshot.docs.map((doc: any) => ({
+            id: doc.id,
+            ...doc.data()
+        })) as BorrowRecord[];
+        safeSetItem('backup_borrowRecords', JSON.stringify(records));
+        return records;
+    } catch (err) {
+        (window as any).firestoreQuotaExceeded = true;
+        console.error("getBorrowRecords error, loading backup:", err);
+        const backup = localStorage.getItem('backup_borrowRecords');
+        return backup ? JSON.parse(backup) : [];
+    }
 };
 
 export const saveBorrowRecord = async (record: BorrowRecord): Promise<void> => {
+    // Save to backup first so local state is updated immediately
+    try {
+        const existingBackupStr = localStorage.getItem('backup_borrowRecords') || '[]';
+        let existingBackup = JSON.parse(existingBackupStr) as BorrowRecord[];
+        if (record.id) {
+            existingBackup = existingBackup.map(r => r.id === record.id ? { ...r, ...record } : r);
+        } else {
+            const newRecord = { ...record, id: 'local_' + Math.random().toString(36).substring(2, 11), createdAt: record.createdAt || new Date().toISOString() };
+            existingBackup.unshift(newRecord);
+        }
+        safeSetItem('backup_borrowRecords', JSON.stringify(existingBackup));
+    } catch (e) {
+        console.error("Error writing backup_borrowRecords to localStorage:", e);
+    }
+
     if (!firestore) throw new Error("Database not initialized");
     const collection = getCollection('borrowRecords');
     
     // Clean fields
     const cleaned = Object.fromEntries(Object.entries(record).filter(([_, v]) => v !== undefined));
     
-    if (cleaned.id) {
+    if (cleaned.id && !String(cleaned.id).startsWith('local_')) {
         await collection.doc(cleaned.id as string).update(cleaned);
     } else {
         await collection.add({
@@ -892,6 +1932,15 @@ export const saveBorrowRecord = async (record: BorrowRecord): Promise<void> => {
 };
 
 export const deleteBorrowRecord = async (id: string): Promise<void> => {
+    try {
+        const existingBackupStr = localStorage.getItem('backup_borrowRecords') || '[]';
+        let existingBackup = JSON.parse(existingBackupStr) as BorrowRecord[];
+        existingBackup = existingBackup.filter(r => r.id !== id);
+        safeSetItem('backup_borrowRecords', JSON.stringify(existingBackup));
+    } catch (e) {
+        console.error("Error removing borrow record from local backup:", e);
+    }
+
     if (!firestore) throw new Error("Database not initialized");
     await getCollection('borrowRecords').doc(id).delete();
 };

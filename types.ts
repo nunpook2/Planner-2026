@@ -92,19 +92,123 @@ export interface EquipmentComponent {
     vendorTel?: string;
 }
 
+export interface StageEvidenceRecord {
+    stageId: number;
+    title: string;
+    date?: string;
+    statusLabel?: string;
+    details?: string;
+    docNo?: string;
+    vendorOrPerson?: string;
+    proofFileOrRef?: string;
+    updatedAt?: string;
+}
+
+export interface TrackingWorkflowStatus {
+    // 1. ขอใบ Quotation จาก Vendor
+    quotationRequested: boolean;
+    quotationDate?: string;
+    quotationStatus?: 'not_requested' | 'requested_waiting' | 'received' | 'rejected' | string;
+    quotationNo?: string;
+    quotationAmount?: string;
+    quotationNote?: string;
+    quotationProof?: string;
+
+    // 2. แจ้งออก PR / PO
+    prIssued: boolean;
+    prNo?: string;
+    prStatus?: 'pending' | 'pr_submitted' | 'po_approved' | 'rejected' | string;
+    prDate?: string;
+    poNo?: string;
+    prNote?: string;
+    prProof?: string;
+
+    // 3. นัดหมาย Vendor เข้ามา (Appointment Status & Date)
+    vendorScheduled: boolean;
+    scheduledDate?: string;          // วันที่นัดหมาย เช่น "2026-10-25"
+    scheduledTime?: string;          // ช่วงเวลานัด เช่น "09:00 - 12:00"
+    appointmentStatus?: 'pending_contact' | 'waiting_confirmation' | 'confirmed' | 'postponed' | 'completed' | string;
+    vendorName?: string;             // บริษัท Vendor
+    technicianName?: string;         // ชื่อช่าง
+    vendorContact?: string;          // เบอร์โทรช่าง/บริษัท
+    appointmentNote?: string;        // หมายเหตุการนัด
+
+    // 4. ใบ Cert / Service Report จาก Vendor
+    certReceived: boolean;
+    certReceivedDate?: string;
+    certNo?: string;
+    certStatus?: 'waiting' | 'received' | 'revision_needed' | string;
+    certNote?: string;
+    certProof?: string;
+
+    // 5. ส่งมอบใบ Cert ให้พนักงานที่ดูแล
+    certDelivered: boolean;
+    certDeliveredDate?: string;
+    recipientName?: string;          // ผู้รับมอบ
+    deliveryNote?: string;
+
+    // 6. สรุปผลการ Cal / PM
+    result: 'Pass' | 'Fail' | 'Action Required' | 'Pending' | '';
+    resultNote?: string;
+    calStickerAffixed?: boolean;     // ติดสติกเกอร์แล้ว
+    completedDate?: string;
+
+    // บันทึกหลักฐานเพิ่มเติม
+    evidences?: StageEvidenceRecord[];
+}
+
+export interface PMDetails {
+    freqYear?: string | number; // e.g. 1
+    lastPM?: string;            // e.g. "Nov", "Jan"
+    nextPM?: string;            // e.g. "Nov 2026"
+    pmBy?: 'Vender' | 'Owner' | string;
+    items?: string;             // รายการที่ทำ PM
+    tolerance?: string;         // Tolerance e.g. "Pass/Fail"
+}
+
+export interface CalDetails {
+    freqYear?: string | number; // e.g. 1
+    lastCal?: string;           // e.g. "Nov", "Jan"
+    nextCal?: string;           // e.g. "Nov"
+    calBy?: 'Vender' | 'Owner' | string;
+    items?: string;             // รายการที่สอบเทียบ
+    tolerance?: string;         // e.g. "± 5°C", "±0.5%"
+}
+
+export interface EquipmentSubComponent {
+    id: string;
+    equipmentNo: string;        // รหัสเครื่องพ่วงย่อย เช่น "PDS-1001/02", "PDS-1004/01"
+    equipmentName: string;      // ชื่อเครื่องพ่วงย่อย เช่น "Specae-Heater (BC2)", "Weight 400 g"
+    owner: string;              // พนักงานที่ดูแล เช่น "PORNTHAK", "Channarong"
+    pm?: PMDetails;
+    cal?: CalDetails;
+    trackingStatus: TrackingWorkflowStatus;
+    notes?: string;
+}
+
 export interface Equipment {
     id: string;
-    code?: string; // Equipment Code for linking
+    equipmentNo: string;        // รหัสเครื่องหลัก เช่น "PDS-1001", "PDS-1002" (ไม่มี '/')
+    equipmentName: string;      // ชื่อเครื่องมือ เช่น "FTIR Tensor37", "Melt Flow Index"
+    owner: string;              // พนักงานที่ดูแล เช่น "PORNTHAK", "Channarong"
+    department?: string;
+    location?: string;
+    pm?: PMDetails;
+    cal?: CalDetails;
+    trackingStatus: TrackingWorkflowStatus;
+    subEquipments?: EquipmentSubComponent[]; // รายการเครื่องพ่วงย่อยที่มี /
+    
+    // Legacy & compatibility props
+    code?: string;
     name: string;
-    group: string; 
-    type?: 'Primary' | 'Accessory' | 'Component'; // New Type Logic
-    status: 'ready' | 'issue' | 'maintenance';
-    actionStatus: 'none' | 'notified' | 'ordered' | 'repairing';
-    details: string; // Model / Serial No can go here for Primary
+    group?: string; 
+    type?: 'Primary' | 'Accessory' | 'Component';
+    status?: 'ready' | 'issue' | 'maintenance';
+    actionStatus?: 'none' | 'notified' | 'ordered' | 'repairing';
+    details?: string;
     serialNo?: string;
     model?: string;
     
-    // Detailed Excel Props (Primary)
     pmBy?: string;
     pmFreq?: string;
     calBy?: string;
@@ -114,21 +218,60 @@ export interface Equipment {
     vendor?: string;
     vendorTel?: string;
     
-    // Hierarchy
-    components?: EquipmentComponent[]; // List of sub-components
-
+    components?: EquipmentComponent[];
     methods?: string[]; 
-    lastUpdated: string;
-    updatedBy: string;
+    lastUpdated?: string;
+    updatedBy?: string;
     history?: EquipmentHistory[];
-    
-    // Updated Logic: Multiple Maintenance Items
     maintenanceItems?: MaintenanceItem[];
-
-    // Legacy Fields (kept for compatibility or simple view)
     custodian?: string; 
     custodianName?: string;
     contactInfo?: string; 
+
+    // Executive Breakdown & Out-of-Order Tracking
+    breakdownStatus?: {
+        isBroken: boolean;
+        currentIncident?: BreakdownRecord;
+        history?: BreakdownRecord[];
+    };
+}
+
+export type BreakdownStage = 
+    | 'reported'           // 1. รับแจ้งอาการเสีย (Issue Reported)
+    | 'investigating'      // 2. ตรวจสอบ/วิเคราะห์สาเหตุ (Inspection / Diagnostics)
+    | 'quotation_repair'   // 3. ขอใบเสนอราคาซ่อม/อะไหล่ (Quotation / Parts Sourcing)
+    | 'pr_repair'          // 4. ออกใบ PR ซ่อม/อนุมัติงบ (PR / PO Approval)
+    | 'repairing'          // 5. กำลังดำเนินการซ่อม (Repair in Progress)
+    | 'repaired_verified'  // 6. ซ่อมเสร็จ/ตรวจรับพร้อมใช้งาน (Resolved & Verified)
+    ;
+
+export interface BreakdownActionLog {
+    id: string;
+    date: string;
+    action: string;
+    actor?: string;
+    stage?: BreakdownStage;
+}
+
+export interface BreakdownRecord {
+    id: string;
+    equipmentId: string;
+    equipmentNo: string;
+    equipmentName: string;
+    reportedDate: string;           // วันที่แจ้งเสีย YYYY-MM-DD
+    reportedBy: string;             // ผู้แจ้ง
+    symptom: string;                // อาการเสีย
+    rootCause?: string;             // สาเหตุที่พบ
+    impactLevel: 'Critical' | 'Moderate' | 'Low'; // ระดับผลกระทบต่องานแล็บ
+    stage: BreakdownStage;          // สเต็ป 1-6
+    vendorOrTechnician?: string;    // ผู้ดำเนินการซ่อม
+    quotationNo?: string;           // เลขที่ใบเสนอราคา
+    repairPrNo?: string;            // เลขที่ PR ซ่อม
+    costEstimate?: number;          // ค่าใช้จ่ายโดยประมาณ
+    targetResolutionDate?: string;  // กำหนดเสร็จที่คาดการณ์
+    resolvedDate?: string;          // วันที่ซ่อมเสร็จจริง
+    resolutionNote?: string;        // สรุปผลการซ่อม/ตรวจรับ
+    actionLogs?: BreakdownActionLog[]; // ประวัติรายละเอียดว่าทำอะไรไปกับเครื่องนี้แล้วบ้าง
 }
 
 export interface DailySchedule {

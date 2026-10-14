@@ -46,7 +46,7 @@ interface SummaryItemStats {
 interface PersonStats {
     id: string;
     name: string;
-    role: 'ANLST' | 'ASST';
+    role: 'ANLST' | 'ASST' | 'SYSTEM';
     pendingTasks: number;
     summary: Record<string, SummaryItemStats>;
 }
@@ -638,8 +638,8 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ testers, selectedDate, onDa
             `;
 
             processedPersonnel.forEach(p => {
-                const total = Object.values(p.summary).reduce((acc: number, s: any) => acc + s.total, 0);
-                const done = Object.values(p.summary).reduce((acc: number, s: any) => acc + s.done, 0);
+                const total = Number(Object.values(p.summary).reduce((acc: number, s: any) => acc + s.total, 0));
+                const done = Number(Object.values(p.summary).reduce((acc: number, s: any) => acc + s.done, 0));
                 if (total > 0) prompt += `\n- ${p.name}: ${done}/${total} tasks.`;
             });
 

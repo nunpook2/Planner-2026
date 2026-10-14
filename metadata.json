@@ -1,6 +1,6 @@
 {
-  "name": "Planner V8- Laboratory Task Management",
-  "description": "An advanced laboratory task management system to streamline test assignments, scheduling, and progress tracking for analysts. Features include Excel data import, task prioritization, roster management, and comprehensive reporting, all powered by a real-time database.",
+  "name": "Equipment PM & Calibration Management System",
+  "description": "AI-Powered Laboratory Equipment PM & Calibration Management System. Tracks primary and sub-equipments, 6-stage workflow status, monthly schedules, and smart plan health checks.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
