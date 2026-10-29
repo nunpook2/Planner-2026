@@ -6,6 +6,7 @@ import {
     PencilIcon, BoxIcon, RefreshIcon, ChevronDownIcon, CalendarIcon 
 } from './common/Icons';
 import { MONTH_KEYS, MONTH_INFO_MAP, formatMonthName, normalizeMonth } from '../utils/monthUtils';
+import { getStaffProfile } from '../utils/staffUtils';
 
 interface WorkflowTabProps {
     equipments: Equipment[];
@@ -329,39 +330,34 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
     };
 
     return (
-        <div className="space-y-5 animate-fade-in w-full">
-            {/* EXECUTIVE CONTROL HEADER */}
-            <div className="bg-white dark:bg-base-900 p-5 lg:p-6 rounded-3xl border border-base-200 dark:border-base-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1">
+        <div className="space-y-3.5 animate-fade-in w-full">
+            {/* EXECUTIVE CONTROL HEADER - Compact & Crisp */}
+            <div className="bg-white dark:bg-base-900 p-4 rounded-2xl border border-slate-200 dark:border-base-800 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="space-y-0.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-primary-600 bg-primary-50 dark:bg-primary-950/40 px-2.5 py-1 rounded-full border border-primary-200/50">
-                            PM & Calibration Stage Monitor
+                        <span className="text-[11px] font-black uppercase tracking-wider text-primary-700 bg-primary-50 dark:bg-primary-950 px-2 py-0.5 rounded-md border border-primary-200">
+                            กระดานติดตาม 6 สเต็ป (Quotation ➔ PR ➔ นัดหมาย ➔ Cert)
                         </span>
-                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-base-800 px-2 py-0.5 rounded-full">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-base-800 px-2 py-0.5 rounded-lg border border-slate-200">
                             แสดง {filteredItems.length} จาก {allItems.length} เครื่อง
                         </span>
-                        {selectedMonth !== 'all' && (
-                            <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-0.5 rounded-full border border-indigo-200">
-                                🗓️ กรองเฉพาะเดือน: {MONTH_INFO_MAP[selectedMonth]?.fullDisplay || selectedMonth}
-                            </span>
-                        )}
                     </div>
-                    <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
                         กระดานติดตาม 6 ขั้นตอน & บันทึกหลักฐานวันนัดหมาย
                     </h2>
-                    <p className="text-xs text-slate-500 font-medium">
-                        ฟิกซ์เครื่องมือไว้ด้านซ้ายเพื่อความชัดเจน ตรวจสอบหลักฐานใบเสนอราคา/PR วันนัดหมายช่างเข้าปฏิบัติงาน และใบรับรองได้ครบถ้วน
+                    <p className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
+                        ติดตามกระบวนการ PM & Calibration ครบวงจร พร้อมตารางนัดหมายช่างและบันทึกผล
                     </p>
                 </div>
 
                 {/* View Mode Toggle */}
-                <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-base-800 rounded-2xl border border-slate-200 dark:border-base-700 self-start md:self-auto shrink-0">
+                <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-base-800 rounded-xl border border-slate-200 dark:border-base-700 self-start md:self-auto shrink-0">
                     <button
                         onClick={() => setViewMode('summary')}
-                        className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition-all ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
                             viewMode === 'summary' 
-                                ? 'bg-white dark:bg-base-700 text-primary-600 shadow-sm' 
-                                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
+                                ? 'bg-white dark:bg-base-700 text-primary-600 shadow-2xs' 
+                                : 'text-slate-700 hover:text-slate-900 dark:text-slate-300'
                         }`}
                         title="สรุปภาพรวมผู้บริหาร & ตารางวันนัดหมายช่างประจำเดือน"
                     >
@@ -370,10 +366,10 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                     </button>
                     <button
                         onClick={() => setViewMode('fixed_table')}
-                        className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition-all ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
                             viewMode === 'fixed_table' 
-                                ? 'bg-white dark:bg-base-700 text-primary-600 shadow-sm' 
-                                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
+                                ? 'bg-white dark:bg-base-700 text-primary-600 shadow-2xs' 
+                                : 'text-slate-700 hover:text-slate-900 dark:text-slate-300'
                         }`}
                         title="ตารางติดตามสเตจแบบฟิกซ์เครื่องมือไว้ด้านซ้าย"
                     >
@@ -382,10 +378,10 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                     </button>
                     <button
                         onClick={() => setViewMode('kanban')}
-                        className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition-all ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
                             viewMode === 'kanban' 
-                                ? 'bg-white dark:bg-base-700 text-primary-600 shadow-sm' 
-                                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
+                                ? 'bg-white dark:bg-base-700 text-primary-600 shadow-2xs' 
+                                : 'text-slate-700 hover:text-slate-900 dark:text-slate-300'
                         }`}
                         title="กระดานคัมบังแยกตามขั้นตอน 1-6"
                     >
@@ -471,7 +467,7 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                     >
                         <option value="all">👤 พนักงานที่ดูแล (ทั้งหมด)</option>
                         {ownersList.map(o => (
-                            <option key={o} value={o}>{o}</option>
+                            <option key={o} value={o}>{getStaffProfile(o).displayName}</option>
                         ))}
                     </select>
 
@@ -518,114 +514,112 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
             {/* ========================================================================= */}
             {viewMode === 'summary' && (
                 <div className="space-y-5">
-                    {/* Month Banner & Executive KPIs */}
-                    <div className="bg-gradient-to-br from-slate-900 via-primary-950 to-slate-900 text-white p-6 rounded-3xl shadow-xl border border-slate-800 relative overflow-hidden">
-                        <div className="relative z-10 space-y-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
-                                <div>
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-primary-400 bg-white/10 px-2.5 py-1 rounded-full">
-                                        Executive Monthly Overview
-                                    </span>
-                                    <h3 className="text-xl md:text-2xl font-black mt-1">
-                                        สรุปแผน PM ประจำเดือน: {selectedMonth === 'all' ? 'ภาพรวมทุกเดือน (All Months)' : MONTH_INFO_MAP[selectedMonth]?.fullDisplay}
-                                    </h3>
-                                    <p className="text-xs text-slate-300 font-medium">
-                                        ภาพรวมความพร้อมเครื่องมือ วันนัดหมายช่างเข้าหน้างาน และสเต็ปที่ต้องเร่งรัดติดตาม
-                                    </p>
+                    {/* SECTION 1: EXECUTIVE MONTHLY OVERVIEW & 5 KPI CARDS (คืนค่าครบถ้วนในดีไซน์สะอาดตา) */}
+                    <div className="bg-white dark:bg-base-900 rounded-3xl border border-slate-200/90 dark:border-base-800 p-5 md:p-6 shadow-xs space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-base-800 pb-4">
+                            <div>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-950/60 px-2.5 py-1 rounded-full border border-primary-200/70 dark:border-primary-800/60">
+                                    Executive Monthly Overview
+                                </span>
+                                <h3 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white mt-1">
+                                    สรุปแผน PM ประจำเดือน: {selectedMonth === 'all' ? 'ภาพรวมทุกเดือน (All Months)' : MONTH_INFO_MAP[selectedMonth]?.fullDisplay}
+                                </h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                    ภาพรวมความพร้อมเครื่องมือ วันนัดหมายช่างเข้าหน้างาน และสเต็ปที่ต้องเร่งรัดติดตาม
+                                </p>
+                            </div>
+                            <div className="text-left sm:text-right">
+                                <span className="text-3xl font-black text-slate-900 dark:text-white">{executiveMetrics.total}</span>
+                                <span className="text-xs font-bold text-slate-400 ml-1.5">เครื่องตามแผน</span>
+                            </div>
+                        </div>
+
+                        {/* 5 KPI Metric Cards - ครบทั้ง 5 ด้าน สีสบายตา ไม่ซ้ำซ้อน ชัดเจน */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                            {/* Card 1: ได้วันนัดหมายแล้ว */}
+                            <div className="bg-emerald-50/70 dark:bg-emerald-950/20 rounded-2xl p-4 border border-emerald-200/80 dark:border-emerald-900/40 hover:border-emerald-400 hover:shadow-xs transition-all">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">ได้วันนัดหมายแล้ว</span>
+                                    <span className="p-1.5 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs">🗓️</span>
                                 </div>
-                                <div className="text-right">
-                                    <span className="text-3xl font-black text-white">{executiveMetrics.total}</span>
-                                    <span className="text-xs font-bold text-slate-400 ml-1.5">เครื่องตามแผน</span>
+                                <div className="text-2xl font-black text-emerald-700 dark:text-emerald-300 mt-1">
+                                    {executiveMetrics.hasAppointmentDate}
                                 </div>
+                                <span className="text-[10px] text-emerald-600/90 dark:text-emerald-400 font-medium">
+                                    ยืนยันคิวช่างเข้าหน้างาน
+                                </span>
                             </div>
 
-                            {/* 5 KPI Metric Cards */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                                {/* Card 1: ได้วันนัดหมายแล้ว */}
-                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10 hover:border-emerald-400/50 transition-all">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-bold text-slate-300">ได้วันนัดหมายแล้ว</span>
-                                        <span className="p-1 bg-emerald-500/20 text-emerald-400 rounded-lg text-xs">🗓️</span>
-                                    </div>
-                                    <div className="text-2xl font-black text-emerald-400 mt-1">
-                                        {executiveMetrics.hasAppointmentDate}
-                                    </div>
-                                    <span className="text-[10px] text-slate-400 font-medium">
-                                        ยืนยันคิวช่างเข้าหน้างาน
-                                    </span>
+                            {/* Card 2: รอนัดหมาย / ยังไม่ได้วัน */}
+                            <div className="bg-amber-50/70 dark:bg-amber-950/20 rounded-2xl p-4 border border-amber-200/80 dark:border-amber-900/40 hover:border-amber-400 hover:shadow-xs transition-all">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">รอนัด / ยังไม่ได้วัน</span>
+                                    <span className="p-1.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded-lg text-xs">⏳</span>
                                 </div>
+                                <div className="text-2xl font-black text-amber-700 dark:text-amber-300 mt-1">
+                                    {executiveMetrics.waitingAppointment}
+                                </div>
+                                <span className="text-[10px] text-amber-600/90 dark:text-amber-400 font-medium">
+                                    อยู่ในขั้นนัดแต่ยังไม่ได้วัน
+                                </span>
+                            </div>
 
-                                {/* Card 2: รอนัดหมาย / ยังไม่ได้วัน */}
-                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10 hover:border-amber-400/50 transition-all">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-bold text-slate-300">รอนัด / ยังไม่ได้วัน</span>
-                                        <span className="p-1 bg-amber-500/20 text-amber-400 rounded-lg text-xs">⏳</span>
-                                    </div>
-                                    <div className="text-2xl font-black text-amber-400 mt-1">
-                                        {executiveMetrics.waitingAppointment}
-                                    </div>
-                                    <span className="text-[10px] text-slate-400 font-medium">
-                                        อยู่ในขั้นนัดแต่ยังไม่ได้วัน
-                                    </span>
+                            {/* Card 3: ขอเลื่อนนัด */}
+                            <div className="bg-rose-50/70 dark:bg-rose-950/20 rounded-2xl p-4 border border-rose-200/80 dark:border-rose-900/40 hover:border-rose-400 hover:shadow-xs transition-all">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">ขอเลื่อนนัด</span>
+                                    <span className="p-1.5 bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 rounded-lg text-xs">🔄</span>
                                 </div>
+                                <div className="text-2xl font-black text-rose-700 dark:text-rose-300 mt-1">
+                                    {executiveMetrics.postponed}
+                                </div>
+                                <span className="text-[10px] text-rose-600/90 dark:text-rose-400 font-medium">
+                                    รอประสานงานวันใหม่
+                                </span>
+                            </div>
 
-                                {/* Card 3: ขอเลื่อนนัด */}
-                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10 hover:border-rose-400/50 transition-all">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-bold text-slate-300">ขอเลื่อนนัด</span>
-                                        <span className="p-1 bg-rose-500/20 text-rose-400 rounded-lg text-xs">🔄</span>
-                                    </div>
-                                    <div className="text-2xl font-black text-rose-400 mt-1">
-                                        {executiveMetrics.postponed}
-                                    </div>
-                                    <span className="text-[10px] text-slate-400 font-medium">
-                                        รอประสานงานวันใหม่
-                                    </span>
+                            {/* Card 4: รับใบ Cert แล้ว */}
+                            <div className="bg-cyan-50/70 dark:bg-cyan-950/20 rounded-2xl p-4 border border-cyan-200/80 dark:border-cyan-900/40 hover:border-cyan-400 hover:shadow-xs transition-all">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">รับใบ Cert แล้ว</span>
+                                    <span className="p-1.5 bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300 rounded-lg text-xs">📜</span>
                                 </div>
+                                <div className="text-2xl font-black text-cyan-700 dark:text-cyan-300 mt-1">
+                                    {executiveMetrics.certReceivedCount}
+                                </div>
+                                <span className="text-[10px] text-cyan-600/90 dark:text-cyan-400 font-medium">
+                                    ผ่านการตรวจเช็คหน้างาน
+                                </span>
+                            </div>
 
-                                {/* Card 4: รับใบ Cert แล้ว */}
-                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10 hover:border-cyan-400/50 transition-all">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-bold text-slate-300">รับใบ Cert แล้ว</span>
-                                        <span className="p-1 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs">📜</span>
-                                    </div>
-                                    <div className="text-2xl font-black text-cyan-400 mt-1">
-                                        {executiveMetrics.certReceivedCount}
-                                    </div>
-                                    <span className="text-[10px] text-slate-400 font-medium">
-                                        ผ่านการตรวจเช็คหน้างาน
-                                    </span>
+                            {/* Card 5: เสร็จสมบูรณ์ & ส่งมอบ */}
+                            <div className="bg-primary-50/70 dark:bg-primary-950/20 rounded-2xl p-4 border border-primary-200/80 dark:border-primary-900/40 hover:border-primary-400 hover:shadow-xs transition-all">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">เสร็จสิ้น & ส่งมอบ</span>
+                                    <span className="p-1.5 bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300 rounded-lg text-xs">✓</span>
                                 </div>
-
-                                {/* Card 5: เสร็จสมบูรณ์ & ส่งมอบ */}
-                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10 hover:border-primary-400/50 transition-all">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-bold text-slate-300">เสร็จสิ้น & ส่งมอบ</span>
-                                        <span className="p-1 bg-primary-500/20 text-primary-400 rounded-lg text-xs">✓</span>
-                                    </div>
-                                    <div className="text-2xl font-black text-primary-400 mt-1">
-                                        {executiveMetrics.completed}
-                                    </div>
-                                    <span className="text-[10px] text-slate-400 font-medium">
-                                        ส่งมอบเครื่องให้ผู้ดูแลแล้ว
-                                    </span>
+                                <div className="text-2xl font-black text-primary-700 dark:text-primary-300 mt-1">
+                                    {executiveMetrics.completed}
                                 </div>
+                                <span className="text-[10px] text-primary-600/90 dark:text-primary-400 font-medium">
+                                    ส่งมอบเครื่องให้ผู้ดูแลแล้ว
+                                </span>
                             </div>
                         </div>
                     </div>
 
-                    {/* TWO-COLUMN EXECUTIVE DASHBOARD: SCHEDULE TIMELINE vs ACTION REQUIRED */}
+                    {/* SECTION 2: TWO-COLUMN EXECUTIVE DASHBOARD (SCHEDULE TIMELINE vs ACTION REQUIRED) */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                        {/* Section A: กำหนดการนัดหมายช่างที่ได้วันแล้ว (Confirmed Appointments Calendar) */}
-                        <div className="bg-white dark:bg-base-900 rounded-3xl border border-base-200 dark:border-base-800 p-5 shadow-sm space-y-3.5">
-                            <div className="flex items-center justify-between border-b border-base-200 dark:border-base-800 pb-3">
+                        {/* Column A: กำหนดการนัดหมายช่างที่ได้วันแล้ว (Confirmed Appointments) */}
+                        <div className="bg-white dark:bg-base-900 rounded-3xl border border-slate-200/90 dark:border-base-800 p-5 shadow-xs space-y-3.5">
+                            <div className="flex items-center justify-between border-b border-slate-100 dark:border-base-800 pb-3">
                                 <div>
-                                    <span className="text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full">
+                                    <span className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200/80 dark:border-emerald-900/40">
                                         Confirmed Appointments
                                     </span>
                                     <h4 className="text-base font-black text-slate-900 dark:text-white mt-1 flex items-center gap-2">
                                         <span>🗓️ กำหนดการช่างเข้าปฏิบัติงาน</span>
-                                        <span className="text-xs font-bold text-emerald-600">({executiveMetrics.upcomingAppointments.length} รายการ)</span>
+                                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">({executiveMetrics.upcomingAppointments.length} รายการ)</span>
                                     </h4>
                                 </div>
                                 <span className="text-[11px] font-bold text-slate-400">เรียงตามวันนัดหมาย</span>
@@ -638,7 +632,7 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                                         return (
                                             <div 
                                                 key={`appt_${item.id}_${idx}`}
-                                                className="p-3.5 rounded-2xl bg-slate-50 dark:bg-base-950/50 border border-slate-200/80 dark:border-base-800 hover:border-primary-400 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                                                className="p-3.5 rounded-2xl bg-slate-50 dark:bg-base-950/50 border border-slate-200/80 dark:border-base-800 hover:border-emerald-400 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
                                             >
                                                 <div className="space-y-1">
                                                     <div className="flex items-center gap-2 flex-wrap">
@@ -669,7 +663,7 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                                                         setEditingItem(item);
                                                         setActiveModalStage(3);
                                                     }}
-                                                    className="px-3 py-1.5 bg-white dark:bg-base-800 hover:bg-primary-50 dark:hover:bg-primary-950/40 text-primary-600 rounded-xl text-xs font-bold border border-slate-200 dark:border-base-700 shadow-sm transition-all self-end sm:self-center shrink-0"
+                                                    className="px-3 py-1.5 bg-white dark:bg-base-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-bold border border-slate-200 dark:border-base-700 shadow-2xs transition-all self-end sm:self-center shrink-0 cursor-pointer"
                                                 >
                                                     ดูหลักฐาน / อัปเดต ❯
                                                 </button>
@@ -678,23 +672,23 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                                     })
                                 ) : (
                                     <div className="p-8 text-center border-2 border-dashed border-slate-200 dark:border-base-800 rounded-2xl text-slate-400 space-y-1">
-                                        <p className="text-xs font-bold">ยังไม่มีรายการที่ได้วันนัดหมายในเดือนนี้</p>
-                                        <p className="text-[10px]">คลิก "บันทึกหลักฐาน" ในเครื่องมือด้านขวาเพื่อใส่วันนัดหมายช่าง</p>
+                                        <p className="text-xs font-bold text-slate-600 dark:text-slate-300">ยังไม่มีรายการที่ได้วันนัดหมายในเดือนนี้</p>
+                                        <p className="text-[10px]">คลิก "บันทึกหลักฐาน" ในเครื่องมือเพื่อใส่วันนัดหมายช่างเข้าหน้างาน</p>
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        {/* Section B: เร่งรัดติดตาม - รายการที่ยังไม่ได้วันนัด หรือขอเลื่อนนัด */}
-                        <div className="bg-white dark:bg-base-900 rounded-3xl border border-base-200 dark:border-base-800 p-5 shadow-sm space-y-3.5">
-                            <div className="flex items-center justify-between border-b border-base-200 dark:border-base-800 pb-3">
+                        {/* Column B: เร่งรัดติดตาม - รายการที่ยังไม่ได้วันนัด หรือขอเลื่อนนัด */}
+                        <div className="bg-white dark:bg-base-900 rounded-3xl border border-slate-200/90 dark:border-base-800 p-5 shadow-xs space-y-3.5">
+                            <div className="flex items-center justify-between border-b border-slate-100 dark:border-base-800 pb-3">
                                 <div>
-                                    <span className="text-[10px] font-black uppercase text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full">
+                                    <span className="text-[10px] font-black uppercase text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-200/80 dark:border-amber-900/40">
                                         Action Required: Awaiting Date
                                     </span>
                                     <h4 className="text-base font-black text-slate-900 dark:text-white mt-1 flex items-center gap-2">
                                         <span>⚠️ รายการที่ต้องเร่งรัดวันนัดหมาย</span>
-                                        <span className="text-xs font-bold text-amber-600">({executiveMetrics.awaitingAppointments.length} เครื่อง)</span>
+                                        <span className="text-xs font-bold text-amber-600 dark:text-amber-400">({executiveMetrics.awaitingAppointments.length} เครื่อง)</span>
                                     </h4>
                                 </div>
                                 <span className="text-[11px] font-bold text-slate-400">ยังไม่ได้วันนัด</span>
@@ -726,11 +720,11 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                                                     <h5 className="font-bold text-slate-900 dark:text-white text-xs">
                                                         {item.equipmentName}
                                                     </h5>
-                                                    <div className="text-[10px] text-slate-500 font-medium flex items-center gap-2">
-                                                        <span>👤 ผู้ดูแล: {item.owner}</span>
+                                                    <div className="text-[10px] text-slate-500 font-medium flex items-center gap-2 flex-wrap">
+                                                        <span>👤 ผู้ดูแล: <strong className="text-slate-800 dark:text-slate-200">{getStaffProfile(item.owner).displayName}</strong></span>
                                                         <span>📍 {item.location}</span>
                                                         {st.appointmentNote && (
-                                                            <span className="text-amber-700 font-semibold truncate max-w-xs">
+                                                            <span className="text-amber-700 dark:text-amber-400 font-semibold truncate max-w-xs">
                                                                 หมายเหตุ: {st.appointmentNote}
                                                             </span>
                                                         )}
@@ -742,7 +736,7 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                                                         setEditingItem(item);
                                                         setActiveModalStage(3);
                                                     }}
-                                                    className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-md shadow-amber-500/20 transition-all self-end sm:self-center shrink-0"
+                                                    className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-xs transition-all self-end sm:self-center shrink-0 cursor-pointer"
                                                 >
                                                     + ใส่วันนัดหมาย ❯
                                                 </button>
@@ -751,7 +745,7 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                                     })
                                 ) : (
                                     <div className="p-8 text-center border-2 border-dashed border-slate-200 dark:border-base-800 rounded-2xl text-slate-400 space-y-1">
-                                        <p className="text-xs font-bold text-emerald-600">✓ ไม่มีรายการค้างนัดหมาย</p>
+                                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">✓ ไม่มีรายการค้างนัดหมาย</p>
                                         <p className="text-[10px]">เครื่องมือที่มีแผนได้รับการประสานงานครบถ้วนแล้ว</p>
                                     </div>
                                 )}
@@ -759,42 +753,42 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                         </div>
                     </div>
 
-                    {/* Section C: Stage Pipeline Funnel Progress for Selected Month */}
-                    <div className="bg-white dark:bg-base-900 rounded-3xl border border-base-200 dark:border-base-800 p-5 shadow-sm space-y-3">
-                        <div className="flex items-center justify-between">
+                    {/* SECTION 3: STAGE PIPELINE FUNNEL PROGRESS (ความคืบหน้ารายขั้นตอนทั้ง 6 สเต็ป คืนค่าครบถ้วน) */}
+                    <div className="bg-white dark:bg-base-900 rounded-3xl border border-slate-200/90 dark:border-base-800 p-5 shadow-xs space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-slate-100 dark:border-base-800 pb-3">
                             <div>
-                                <h4 className="text-sm font-black text-slate-900 dark:text-white">
+                                <h4 className="text-base font-black text-slate-900 dark:text-white">
                                     ความคืบหน้ารายขั้นตอนทั้ง 6 สเต็ป (Stage Funnel Progress)
                                 </h4>
-                                <p className="text-[11px] text-slate-400 font-medium">
+                                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                                     จำนวนเครื่องในแต่ละขั้นตอนของเดือน {selectedMonth === 'all' ? 'ทั้งหมด' : MONTH_INFO_MAP[selectedMonth]?.fullDisplay}
                                 </p>
                             </div>
                             <button
                                 onClick={() => setViewMode('fixed_table')}
-                                className="text-xs font-black text-primary-600 hover:underline flex items-center gap-1"
+                                className="text-xs font-black text-primary-600 hover:text-primary-700 dark:text-primary-400 hover:underline flex items-center gap-1 cursor-pointer"
                             >
                                 <span>เปิดตารางตรวจสอบละเอียด (ฟิกซ์ซ้าย)</span>
                                 <span>❯</span>
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                             {STAGES.map(stage => {
                                 const countInStage = filteredItems.filter(it => getItemCurrentStage(it.trackingStatus) === stage.id).length;
                                 return (
                                     <div 
                                         key={stage.id}
-                                        className="p-3 rounded-2xl bg-slate-50 dark:bg-base-950/60 border border-slate-200/80 dark:border-base-800 space-y-1 text-center"
+                                        className="p-3.5 rounded-2xl bg-slate-50 dark:bg-base-950/60 border border-slate-200/80 dark:border-base-800 space-y-1 text-center hover:border-primary-400 hover:bg-primary-50/20 transition-all"
                                     >
-                                        <div className="text-[10px] font-black uppercase text-slate-400">Stage {stage.id}</div>
+                                        <div className="text-[10px] font-black uppercase text-slate-400">STAGE {stage.id}</div>
                                         <div className="text-xs font-black text-slate-800 dark:text-white truncate" title={stage.title}>
                                             {stage.title}
                                         </div>
-                                        <div className="text-xl font-black text-primary-600">
+                                        <div className="text-2xl font-black text-primary-600 dark:text-primary-400 my-0.5">
                                             {countInStage}
                                         </div>
-                                        <div className="text-[9px] text-slate-400 truncate">
+                                        <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate" title={stage.desc}>
                                             {stage.desc}
                                         </div>
                                     </div>
@@ -921,7 +915,7 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                                                         {item.equipmentName}
                                                     </div>
                                                     <div className="text-[10px] text-slate-500 font-medium flex items-center justify-between">
-                                                        <span>👤 ผู้ดูแล: <span className="font-bold text-slate-700 dark:text-slate-300">{item.owner}</span></span>
+                                                        <span>👤 ผู้ดูแล: <span className="font-bold text-slate-800 dark:text-slate-200">{getStaffProfile(item.owner).displayName}</span></span>
                                                         <span className="text-[9px] text-slate-400">{item.assignee}</span>
                                                     </div>
                                                 </div>
@@ -1238,8 +1232,8 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                                                         </div>
                                                     )}
 
-                                                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 pt-1">
-                                                        <span>👤 {item.owner}</span>
+                                                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 pt-1">
+                                                        <span>👤 {getStaffProfile(item.owner).displayName}</span>
                                                         <span>📍 {item.location}</span>
                                                     </div>
 
@@ -1326,7 +1320,7 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                                     </span>
                                 </h3>
                                 <div className="text-xs text-slate-500 font-medium">
-                                    👤 ผู้ดูแล: <span className="font-bold text-slate-700 dark:text-slate-300">{editingItem.owner}</span> | 📍 {editingItem.location}
+                                    👤 ผู้ดูแล: <span className="font-bold text-slate-800 dark:text-slate-200">{getStaffProfile(editingItem.owner).displayName}</span> | 📍 {editingItem.location}
                                 </div>
                             </div>
                             <button
@@ -1888,8 +1882,8 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
                                             </label>
                                             <input
                                                 type="text"
-                                                placeholder={`เช่น ${editingItem.owner}`}
-                                                value={editingItem.trackingStatus.recipientName || editingItem.owner}
+                                                placeholder={`เช่น ${getStaffProfile(editingItem.owner).thName}`}
+                                                value={editingItem.trackingStatus.recipientName || getStaffProfile(editingItem.owner).thName}
                                                 onChange={e => setEditingItem({
                                                     ...editingItem,
                                                     trackingStatus: { ...editingItem.trackingStatus, recipientName: e.target.value }

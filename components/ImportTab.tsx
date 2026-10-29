@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import type { Equipment, EquipmentSubComponent, TrackingWorkflowStatus } from '../types';
-import { batchImportEquipments, INITIAL_EQUIPMENTS } from '../services/dataService';
+import { 
+    batchImportEquipments, INITIAL_EQUIPMENTS, 
+    normalizeEquipmentNo, STANDARD_EQUIPMENT_OWNERS, getStandardOwner, sortEquipmentsNaturally 
+} from '../services/dataService';
 import { 
     UploadIcon, DownloadIcon, CheckCircleIcon, AlertTriangleIcon, 
     SearchIcon, SparklesIcon, CalendarIcon, ChevronDownIcon, ClockIcon 
@@ -44,14 +47,22 @@ export const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                     return;
                 }
 
-                // Locate the starting row of data (find row that contains 'PDS-', 'PDF', or equipment data)
+                // Locate the starting row of data (find row that contains real equipment code or equipment name)
                 let headerRow1Idx = 0;
                 let headerRow2Idx = 1;
                 let dataStartRowIdx = 2;
 
-                for (let r = 0; r < Math.min(sheetMatrix.length, 12); r++) {
-                    const rowText = sheetMatrix[r].map(c => String(c).toLowerCase()).join(' ');
-                    if (rowText.includes('pds-') || rowText.includes('pdf') || rowText.includes('ftir') || rowText.includes('lumos') || rowText.includes('melt') || rowText.includes('balance')) {
+                for (let r = 0; r < Math.min(sheetMatrix.length, 15); r++) {
+                    const row = sheetMatrix[r];
+                    if (!row) continue;
+                    const nonEmptyCount = row.filter((c: any) => String(c).trim() !== '').length;
+                    // Skip single-cell title banners (e.g. "PCRD Equipment Master Plan")
+                    if (nonEmptyCount <= 1) continue;
+
+                    const rowText = row.map((c: any) => String(c).toLowerCase()).join(' ');
+                    // Match actual equipment code/name patterns, NOT just a title containing "pdf"
+                    const hasEquipPattern = /(pds-\d+|pdf\s*1?-?\s*\d+|\b1-\d{3}\b|ftir|lumos|melt\s*flow|analytical\s*balance|density\s*meter|universal\s*testing)/i.test(rowText);
+                    if (hasEquipPattern) {
                         dataStartRowIdx = r;
                         headerRow2Idx = Math.max(0, r - 1);
                         headerRow1Idx = Math.max(0, r - 2);
@@ -78,10 +89,10 @@ export const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                     colSections[c] = currentSection;
                 }
 
-                // Default column indices
-                let colEquipNo = 0;
-                let colEquipName = 1;
-                let colOwner = 2;
+                // Column indices - initialized to -1 for auto-detection
+                let colEquipNo = -1;
+                let colEquipName = -1;
+                let colOwner = -1;
                 let colPMFreq = -1;
                 let colPMLast = -1;
                 let colPMNext = -1;
@@ -106,11 +117,22 @@ export const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                     const r2 = String(row2[c] || '').toLowerCase().trim();
                     const combined = `${sec} ${r1} ${r2}`.replace(/[^a-z0-9ก-๙]/g, '');
 
-                    if (combined.includes('equipmentno') || combined.includes('รหัสเครื่อง') || combined.includes('ลำดับ')) {
-                        if (colEquipNo === 0) colEquipNo = c;
-                    } else if (combined.includes('equipmentname') || combined.includes('ชื่อเครื่อง') || combined.includes('ชื่ออุปกรณ์')) {
+                    // Equipment No.: MUST NOT be just "ลำดับ" or "No."
+                    if (combined.includes('equipmentno') || combined.includes('equipmentnumber') || combined.includes('รหัสเครื่อง') || combined.includes('รหัสอุปกรณ์') || combined.includes('รหัสเครื่องมือ') || combined.includes('equipmentcode') || combined.includes('machineno') || combined.includes('pdfno') || combined.includes('pdsno')) {
+                        colEquipNo = c;
+                    } else if (combined.includes('equipmentname') || combined.includes('ชื่อเครื่อง') || combined.includes('ชื่ออุปกรณ์') || combined.includes('รายการเครื่องมือ') || combined.includes('machinename') || combined.includes('รายการเครื่อง')) {
                         colEquipName = c;
-                    } else if (combined.includes('พนักงานที่ดูแล') || combined.includes('ผู้ดูแล') || combined.includes('owner') || combined.includes('ผู้รับผิดชอบ')) {
+                    } else if (
+                        combined.includes('พนักงานที่ดูแล') || combined.includes('ผู้ดูแล') || 
+                        combined.includes('ผู้รับผิดชอบ') || combined.includes('พนักงานผู้รับผิดชอบ') || 
+                        combined.includes('เจ้าหน้าที่ดูแล') || combined.includes('owner') || 
+                        combined.includes('custodian') || combined.includes('pic') || 
+                        combined.includes('analyst') || combined.includes('staff') || 
+                        combined.includes('ชื่อผู้รับผิดชอบ') || combined.includes('ชื่อผู้ดูแล') ||
+                        combined.includes('ชื่อ-สกุล') || combined.includes('ผู้ปฏิบัติงาน') || 
+                        combined.includes('ผู้ทดสอบ') || combined.includes('tester') || 
+                        combined.includes('operator') || combined.includes('responsible')
+                    ) {
                         colOwner = c;
                     } else if (sec === 'pm' || combined.includes('pm')) {
                         if (combined.includes('freq') || combined.includes('ความถี่') || combined.includes('ครั้งปี')) colPMFreq = c;
@@ -146,7 +168,29 @@ export const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                     }
                 }
 
-                // Fallbacks if columns were not auto-detected
+                // Sample data rows to identify columns if not found via header text
+                for (let c = 0; c < Math.min(maxCols, 15); c++) {
+                    const sampleCells: string[] = [];
+                    for (let r = dataStartRowIdx; r < Math.min(sheetMatrix.length, dataStartRowIdx + 8); r++) {
+                        if (sheetMatrix[r]) sampleCells.push(String(sheetMatrix[r][c] || '').trim());
+                    }
+                    const joined = sampleCells.join(' ');
+
+                    if (colEquipNo === -1 && /(pds-\d+|pdf\s*1?-?\s*\d+|\b1-\d{1,3}\b)/i.test(joined)) {
+                        colEquipNo = c;
+                    }
+                    if (colEquipName === -1 && /(ftir|lumos|melt|balance|meter|microscope|oven|furnace|viscometer|calorimeter|เครื่อง|ชุด)/i.test(joined)) {
+                        colEquipName = c;
+                    }
+                    if (colOwner === -1 && /(pornthak|channarong|wiparat|somchai|narongsak|kanyarat|พรทัก|ชาญณรงค์|วิภา|สมชาย|ณรงค์ศักดิ์|กัญญารัตน์)/i.test(joined)) {
+                        colOwner = c;
+                    }
+                }
+
+                // Intelligent fallbacks
+                if (colEquipNo === -1) colEquipNo = 0;
+                if (colEquipName === -1) colEquipName = colEquipNo === 0 ? 1 : 0;
+                if (colOwner === -1) colOwner = (colEquipName !== 2 && colEquipNo !== 2) ? 2 : 3;
                 if (colPMFreq === -1) colPMFreq = 3;
                 if (colPMLast === -1) colPMLast = 4;
                 if (colPMBy === -1) colPMBy = 5;
@@ -163,9 +207,55 @@ export const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                     const row = sheetMatrix[r];
                     if (!row || row.every((c: any) => String(c).trim() === '')) continue;
 
-                    let equipNo = String(row[colEquipNo] || '').trim();
+                    let rawEquipNo = String(row[colEquipNo] || '').trim();
                     let equipName = String(row[colEquipName] || '').trim();
-                    let owner = String(row[colOwner] || '').trim();
+                    let rawOwner = String(row[colOwner] || '').trim();
+
+                    // Standardize equipment number (normalizes "PDF 1-001" -> "PDS-1001", and rejects junk header text)
+                    let equipNo = normalizeEquipmentNo(rawEquipNo);
+
+                    // If equipNo was missing/unmatched, try to deduce from equipment name
+                    if (!equipNo && equipName) {
+                        const nameLower = equipName.toLowerCase();
+                        if (nameLower.includes('ftir') || nameLower.includes('tensor')) equipNo = 'PDS-1001';
+                        else if (nameLower.includes('lumos')) equipNo = 'PDS-1002';
+                        else if (nameLower.includes('microscope') || nameLower.includes('optical')) equipNo = 'PDS-1003';
+                        else if (nameLower.includes('melt') || nameLower.includes('mfi')) equipNo = 'PDS-1004';
+                        else if (nameLower.includes('balance') || nameLower.includes('ชั่ง')) equipNo = 'PDS-1005';
+                        else if (nameLower.includes('density') || nameLower.includes('หนาแน่น')) equipNo = 'PDS-1006';
+                        else if (nameLower.includes('universal') || nameLower.includes('utm')) equipNo = 'PDS-1007';
+                        else if (nameLower.includes('oven') || nameLower.includes('ตู้อบ')) equipNo = 'PDS-1008';
+                        else if (nameLower.includes('ph') || nameLower.includes('conductivity')) equipNo = 'PDS-1009';
+                        else if (nameLower.includes('moisture') || nameLower.includes('ความชื้น')) equipNo = 'PDS-1010';
+                        else if (nameLower.includes('viscometer') || nameLower.includes('ความหนืด')) equipNo = 'PDS-1011';
+                        else if (nameLower.includes('dsc') || nameLower.includes('calorimeter')) equipNo = 'PDS-1012';
+                        else if (nameLower.includes('color') || nameLower.includes('spectro')) equipNo = 'PDS-1013';
+                        else if (nameLower.includes('furnace') || nameLower.includes('เตาเผา')) equipNo = 'PDS-1014';
+                    }
+
+                    // Skip phantom rows where equipment number is invalid or literally "PDF" or header labels
+                    if (!equipNo) {
+                        // If it has equipment name and currentPrimary, it might be an indented sub-equipment
+                        if (currentPrimary && (equipName || row[colCalItems] || row[colPMItems])) {
+                            equipNo = '';
+                        } else {
+                            continue;
+                        }
+                    }
+
+                    // Clean owner string and translate Thai names
+                    let owner = rawOwner;
+                    if (/พรทัก/i.test(owner)) owner = 'PORNTHAK';
+                    else if (/ชาญณรงค์/i.test(owner)) owner = 'Channarong';
+                    else if (/กัญญารัตน์/i.test(owner)) owner = 'Kanyarat';
+                    else if (/วิภา/i.test(owner)) owner = 'Wiparat';
+                    else if (/สมชาย/i.test(owner)) owner = 'Somchai';
+                    else if (/ณรงค์ศักดิ์/i.test(owner)) owner = 'Narongsak';
+
+                    const ownerUpper = owner.toUpperCase().replace(/\s+/g, '');
+                    if (ownerUpper === 'PDF' || ownerUpper === 'EQUIPMENTNO' || owner.includes('พนักงาน') || owner.includes('ผู้รับผิดชอบ') || owner.includes('สถานะ') || owner.includes('Vender') || owner.includes('ลำดับ')) {
+                        owner = '';
+                    }
 
                     const pmFreq = String(row[colPMFreq] || '1').trim();
                     const rawPMLast = String(row[colPMLast] || '').trim();
@@ -217,21 +307,19 @@ export const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                         result: result as any
                     };
 
-                    // Inherit owner if row is empty
-                    if (!owner && currentPrimary) {
-                        owner = currentPrimary.owner;
-                    }
-
                     // Check if Sub-Equipment: Has '/' OR has sub-item under currentPrimary
                     const isSub = equipNo.includes('/') || (!equipNo && currentPrimary && (calItems || pmItems || equipName));
 
                     if (isSub) {
-                        const finalSubNo = equipNo || (currentPrimary ? `${currentPrimary.equipmentNo}/sub-${(currentPrimary.subEquipments?.length || 0) + 1}` : `SUB-${r}`);
+                        const finalSubNo = equipNo || (currentPrimary ? `${currentPrimary.equipmentNo}/0${(currentPrimary.subEquipments?.length || 0) + 1}` : `SUB-${r}`);
+                        const subStdOwner = getStandardOwner(finalSubNo, equipName || calItems) || currentPrimary?.owner || 'PORNTHAK';
+                        const subOwner = (owner && owner !== 'PORNTHAK') ? owner : (subStdOwner || currentPrimary?.owner || 'PORNTHAK');
+
                         const sub: EquipmentSubComponent = {
-                            id: `sub_${r}_${Date.now()}`,
+                            id: `sub_${r}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                             equipmentNo: finalSubNo,
                             equipmentName: equipName || calItems || 'อุปกรณ์พ่วง/อุปกรณ์เสริม',
-                            owner: owner || currentPrimary?.owner || 'PORNTHAK',
+                            owner: subOwner,
                             pm: { freqYear: pmFreq, lastPM: pmLast, nextPM: pmNext, pmBy, items: pmItems, tolerance },
                             cal: { freqYear: calFreq, lastCal: calLast, nextCal: calNext, calBy, items: calItems, tolerance },
                             trackingStatus
@@ -243,12 +331,15 @@ export const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                         }
                     } else if (equipNo) {
                         // PRIMARY EQUIPMENT
+                        const stdOwner = getStandardOwner(equipNo, equipName);
+                        const resolvedOwner = (owner && owner !== 'PORNTHAK') ? owner : (stdOwner || owner || 'PORNTHAK');
+
                         currentPrimary = {
-                            id: `eq_${r}_${Date.now()}`,
+                            id: `eq_${r}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                             equipmentNo: equipNo,
                             equipmentName: equipName || equipNo,
                             name: equipName || equipNo,
-                            owner: owner || 'PORNTHAK',
+                            owner: resolvedOwner,
                             status: 'ready',
                             pm: { freqYear: pmFreq, lastPM: pmLast, nextPM: pmNext, pmBy, items: pmItems, tolerance },
                             cal: { freqYear: calFreq, lastCal: calLast, nextCal: calNext, calBy, items: calItems, tolerance },
@@ -260,9 +351,11 @@ export const ImportTab: React.FC<ImportTabProps> = ({ onTasksUpdated }) => {
                 }
 
                 if (parsedList.length > 0) {
-                    setImportedEquipments(parsedList);
+                    const sorted = sortEquipmentsNaturally(parsedList);
+                    setImportedEquipments(sorted);
+                    const ownersList = Array.from(new Set(sorted.map(e => e.owner))).join(', ');
                     setStatusMessage({
-                        text: `นำเข้าไฟล์ "${file.name}" สำเร็จ! จัดโครงสร้างเป็น ${parsedList.length} เครื่องหลัก (ผูกเครื่องพ่วงย่อย ${parsedList.reduce((acc, p) => acc + (p.subEquipments?.length || 0), 0)} ชิ้น) แยก PM และ Calibration พร้อมแปลงรอบเดือนเรียบร้อยแล้ว`
+                        text: `นำเข้าไฟล์ "${file.name}" สำเร็จ! จัดโครงสร้างเป็น ${sorted.length} เครื่องหลัก (รหัส ${sorted[0]?.equipmentNo} ถึง ${sorted[sorted.length - 1]?.equipmentNo}) พร้อมผู้รับผิดชอบตามไฟล์ (${ownersList}) เรียบร้อยแล้ว`
                     });
                 } else {
                     setStatusMessage({ text: 'ไม่พบแถวข้อมูลเครื่องมือในไฟล์ กรุณาตรวจสอบว่ามีรหัสเครื่องในคอลัมน์แรก', isError: true });

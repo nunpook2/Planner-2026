@@ -1,0 +1,337 @@
+Equipment no.	Equipment name	พนักงานที่ดูแล	preventive maintenance				Calibration				รายการที่ทำ		Tolerance	Contact Vender	Status					
+											PM	Cal								
+			Freq/year	Last PM	Next PM	PM by	Freq/year	Last Cal	Next Cal	Cal by					ขอใบ Quatation	แจ้งออก PR	นัดหมาย Vender เข้ามา	ใบ Cert จาก Vender	ส่งมอบใบ Cert ให้พนักงานที่ดูแล	สรุปผลการ Cal
+ PDS-1001	FTIR Tensor37	PORNTHAK	1	Nov		Vender	1	Nov	-	Vender	ตามรายการ Vender	ตามรายการ Vender	Pass/Fail	"Company : Bruker
+Name : เอก
+Tel : 0901984481
+Mail : suparerk.parakij@bruker.com"						
+ PDS-1001/02	Specae-Heater (BC2)	PORNTHAK	1	Jan		Vender	1	Jan	-	Vender	"""1.check สภาพเครื่อง ไม่แตกชำรุด
+2.check สภาพสายไฟไม่ขาดชำรุด
+3.เช็ดคราบไหม้, ฝุ่น"""	"Temp XXX จุด
+1.    c.
+2.       c.
+3.       c."	± 5 °C	"Company : TK Cal
+Name : วิว
+Tel : 0863760772, 0922575420
+Mail :supapron.singkhamkha@trescal.com"						
+ PDS-1002	LUMOS	PORNTHAK	1	Nov		Vender	1	Nov	-	Vender	ตามรายการ Vender	ตามรายการ Vender	Pass/Fail	"Company : Bruker
+Name : เอก
+Tel : 0901984481
+Mail : suparerk.parakij@bruker.com"						
+ PDS-1003	Opticla microscope	PORNTHAK	1	Apr		Vender	1	Apr	-	Vender	ตามรายการ Vender	ตามรายการ Vender	"PM : Pass/Fail
+Cal : ± 5 um"	"Company : Quality report
+Name : นุ่น
+Tel : 02 946 9988 (Auto 20 line) Ext.207
+Mail : service@qualityreport.co.th"						
+ PDS-1004	Melt Flow Index	Channarong	1	Jan		Owner	-	-	-	-	"1.ตรวจสอบสภาพสายไฟ
+2.เช็ด ดูดฝุ่น ทำความสะอาดภายในและภายนอกเครื่อง
+3.ตรวจสอบสายลมเข้าเครื่อง
+4. ตรวจสถาพผิวใน Barrel , Piston"	-	Pass/Fail	CHANNACH						
+ PDS-1004/01	Weight 400 g 	Channarong	-	-		-	1	Jan	-	Vender	-	Weight	±0.5%	"Company : TK Cal
+Name : วิว
+Tel : 0863760772, 0922575420
+Mail :supapron.singkhamkha@trescal.com"						
+ PDS-1004/02	Weight 2060 g 	Channarong	-	-		-	1	Jan	-	Vender	-	Weight	±0.5%							
+ PDS-1004/03	Weight 4900 g 	Channarong	-	-		-	1	Jan	-	Vender	-	Weight	±0.5%							
+ PDS-1004/04	Weight 5000 g 	Channarong	-	-		-	1	Jan	-	Vender	-	Weight	±0.5%							
+ PDS-1004/05	Weight 21500 g 	Channarong	-	-		-	1	Jan	-	Vender	-	Weight	±0.5%							
+ PDS-1004/06	Piston	Channarong	-	-		-	1	Jan	-	Vender	-	Weight	±0.5%							
+		Channarong	-	-		-	1	Jan	-	Vender	-	เส้นผ่านศูนย์กลางหัวลูกสูบ (Head Diameter)	"9.474 mm
+±0.007 mm"							
+		Channarong	-	-		-	1	Jan	-	Vender	-	ความยาวของหัวลูกสูบ (Head Length)	"6.35 mm
+±0.10 mm (ISO 1133)
+±0.13 mm (ASTM D1238)"							
+ PDS-1004/07	Orifice	Channarong	-	-		-	1	Jan	-	Vender	-	เส้นผ่านศูนย์กลางรูใน (Bore Diameter)	"2.095 mm
+±0.005 mm"							
+		Channarong	-	-		-	1	Jan	-	Vender	-	ความยาว (Length)	"8.000 mm
+±0.025 mm"							
+ PDS-1004/08	Temp	Channarong	-	-		-	1	Jan	-	Vender	-	Temp	±0.2 °C							
+ PDS-1005	Melt Flow Index	Channarong	1	Feb		Owner	-	-	-	-	"1.ตรวจสอบสภาพสายไฟ
+2.เช็ด ดูดฝุ่น ทำความสะอาดภายในและภายนอกเครื่อง
+3.ตรวจสอบสายลมเข้าเครื่อง
+4. ตรวจสถาพผิวใน Barrel , Piston"	-	Pass/Fail	CHANNACH						
+ PDS-1005/01	Weight 900 g.	Channarong	-	-		-	1	Feb	-	Vender	-	Weight	±0.5%	"Company : TK Cal
+Name : วิว
+Tel : 0863760772, 0922575420
+Mail :supapron.singkhamkha@trescal.com"						
+ PDS-1005/02	Weight 1160 g.	Channarong	-	-		-	1	Feb	-	Vender	-	Weight	±0.5%							
+ PDS-1005/03	Weight 1640 g.	Channarong	-	-		-	1	Feb	-	Vender	-	Weight	±0.5%							
+ PDS-1005/04	Weight 1200 g.	Channarong	-	-		-	1	Feb	-	Vender	-	Weight	±0.5%							
+ PDS-1005/05	Weight 5000_1 g.	Channarong	-	-		-	1	Feb	-	Vender	-	Weight	±0.5%							
+ PDS-1005/06	Weight 2500 g.	Channarong	-	-		-	1	Feb	-	Vender	-	Weight	±0.5%							
+ PDS-1005/07	Weight 5000_2 g.	Channarong	-	-		-	1	Feb	-	Vender	-	Weight	±0.5%							
+ PDS-1005/08	Weight 4100 g.	Channarong	-	-		-	1	Feb	-	Vender	-	Weight	±0.5%							
+ PDS-1005/09	Piston	Channarong	-	-		-	1	Feb	-	Vender	-	Weight	±0.5%							
+		Channarong	-	-		-	1	Feb	-	Vender	-	เส้นผ่านศูนย์กลางหัวลูกสูบ (Head Diameter)	"9.474 mm
+±0.007 mm"							
+		Channarong	-	-		-	1	Feb	-	Vender	-	ความยาวของหัวลูกสูบ (Head Length)	"6.35 mm
+±0.10 mm (ISO 1133)
+±0.13 mm (ASTM D1238)"							
+ PDS-1005/10	Orifice	Channarong	-	-		-	1	Feb	-	Vender	-	เส้นผ่านศูนย์กลางรูใน (Bore Diameter)	"2.095 mm
+±0.005 mm"							
+		Channarong	-	-		-	1	Feb	-	Vender	-	ความยาว (Length)	"8.000 mm
+±0.025 mm"							
+ PDS-1005/11	Weight 2060 g.	Channarong	-	-		-	1	Feb	-	Vender	-	Weight	±0.5%							
+ PDS-1005/12	Temp	Channarong	-	-		-	1	Feb	-	Vender	-	Temp	±0.2 °C							
+ PDS-1006	Melt Flow Index	Channarong	1	Feb		Owner	-	-	-	-	"1.ตรวจสอบสภาพสายไฟ
+2.เช็ด ดูดฝุ่น ทำความสะอาดภายในและภายนอกเครื่อง
+3.ตรวจสอบสายลมเข้าเครื่อง
+4. ตรวจสถาพผิวใน Barrel , Piston"	-	Pass/Fail	CHANNACH						
+ PDS-1006/01	Weight 900 g.	Channarong	-	-		-	1	Mar	-	Vender	-	Weight	±0.5%	"Company : TK Cal
+Name : วิว
+Tel : 0863760772, 0922575420
+Mail :supapron.singkhamkha@trescal.com"						
+ PDS-1006/02	Weight 1160 g.	Channarong	-	-		-	1	Mar	-	Vender	-	Weight	±0.5%							
+ PDS-1006/03	Weight 1640 g.	Channarong	-	-		-	1	Mar	-	Vender	-	Weight	±0.5%							
+ PDS-1006/04	Weight 1200 g.	Channarong	-	-		-	1	Mar	-	Vender	-	Weight	±0.5%							
+ PDS-1006/05	Weight 5000_1 g.	Channarong	-	-		-	1	Mar	-	Vender	-	Weight	±0.5%							
+ PDS-1006/06	Weight 2500 g.	Channarong	-	-		-	1	Mar	-	Vender	-	Weight	±0.5%							
+ PDS-1006/07	Weight 5000_2 g.	Channarong	-	-		-	1	Mar	-	Vender	-	Weight	±0.5%							
+ PDS-1006/08	Weight 4100 g.	Channarong	-	-		-	1	Mar	-	Vender	-	Weight	±0.5%							
+ PDS-1006/09	Piston	Channarong	-	-		-	1	Mar	-	Vender	-	Weight	±0.5%							
+		Channarong	-	-		-	1	Mar	-	Vender	-	เส้นผ่านศูนย์กลางหัวลูกสูบ (Head Diameter)	"9.474 mm
+±0.007 mm"							
+		Channarong	-	-		-	1	Mar	-	Vender	-	ความยาวของหัวลูกสูบ (Head Length)	"6.35 mm
+±0.10 mm (ISO 1133)
+±0.13 mm (ASTM D1238)"							
+ PDS-1006/10	Orifice	Channarong	-	-		-	1	Mar	-	Vender	-	เส้นผ่านศูนย์กลางรูใน (Bore Diameter)	"2.095 mm
+±0.005 mm"							
+		Channarong	-	-		-	1	Mar	-	Vender	-	ความยาว (Length)	"8.000 mm
+±0.025 mm"							
+ PDS-1006/11	Temp	Channarong	-	-		-	1	Mar	-	Vender	-	Temp	±0.2 °C							
+ PDS-1007	DENSITY GRADIENT TUBE 	METEECHA	1	Jan		Owner	-	-	-	-	"1. ทำความสะอาดภายในตู้ ขัดตระไคร่น้ำ , เปลี่ยนน้ำ Cooling
+2. ถอด filter มาดูดฝุ่น"	-	Pass/Fail	METEECHA						
+ PDS-1007/02	Temp	METEECHA	-	-		-	1	Jan	-	Vender	-	"Temp XXX จุด
+1.    c.
+2.       c.
+3.       c."	±0.2 °C	"Company : TK Cal
+Name : วิว
+Tel : 0863760772, 0922575420
+Mail :supapron.singkhamkha@trescal.com"						
+ PDS-1007/03	Float C2-1A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-2A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-3A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-4A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-5A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-6A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-7A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-8A	METEECHA	-	-		-	0.5	June	-	Vender										
+ PDS-1007/04	Float C3-1A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C3-2A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C3-3A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C3-4A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C3-5A	METEECHA	-	-		-	0.5	June	-	Vender										
+ PDS-1007/05	Float C4-1A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C4-2A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C4-3A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C4-4A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C4-5A	METEECHA	-	-		-	0.5	June	-	Vender										
+ PDS-1007/06	Float C5-1A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C5-2A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C5-3A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C5-4A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C5-5A	METEECHA	-	-		-	0.5	June	-	Vender										
+ PDS-1007/07	Float C6-1A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C6-2A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C6-3A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C6-4A	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C6-5A	METEECHA	-	-		-	0.5	June	-	Vender										
+ PDS-1007/08	Float C2-1B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-2B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-3B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-4B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-5B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-6B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-7B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C2-8B	METEECHA	-	-		-	0.5	June	-	Vender										
+ PDS-1007/09	Float C3-1B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C3-2B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C3-3B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C3-4B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C3-5B	METEECHA	-	-		-	0.5	June	-	Vender										
+ PDS-1007/10	Float C4-1B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C4-2B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C4-3B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C4-4B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C4-5B	METEECHA	-	-		-	0.5	June	-	Vender										
+ PDS-1007/11	Float C5-1B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C5-2B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C5-3B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C5-4B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C5-5B	METEECHA	-	-		-	0.5	June	-	Vender										
+ PDS-1007/12	Float C6-1B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C6-2B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C6-3B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C6-4B	METEECHA	-	-		-	0.5	June	-	Vender										
+	Float C6-5B	METEECHA	-	-		-	0.5	June	-	Vender										
+ PDS-1008	Balance   220 g (Density)	SANCHAIK	1	June		Vender	1	June	-	Vender	ตามรายการ Vender	ตามรายการ Vender	+ 1%Of Max	"Company : Mettler Toledo
+Name : XXX
+Tel : XXX
+Mail :XXX"						
+ PDS-1009	SIEVE Shaker	THAWAPHO	1	Mar		Vender	1	Mar	-	Vender	ตามรายการ Vender	ตามรายการ Vender	???	"Company : DKSH
+Name : Rattanapon Phothita
+Tel : 0641827102
+Mail :rattanapon.phothita@dksh.com"						
+ PDS-1009/1	Test SIEVE  45um(No.325)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 8 um	"Company : TK Cal
+Name : วิว
+Tel : 0863760772, 0922575420
+Mail :supapron.singkhamkha@trescal.com"						
+ PDS-1009/2	Test SIEVE  75um(No.200)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 8 um							
+ PDS-1009/3	Test SIEVE  106um(No.140)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 8 um							
+ PDS-1009/4	Test SIEVE  180um-(No.80)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 9 um							
+ PDS-1009/5	Test SIEVE  250um-(No.60)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 12 um							
+ PDS-1009/6	Test SIEVE  355um-(No.45)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 16 um							
+ PDS-1009/7	Test SIEVE  500um-(No.35)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 20 um							
+ PDS-1009/8	Test SIEVE  600um-(No.30)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 25 um							
+ PDS-1009/9	Test SIEVE  710um-(No.25)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 30 um							
+ PDS-1009/10	Test SIEVE  850um-(No.20)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 35 um							
+ PDS-1009/11	Test SIEVE  1.00mm-(No.18)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 0.04 mm							
+ PDS-1009/12	Test SIEVE  1.40mm-(No.14)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 0.05 mm							
+ PDS-1009/13	Test SIEVE  1.70mm-(No.12)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 0.08 mm							
+ PDS-1009/14	Test SIEVE  2.50mm-(-)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง								
+ PDS-1009/15	Test SIEVE  3.35mm-(No.6)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 0.11 mm							
+ PDS-1009/16	Test SIEVE  4.00mm-(No.5)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 0.13 mm							
+ PDS-1009/17	Test SIEVE  4.75mm-(No.4)A	WITAYAWA	-	-		-	0.5	Mar-25	Mar-27	Vender	-	ขนาดของรูตระแกรง	+ 0.15 mm							
+ PDS-1009/18	Test SIEVE  45um(No.325)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 8 um							
+ PDS-1009/19	Test SIEVE  75um(No.200)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 8 um							
+ PDS-1009/20	Test SIEVE  106um(No.140)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 8 um							
+ PDS-1009/21	Test SIEVE  180um(No.80)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 9 um							
+ PDS-1009/22	Test SIEVE  250um-(No.60)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 12 um							
+ PDS-1009/23	Test SIEVE  355um-(No.45)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 16 um							
+ PDS-1009/24	Test SIEVE  500um-(No.35)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 20 um							
+ PDS-1009/25	Test SIEVE  600um-(No.30)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 25 um							
+ PDS-1009/26	Test SIEVE  710um-(No.25)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 30 um							
+ PDS-1009/27	Test SIEVE  850um-(No.20)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 35 um							
+ PDS-1009/28	Test SIEVE  1.00mm-(No.18)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 0.04 mm							
+ PDS-1009/29	Test SIEVE  1.40mm-(No.14)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 0.05 mm							
+ PDS-1009/30	Test SIEVE  1.70mm-(No.12)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 0.08 mm							
+ PDS-1009/31	Test SIEVE  2.50mm-(-)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง								
+ PDS-1009/32	Test SIEVE  3.35mm-(No.6)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 0.11 mm							
+ PDS-1009/33	Test SIEVE  4.00mm-(No.5)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 0.13 mm							
+ PDS-1009/34	Test SIEVE  4.75mm-(No.4)B	Pornthawit	-	-		-	0.5	Mar-24	Mar-26	Vender	-	ขนาดของรูตระแกรง	+ 0.15 mm							
+ PDS-1010	Bulk Density ASTM	Pornthawit	-	-		-	1	May-25	May-26	Owner	-	Cal ปริมาตรกระบอก	± 1%	-						
+ PDS-1011	Bulk Density ISO	Pornthawit	-	-		-	1	May-25	May-26	Owner	-	Cal ปริมาตรกระบอก	± 1%	"Company : Sorsoh
+Name : เต้ย
+Tel : 0873341055
+Mail : XXX"						
+ PDS-1012	DSC1	Mark	1	Sep-26		Vender	1	Sep-26	Sep-27	Vender	ตามรายการ Vender	ตามรายการ Vender	Pass/Fail	"Company : Mettler
+Name : เบส
+Tel : 0659986024
+Mail : XXX"						
+ PDS-1012/01	Chiller DSC1	Mark	1	Sep-26		Owner	1	Sep-26	Sep-27	Owner	ดูดฝุ่นใต้เครื่อง	-	Pass/Fail							
+ PDS-1013	DSC2	Mark	1	Sep-26		Vender	1	Sep-26	Sep-27	Vender	ตามรายการ Vender	ตามรายการ Vender	Pass/Fail							
+ PDS-1013/01	Chiller DSC2	Mark	1	Sep-26		Owner	1	Sep-26	Sep-27	Owner	ดูดฝุ่นใต้เครื่อง	-	Pass/Fail							
+ PDS-1013/02	Gas Flow meter	Mark	-	-		-	1	Dec-26	Dec-27	Vender	ตามรายการ Vender	ตามรายการ Vender	Pass/Fail							
+ PDS-1014	DSC3+	Mark	1	Sep-26		Vender	1	Sep-26	Sep-27	Vender	ตามรายการ Vender	ตามรายการ Vender	Pass/Fail							
+ PDS-1014/01	Chiller DSC3	Mark	1	Sep-26		Owner	1	Sep-26	Sep-27	Owner	ดูดฝุ่นใต้เครื่อง	-	Pass/Fail							
+ PDS-1015	TGA/DSc 3+	Sanchai	1	Jun-26		Vender	1	Jun-26	Jun-27	Vender	ตามรายการ Vender	ตามรายการ Vender	Pass/Fail							
+ PDS-1015/01	Cooling TGA	Sanchai	1	Jun-26		Owner	1	Jun-26	Jun-27	Owner	"1. เช็ดทำความสะอาด 
+2.เปลี่ยนถ่ายน้ำ+เติมน้ำนากันตระกรัน"	-	Pass/Fail							
+ PDS-1016	Karl Fischer Titrator	Sanchai	1	Apr-26		Vender	1	Apr-26	Apr-27	Vender	ตามรายการ Vender	ตามรายการ Vender	± 5 °C							
+ PDS-1017	X-RAY	Thawatchai	1	Nov-26		Vender	1	Nov-26	Nov-26	Vender	ตามรายการ Vender	ตามรายการ Vender	Pass/Fail	"Company : Bruker
+Name : อัฐมา
+Tel :66-2032-8963 , 064-554-3653
+Mail : suparerk.parakij@bruker.com"						
+ PDS-1017/01	Chiller for X-RAY	Thawatchai	1	Nov-26		Owner	1	Nov-26	Nov-26	Owner	ทำความสะอาดเครื่อง, เปลี่ยน filter,เปลี่ยนน้ำ,ตรวจเช็คอุปกรณ์ต่างๆของเครื่อง	-	Pass/Fail							
+ PDS-1019	Autoclave	Thawatchai	1	Jan-26		Owner	1	Jan-26	Jan-27	Vender	ทำความสะอาดบริเวณรอบเครื่อง เช็ครอยรั่วซึ่ม	Temp…..?	± 5 °C	"Company : TK Cal
+Name : วิว
+Tel : 0863760772, 0922575420
+Mail :Attama.Pungchangam@bruker.com"						
+ PDS-1020	IV LAUDA PV24-1	Nuttanai	-	-		-	1	Jan-26	Jan-27	Vender	-	Temp…..?		"Company : TK Cal
+Name : วิว
+Tel : 0863760772, 0922575420
+Mail :supapron.singkhamkha@trescal.com"						
+ PDS-1020/1	Ubbelohde 1	Nuttanai	-	-		-	1	Jan-26	Jan-27	Vender	-	ค่า K หลอด	Cal to use	DKSH						
+ PDS-1020/2	Ubbelohde 2	Nuttanai	-	-		-	1	Jan-26	Jan-27	Vender	-	ค่า K หลอด	Cal to use	DKSH						
+ PDS-1020/3	Ubbelohde 3	Nuttanai	-	-		-	1	Jan-26	Jan-27	Vender	-	ค่า K หลอด	Cal to use	DKSH						
+ PDS-1020/4	Ubbelohde 4	Nuttanai	-	-		-	1	Jan-26	Jan-27	Vender	-	ค่า K หลอด	Cal to use	DKSH						
+ PDS-1021	IV LAUDA PV24-2	Nuttanai	-	-		-	1	Jan-26	Jan-27	Vender	-	Temp…..?		"Company : TK Cal
+Name : วิว
+Tel : 0863760772, 0922575420
+Mail :supapron.singkhamkha@trescal.com"						
+ PDS-1021/1	Ubbelohde 5	Nuttanai	-	-		-	1	Jan-26	Jan-27	Vender	-	ค่า K หลอด	Cal to use	DKSH						
+ PDS-1021/2	Ubbelohde 6	Nuttanai	-	-		-	1	Jan-26	Jan-27	Vender	-	ค่า K หลอด	Cal to use	DKSH						
+ PDS-1021/3	Ubbelohde 7	Nuttanai	-	-		-	1	Jan-26	Jan-27	Vender	-	ค่า K หลอด	Cal to use	DKSH						
+ PDS-1021/4	Ubbelohde 8	Nuttanai	-	-		-	1	Jan-26	Jan-27	Vender	-	ค่า K หลอด	Cal to use	DKSH						
+ PDS-1023	OTR MOCON   	Metee	-	-		-	1	Oct-26	Oct-27	Vender	-	ตามรายการ Vender	"temp  ± 0.25 ° C
+flow ± 2.0 SCCM
+RH  ±3.0 %
+cert.film  ± 5 %"	"Company : Bow commercial
+Name : พรทิพย์ โกศิริอักษร
+Tel : 081-988-0518
+Mail :www.bowcommercial.com"						
+ PDS-1024	OTR MOCON   	Metee	-	-		-	1	Oct-26	Oct-27	Vender	-	ตามรายการ Vender								
+ PDS-1025	WVTR MOCON	Metee	-	-		-	1	Oct-26	Oct-27	Vender	-	ตามรายการ Vender								
+ PDS-1026	WVTR MOCON	Metee	-	-		-	1	Oct-26	Oct-27	Vender	-	ตามรายการ Vender								
+ PDS-1027	OTR  8003 illinois	Metee	-	-		-	1	Oct-26	Oct-27	Vender	-	SorSoh.Co.,Ltd.	"flow ± 0.5 cc/min
+temp  ± 10%
+gas O2 ± 8 %
+cert. film  ± 8 %"	SorSoh.Co.,Ltd.						
+ PDS-1029-01	Balance  510 g	Weerawat	1	Jun-26	Jun-27	Vender	1	Jun-26	Jun-27	Vender	ตามรายการ Vender	Weight	+-1% of Max	"Company : Mettler
+Name : Kassakorn Tassanachaisakul
+Tel : 065 998 6026 
+Mail : XXX"						
+ PDS-1029-02	Balance  120 g	Weerawat	1	Jun-26	Jun-27	Vender	1	Jun-26	Jun-27	Vender	ตามรายการ Vender	Weight	+-1% of Max							
+ PDS-1029-03	Balance  220 g	Weerawat	1	Jun-26	Jun-27	Vender	1	Jun-26	Jun-27	Vender	ตามรายการ Vender	Weight	+-1% of Max							
+ PDS-1029-04	Balance  220 g	Weerawat	1	Jun-26	Jun-27	Vender	1	Jun-26	Jun-27	Vender	ตามรายการ Vender	Weight	+-1% of Max							
+ PDS-1029-05	Balance  4200 g	Weerawat	1	Jun-26	Jun-27	Vender	1	Jun-26	Jun-27	Vender	ตามรายการ Vender	Weight	+-1% of Max							
+ PDS-1030-01	Binder Oven VD115 (อบเครื่องแก้ว)	Thawatchai	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C	"Company : TK Cal
+Name : วิว
+Tel : 0863760772, 0922575420
+Mail :supapron.singkhamkha@trescal.com"						
+ PDS-1030-02	Binder Oven ED 53 (อบ IV)	Thawatchai	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C							
+ PDS-1030-03	Memmert Oven UF55 (Shrinkage)	Thawatchai	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C							
+ PDS-1030-04	Binder Oven Vacuum	Thawatchai	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C							
+ PDS-1031-01	Furnace	Thawatchai	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C							
+ PDS-1032-01	Compression	Pornthawit	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C							
+ PDS-1032-02	Compression Hydraulic Press 20 Ton	Pornthawit	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C							
+ PDS-1032-03	Cold Compression	Pornthawit	1	Jan-26	Jan-27	Owner	-	-	-	-	"""1.check สภาพเครื่องไม่ชำรุด
+2.check สภาพสายไฟไม่ขาดชำรุด
+3.เช็ดคราบสนิม,คราบ polymer, ฝุ่น
+4.ตรวจสอบระดับน้ำมันไฮดรอลิก และเติมให้อยู่ในระดับที่กำหนด"""	-	Pass/Fail	Pornthawit						
+ PDS-1032-04	Cooling Cold Compression	Pornthawit	1	Jan-26	Jan-27	Owner	-	-	-	-	"""1.check สภาพเครื่องไม่ชำรุด
+2.check สภาพสายไฟไม่ขาดชำรุด
+3.เช็ดคราบสนิม,คราบ polymer, ฝุ่น
+4.ตรวจสอบระดับน้ำ cooling ให้อยู่ในระดับที่กำหนด
+5.เปลี่ยนน้ำ cooling
+6.ตรวจสอบสายน้ำไม่มีรอยแตก และน้ำรั่วซึม"""	-	Pass/Fail	Pornthawit						
+ PDS-1032-05	Specae-Compression Mold	Pornthawit	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C	"Company : TK Cal
+Name : วิว
+Tel : 0863760772, 0922575420
+Mail :supapron.singkhamkha@trescal.com"						
+ PDS-1033-01	LABTECH (heater add.)	Weerawat	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C							
+ PDS-1034-01	Heater Stirrer Extraction	Weerawat	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C							
+ PDS-1035-01	Star Fish 1	Weerawat	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C							
+ PDS-1035-02	Star Fish 2	Weerawat	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C							
+ PDS-1036-01	LAUDA Annealing Bath	Weerawat	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C							
+ PDS-1037-01	Ultrasonic bath	Thawatchai	1	Jan-26	Jan-27	Owner	-	-	-	-	ขัดล้าง bath ทำความสะอาดตัวเครื่อง	-	Pass/Fail	Thawatchai						
+ PDS-1038-01	Digital temperature	Weerawat	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 1 °C	"Company : TK Cal
+Name : วิว
+Tel : 0863760772, 0922575420
+Mail :supapron.singkhamkha@trescal.com"						
+ PDS-1039-01	Thermocouple Probe-01	Weerawat	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 1 °C							
+ PDS-1039-02	Thermocouple Probe-02	Weerawat	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 1 °C							
+ PDS-1040-01	Thermometer	Sanchai	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 2 °C							
+ PDS-1041-01	Thickness  Mitutoyo	Pornthawit	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Dimension	± 10 um							
+ PDS-1042-01	Go No Go Gauge	Channarong	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Dimension	+0.005 mm							
+ PDS-1043-01	Stopwatch	Weerawat	-	-	-	-	1	Jul-26	Jul-27	Vender	-	Time	+-0.1Sec							
+ PDS-1043-02	Stopwatch	Weerawat	-	-	-	-	1	Jul-26	Jul-27	Vender	-	Time	+-0.1Sec							
+ PDS-1043-03	Stopwatch	Weerawat	-	-	-	-	1	Jul-26	Jul-27	Vender	-	Time	+-0.1Sec							
+ PDS-1043-04	Stopwatch	Weerawat	-	-	-	-	1	Jul-26	Jul-27	Vender	-	Time	+-0.1Sec							
+ PDS-1044-01	UPS X-ray	Pornthawit	1	Apr-26	Apr-27	Vender	-	-	-	-	ตามรายการ Vender	-	Pass/Fail							
+ PDS-1044-02	UPS Syndome	Pornthawit	1	Apr-26	Apr-27	Vender	-	-	-	-	ตามรายการ Vender	-	Pass/Fail							
+ PDS-1044-03	UPS TS series	Pornthawit	1	Apr-26	Apr-27	Vender	-	-	-	-	ตามรายการ Vender	-	Pass/Fail							
+ PDS-1044-04	UPS Battery pack	Pornthawit	1	Apr-26	Apr-27	Vender	-	-	-	-	ตามรายการ Vender	-	Pass/Fail							
+ PDS-1045-01	Hood1	Thawatchai	1	Jun-26	Jun-27	Vender	-	-	-	-	ตามรายการ Vender	-	Pass/Fail							
+ PDS-1045-02	Hood2	Thawatchai	1	Jun-26	Jun-27	Vender	-	-	-	-	ตามรายการ Vender	-	Pass/Fail							
+ PDS-1045-03	Hood3	Thawatchai	1	Jun-26	Jun-27	Vender	-	-	-	-	ตามรายการ Vender	-	Pass/Fail							
+ PDS-1045-04	Hood4	Thawatchai	1	Jun-26	Jun-27	Vender	-	-	-	-	ตามรายการ Vender	-	Pass/Fail							
+ PDS-1045-05	Hood5	Thawatchai	1	Jun-26	Jun-27	Vender	-	-	-	-	ตามรายการ Vender	-	Pass/Fail							
+ PDS-1045-06	Hood6	Thawatchai	1	Jun-26	Jun-27	Vender	-	-	-	-	ตามรายการ Vender	-	Pass/Fail							
+ PDS-1046-01	Shaker bath memmert(For IV)	Nuttanai	-	-	-	-	1	Jan-26	Jan-27	Vender	-	Temp	± 5 °C							
+ PDS-1047-01	Rotary Evaporator 	Weerawat	1	Jan-26	Jan-27	Owner	-	-	-	-	"1. ทำความสะอาดภายนอกและหน้าจอ: ใช้ผ้าแห้งหรือน้ำยาทำความสะอาดที่เหมาะสมเช็ดคราบฝุ่น 
+2. ตรวจสอบการเชื่อมต่อ: ตรวจสอบสายไฟ สายสัญญาณ และการเชื่อมต่อ 
+3. ตรวจสอบปุ่มและเซนเซอร์: ทดสอบปุ่มกด 
+4.ตรวจสอบOil"	-	Pass/Fail							
+ PDS-1047-02	Cooling Rotary Evaporator 	Weerawat	1	Jan-26	Jan-27	Owner	-	-	-	-		-	Pass/Fail							
+PDS-1048-01	Gelbo flex	Thawatchai	1	Jan-26	Jan-27	Owner	-	-	-	-	เป่าฝุ่นเช็ดทำความสะอาด/ตรวจเช็คอุปกรณ์ ข้อต่อต่างๆ เติมน้ำมันหล่อลื่น	-	Pass/Fail							

@@ -3,6 +3,7 @@ import { firestore } from './firebase';
 import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog, Booking, ProficiencyTest, ProficiencyRecord, SupportRequest, Walkthrough, BorrowRecord } from '../types';
 import { TaskCategory } from '../types';
 import { normalizeMonth, isToleranceString } from '../utils/monthUtils';
+import { MASTER_EQUIPMENTS, MASTER_EQUIPMENT_OWNERS } from './masterEquipments';
 
 // Export firestore for use in components
 export { firestore };
@@ -78,729 +79,143 @@ export const getAllExistingRequestIds = async (): Promise<Set<string>> => {
     return existingIds;
 };
 
-export const INITIAL_EQUIPMENTS: Equipment[] = [
-    {
-        id: 'eq-pdf-1-001',
-        equipmentNo: 'PDF 1-001',
-        equipmentName: 'Analytical Balance (เครื่องชั่งละเอียด 4 ตำแหน่ง)',
-        name: 'Analytical Balance (เครื่องชั่งละเอียด 4 ตำแหน่ง)',
-        code: 'PDF 1-001',
-        owner: 'PORNTHAK',
-        department: 'PCRD Lab',
-        location: 'Balance Room (ห้องชั่งน้ำหนัก)',
-        status: 'ready',
-        pm: {
-            freqYear: 1,
-            lastPM: 'Nov',
-            nextPM: 'Nov',
-            pmBy: 'Vender',
-            items: '1. ทำความสะอาด Chamber และจานชั่ง 2. ตรวจสอบระดับน้ำฟองอากาศ 3. ตรวจสอบระบบไฟฟ้าและ Linear response',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'Nov',
-            nextCal: 'Nov',
-            calBy: 'Vender (มว.)',
-            items: 'สอบเทียบมวลมาตรฐาน Class E2 (ช่วงการชั่ง 1g ถึง 200g)',
-            tolerance: '± 0.1 mg'
-        },
-        trackingStatus: {
-            quotationRequested: true,
-            quotationDate: '2026-09-25',
-            prIssued: true,
-            prNo: 'PR-69-10088',
-            vendorScheduled: true,
-            scheduledDate: '2026-11-05',
-            certReceived: false,
-            certDelivered: false,
-            result: 'Pending'
-        },
-        subEquipments: []
-    },
-    {
-        id: 'eq-pdf-1-002',
-        equipmentNo: 'PDF 1-002',
-        equipmentName: 'Density Meter (เครื่องวัดความหนาแน่นอัตโนมัติ)',
-        name: 'Density Meter (เครื่องวัดความหนาแน่นอัตโนมัติ)',
-        code: 'PDF 1-002',
-        owner: 'PORNTHAK',
-        department: 'PCRD Lab',
-        location: 'Physical Lab Room 1',
-        status: 'ready',
-        pm: {
-            freqYear: 1,
-            lastPM: 'Mar',
-            nextPM: 'Mar',
-            pmBy: 'Vender',
-            items: '1. เปลี่ยนซีลชุดท่อสูบสาร 2. ล้าง U-Tube Sensor 3. ตรวจสอบระบบ Peltier ควบคุมอุณหภูมิ',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'Mar',
-            nextCal: 'Mar',
-            calBy: 'Vender',
-            items: 'สอบเทียบความหนาแน่นด้วยสารมาตรฐาน Ultra-pure Water และ Dry Air ที่ 20°C',
-            tolerance: '± 0.0001 g/cm³'
-        },
-        trackingStatus: {
-            quotationRequested: true,
-            quotationDate: '2026-02-10',
-            prIssued: true,
-            prNo: 'PR-69-02119',
-            vendorScheduled: true,
-            scheduledDate: '2026-03-14',
-            certReceived: true,
-            certReceivedDate: '2026-03-20',
-            certDelivered: true,
-            certDeliveredDate: '2026-03-22',
-            result: 'Pass',
-            resultNote: 'ความหนาแน่นผ่านเกณฑ์มาตรฐาน ± 0.0001 g/cm³'
-        },
-        subEquipments: []
-    },
-    {
-        id: 'eq-pdf-1-003',
-        equipmentNo: 'PDF 1-003',
-        equipmentName: 'Universal Testing Machine (เครื่องทดสอบแรงดึง UTM)',
-        name: 'Universal Testing Machine (เครื่องทดสอบแรงดึง UTM)',
-        code: 'PDF 1-003',
-        owner: 'Channarong',
-        department: 'PCRD Lab',
-        location: 'Mechanical Testing Hall',
-        status: 'ready',
-        pm: {
-            freqYear: 1,
-            lastPM: 'Jun',
-            nextPM: 'Jun',
-            pmBy: 'Vender',
-            items: '1. หล่อลื่น Ball Screw แกนขับเคลื่อน 2. ตรวจสอบ Safety Limit Switch 3. ตรวจเช็คสายพานมอเตอร์',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'Jun',
-            nextCal: 'Jun',
-            calBy: 'Vender',
-            items: 'สอบเทียบ Load Cell 50 kN ตาม ISO 7500-1 และความเร็ว Crosshead Speed',
-            tolerance: '± 0.5% (Class 0.5)'
-        },
-        trackingStatus: {
-            quotationRequested: true,
-            quotationDate: '2026-05-12',
-            prIssued: true,
-            prNo: 'PR-69-05244',
-            vendorScheduled: true,
-            scheduledDate: '2026-06-18',
-            certReceived: true,
-            certReceivedDate: '2026-06-25',
-            certDelivered: true,
-            certDeliveredDate: '2026-06-28',
-            result: 'Pass',
-            resultNote: 'Load Cell Calibrated Pass (Class 0.5)'
-        },
-        subEquipments: []
-    },
-    {
-        id: 'eq-pdf-1-004',
-        equipmentNo: 'PDF 1-004',
-        equipmentName: 'Precision Hot Air Oven (ตู้อบความร้อนควบคุมอุณหภูมิ)',
-        name: 'Precision Hot Air Oven (ตู้อบความร้อนควบคุมอุณหภูมิ)',
-        code: 'PDF 1-004',
-        owner: 'Channarong',
-        department: 'PCRD Lab',
-        location: 'Thermal Analysis Room',
-        status: 'ready',
-        pm: {
-            freqYear: 1,
-            lastPM: 'Feb',
-            nextPM: 'Feb',
-            pmBy: 'Owner',
-            items: '1. ทำความสะอาดพัดลมกระจายลมร้อน 2. ตรวจเช็คขอบยางซีลประตู 3. ทดสอบระบบตัดไฟเตือน Over-temperature',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'Feb',
-            nextCal: 'Feb',
-            calBy: 'Vender',
-            items: 'สอบเทียบการกระจายอุณหภูมิ 9 จุด (9-Point Thermal Uniformity ที่ 105°C และ 150°C)',
-            tolerance: '± 2.0 °C'
-        },
-        trackingStatus: {
-            quotationRequested: true,
-            quotationDate: '2026-01-10',
-            prIssued: true,
-            prNo: 'PR-69-01140',
-            vendorScheduled: true,
-            scheduledDate: '2026-02-12',
-            certReceived: true,
-            certReceivedDate: '2026-02-18',
-            certDelivered: true,
-            certDeliveredDate: '2026-02-20',
-            result: 'Pass',
-            resultNote: 'การกระจายอุณหภูมิผ่านเกณฑ์ ± 2.0 °C'
-        },
-        subEquipments: []
-    },
-    {
-        id: 'eq-pdf-1-005',
-        equipmentNo: 'PDF 1-005',
-        equipmentName: 'pH / Conductivity Meter (เครื่องวัดค่ากรดด่างและการนำไฟฟ้า)',
-        name: 'pH / Conductivity Meter (เครื่องวัดค่ากรดด่างและการนำไฟฟ้า)',
-        code: 'PDF 1-005',
-        owner: 'PORNTHAK',
-        department: 'PCRD Lab',
-        location: 'Chemical Prep Room',
-        status: 'ready',
-        pm: {
-            freqYear: 2,
-            lastPM: 'Apr',
-            nextPM: 'Oct',
-            pmBy: 'Owner',
-            items: '1. ตรวจสอบระดับ Electrolyte 2. ทำความสะอาด Junction 3. ตรวจสอบสายนำสัญญาณ BNC',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'Apr',
-            nextCal: 'Apr',
-            calBy: 'Vender',
-            items: 'สอบเทียบสารละลายบัฟเฟอร์มาตรฐาน pH 4.01, 7.00, 10.01 และ Conductivity Standard 1413 µS/cm',
-            tolerance: 'pH ± 0.02 / Cond ± 1%'
-        },
-        trackingStatus: {
-            quotationRequested: false,
-            prIssued: false,
-            vendorScheduled: false,
-            certReceived: false,
-            certDelivered: false,
-            result: 'Pending'
-        },
-        subEquipments: []
-    },
-    {
-        id: 'eq-pdf-1-006',
-        equipmentNo: 'PDF 1-006',
-        equipmentName: 'Moisture Analyzer (เครื่องวิเคราะห์ความชื้นอัตโนมัติ)',
-        name: 'Moisture Analyzer (เครื่องวิเคราะห์ความชื้นอัตโนมัติ)',
-        code: 'PDF 1-006',
-        owner: 'PORNTHAK',
-        department: 'PCRD Lab',
-        location: 'Physical Lab Room 1',
-        status: 'ready',
-        pm: {
-            freqYear: 1,
-            lastPM: 'May',
-            nextPM: 'May',
-            pmBy: 'Vender',
-            items: '1. ทำความสะอาดชุดทำความร้อน Halogen Lamp 2. ตรวจเช็ค Temperature sensor 3. ตรวจสอบแผงควบคุมระบบสัมผัส',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'May',
-            nextCal: 'May',
-            calBy: 'Vender',
-            items: 'สอบเทียบระบบชั่งน้ำหนัก (Weight Calibration) และระบบควบคุมอุณหภูมิที่ 100°C, 160°C',
-            tolerance: '± 0.05% / ± 1.5°C'
-        },
-        trackingStatus: {
-            quotationRequested: true,
-            quotationDate: '2026-04-05',
-            prIssued: true,
-            prNo: 'PR-69-04188',
-            vendorScheduled: true,
-            scheduledDate: '2026-05-15',
-            certReceived: true,
-            certReceivedDate: '2026-05-22',
-            certDelivered: true,
-            certDeliveredDate: '2026-05-25',
-            result: 'Pass',
-            resultNote: 'ผลการสอบเทียบผ่านเกณฑ์มาตรฐาน'
-        },
-        subEquipments: []
-    },
-    {
-        id: 'eq-pdf-1-007',
-        equipmentNo: 'PDF 1-007',
-        equipmentName: 'Brookfield Viscometer (เครื่องวัดความหนืดของไหล)',
-        name: 'Brookfield Viscometer (เครื่องวัดความหนืดของไหล)',
-        code: 'PDF 1-007',
-        owner: 'Channarong',
-        department: 'PCRD Lab',
-        location: 'Rheology Lab',
-        status: 'ready',
-        pm: {
-            freqYear: 1,
-            lastPM: 'Jul',
-            nextPM: 'Jul',
-            pmBy: 'Vender',
-            items: '1. ตรวจสอบความเที่ยงตรงของแกนหมุน Spindle 2. หล่อลื่น Bearing 3. ตรวจสอบ Auto-zero calibration',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'Jul',
-            nextCal: 'Jul',
-            calBy: 'Vender',
-            items: 'สอบเทียบด้วยน้ำมันมาตรฐานความหนืด Certified Viscosity Standard Fluids (100 cP, 1000 cP)',
-            tolerance: '± 1.0% Full Scale'
-        },
-        trackingStatus: {
-            quotationRequested: true,
-            quotationDate: '2026-06-02',
-            prIssued: true,
-            prNo: 'PR-69-06312',
-            vendorScheduled: true,
-            scheduledDate: '2026-07-10',
-            certReceived: true,
-            certReceivedDate: '2026-07-18',
-            certDelivered: true,
-            certDeliveredDate: '2026-07-20',
-            result: 'Pass',
-            resultNote: 'ความหนืดผ่านเกณฑ์มาตรฐาน ± 1.0% FS'
-        },
-        subEquipments: []
-    },
-    {
-        id: 'eq-pdf-1-008',
-        equipmentNo: 'PDF 1-008',
-        equipmentName: 'DSC - Differential Scanning Calorimeter (เครื่องวิเคราะห์สมบัติทางความร้อน)',
-        name: 'DSC - Differential Scanning Calorimeter',
-        code: 'PDF 1-008',
-        owner: 'PORNTHAK',
-        department: 'PCRD Lab',
-        location: 'Thermal Analysis Suite',
-        status: 'ready',
-        pm: {
-            freqYear: 1,
-            lastPM: 'Aug',
-            nextPM: 'Aug',
-            pmBy: 'Vender',
-            items: '1. ทำความสะอาด Furnace Chamber 2. ตรวจสอบก๊าซหล่อเย็น N2 Purge flow 3. ตรวจสอบสัญญาณ Thermocouple Baseline',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'Aug',
-            nextCal: 'Aug',
-            calBy: 'Vender',
-            items: 'สอบเทียบ Temperature & Heat of Fusion ด้วย Indium และ Zinc Reference Standards',
-            tolerance: 'Temp ± 0.5 °C / Enthalpy ± 1.0%'
-        },
-        trackingStatus: {
-            quotationRequested: true,
-            quotationDate: '2026-07-05',
-            prIssued: true,
-            prNo: 'PR-69-07421',
-            vendorScheduled: true,
-            scheduledDate: '2026-08-14',
-            certReceived: false,
-            certDelivered: false,
-            result: 'Pending'
-        },
-        subEquipments: []
-    },
-    {
-        id: 'eq-pdf-1-009',
-        equipmentNo: 'PDF 1-009',
-        equipmentName: 'Color Spectrophotometer (เครื่องวัดสีและเฉดสีตัวอย่าง)',
-        name: 'Color Spectrophotometer',
-        code: 'PDF 1-009',
-        owner: 'Channarong',
-        department: 'PCRD Lab',
-        location: 'Optical Inspection Lab',
-        status: 'ready',
-        pm: {
-            freqYear: 1,
-            lastPM: 'Sep',
-            nextPM: 'Sep',
-            pmBy: 'Owner',
-            items: '1. ทำความสะอาด Integrating Sphere 2. ตรวจเช็ค White Tile มาตรฐาน 3. ตรวจสอบความเข้มแสง Xenon Flash Lamp',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'Sep',
-            nextCal: 'Sep',
-            calBy: 'Vender',
-            items: 'สอบเทียบค่าสีมาตรฐาน CIE L*a*b* และการทำซ้ำ (Repeatability) ด้วยแผ่นมาตรฐานมาตรฐาน',
-            tolerance: 'ΔE*ab ≤ 0.2'
-        },
-        trackingStatus: {
-            quotationRequested: true,
-            quotationDate: '2026-08-10',
-            prIssued: true,
-            prNo: 'PR-69-08190',
-            vendorScheduled: false,
-            certReceived: false,
-            certDelivered: false,
-            result: 'Pending'
-        },
-        subEquipments: []
-    },
-    {
-        id: 'eq-pdf-1-010',
-        equipmentNo: 'PDF 1-010',
-        equipmentName: 'Muffle Furnace 1100°C (เตาเผาอุณหภูมิสูงความแม่นยำสูง)',
-        name: 'Muffle Furnace 1100°C',
-        code: 'PDF 1-010',
-        owner: 'Channarong',
-        department: 'PCRD Lab',
-        location: 'Furnace Room',
-        status: 'ready',
-        pm: {
-            freqYear: 1,
-            lastPM: 'Oct',
-            nextPM: 'Oct',
-            pmBy: 'Owner',
-            items: '1. ตรวจสอบขดลวดความร้อน Heating Elements 2. ตรวจเช็คฉนวนกันความร้อน Ceramic Fiber 3. ตรวจสอบระบบเตือน Overheat',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'Oct',
-            nextCal: 'Oct',
-            calBy: 'Vender',
-            items: 'สอบเทียบความสม่ำเสมอของอุณหภูมิ (Temperature Uniformity) ที่ 500°C, 900°C',
-            tolerance: '± 5.0 °C'
-        },
-        trackingStatus: {
-            quotationRequested: true,
-            quotationDate: '2026-09-01',
-            prIssued: true,
-            prNo: 'PR-69-09022',
-            vendorScheduled: false,
-            certReceived: false,
-            certDelivered: false,
-            result: 'Pending'
-        },
-        subEquipments: []
-    },
-    {
-        id: 'eq-pds-1001',
-        equipmentNo: 'PDS-1001',
-        equipmentName: 'FTIR Tensor37 (เครื่องฟูเรียร์ทรานส์ฟอร์มอินฟราเรดสเปกโตรมิเตอร์)',
-        name: 'FTIR Tensor37',
-        code: 'PDS-1001',
-        owner: 'PORNTHAK',
-        department: 'PCRD Lab',
-        location: 'Spectroscopy Room A',
-        status: 'ready',
-        pm: {
-            freqYear: 1,
-            lastPM: 'Nov',
-            nextPM: 'Nov',
-            pmBy: 'Vender',
-            items: '1. ตรวจสอบ Laser Alignment 2. เปลี่ยน Desiccant Indicator 3. ตรวจสอบ Beam Splitter',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'Nov',
-            nextCal: 'Nov',
-            calBy: 'Vender',
-            items: 'Wavenumber Accuracy & Repeatability ด้วย Polystyrene Film Standard',
-            tolerance: '± 1.0 cm⁻¹'
-        },
-        trackingStatus: {
-            quotationRequested: true,
-            quotationDate: '2026-10-01',
-            prIssued: true,
-            prNo: 'PR-69-10042',
-            vendorScheduled: true,
-            scheduledDate: '2026-11-12',
-            certReceived: false,
-            certDelivered: false,
-            result: 'Pending'
-        },
-        subEquipments: [
-            {
-                id: 'sub-pds-1001-02',
-                equipmentNo: 'PDS-1001/02',
-                equipmentName: 'Specae-Heater (BC2)',
-                owner: 'PORNTHAK',
-                pm: {
-                    freqYear: 1,
-                    lastPM: 'Jan',
-                    nextPM: 'Jan',
-                    pmBy: 'Vender',
-                    items: '1. check สภาพเครื่อง ไม่แตกชำรุด 2. check สภาพสายไฟไม่ขาดชำรุด',
-                    tolerance: 'Pass/Fail'
-                },
-                cal: {
-                    freqYear: 1,
-                    lastCal: 'Jan',
-                    nextCal: 'Jan',
-                    calBy: 'Vender',
-                    items: 'Temp 3 จุด (100°C, 150°C, 200°C)',
-                    tolerance: '± 5°C'
-                },
-                trackingStatus: {
-                    quotationRequested: true,
-                    quotationDate: '2026-09-20',
-                    prIssued: true,
-                    prNo: 'PR-69-09881',
-                    vendorScheduled: false,
-                    certReceived: false,
-                    certDelivered: false,
-                    result: 'Pending'
-                }
-            }
-        ]
-    },
-    {
-        id: 'eq-pds-1002',
-        equipmentNo: 'PDS-1002',
-        equipmentName: 'LUMOS (FTIR Microscope กล้องจุลทรรศน์อินฟราเรด)',
-        name: 'LUMOS',
-        code: 'PDS-1002',
-        owner: 'PORNTHAK',
-        department: 'PCRD Lab',
-        location: 'Spectroscopy Room B',
-        pm: {
-            freqYear: 1,
-            lastPM: 'Nov',
-            nextPM: 'Nov',
-            pmBy: 'Vender',
-            items: '1. ตรวจสอบ Laser Alignment 2. ตรวจสอบ Infrared Detector 3. ทำความสะอาด Stage & Optical Path',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'Nov',
-            nextCal: 'Nov',
-            calBy: 'Vender',
-            items: 'Wavenumber Accuracy & Repeatability Calibration ด้วย Polystyrene Standard',
-            tolerance: '± 1.0 cm⁻¹'
-        },
-        trackingStatus: {
-            quotationRequested: false,
-            prIssued: false,
-            vendorScheduled: false,
-            certReceived: false,
-            certDelivered: false,
-            result: 'Pending'
-        },
-        status: 'issue',
-        breakdownStatus: {
-            isBroken: true,
-            currentIncident: {
-                id: 'inc-pds-1002-1',
-                equipmentId: 'eq-pds-1002',
-                equipmentNo: 'PDS-1002',
-                equipmentName: 'LUMOS',
-                reportedDate: '2026-10-09',
-                reportedBy: 'PORNTHAK',
-                symptom: 'ระบบเลเซอร์วัดตำแหน่งแกน Z Error ทำให้ไม่สามารถ Focus ได้',
-                rootCause: 'Optical sensor alignment เสื่อมสภาพจากการใช้งานต่อเนื่อง',
-                impactLevel: 'Critical',
-                stage: 'pr_repair',
-                vendorOrTechnician: 'Bruker Service Engineer',
-                quotationNo: 'QT-2026-8891',
-                repairPrNo: 'PR-69-10902',
-                costEstimate: 45000,
-                targetResolutionDate: '2026-10-25',
-                resolutionNote: 'รออนุมัติ PR เพื่อเบิกอะไหล่ Sensor จากต่างประเทศ',
-                actionLogs: [
-                    { id: 'log-1', date: '2026-10-09', action: 'รับแจ้งอาการเสีย: เลเซอร์แกน Z error ไม่สามารถ Focus ชิ้นงานได้', actor: 'PORNTHAK', stage: 'reported' },
-                    { id: 'log-2', date: '2026-10-10', action: 'วิศวกร Bruker ตรวจสอบหน้างาน พบ Optical sensor เสื่อมสภาพ ต้องสั่งอะไหล่ชุดใหม่', actor: 'Bruker Engineer', stage: 'investigating' },
-                    { id: 'log-3', date: '2026-10-11', action: 'ขอและได้รับใบเสนอราคา QT-2026-8891 (45,000 บาท)', actor: 'PORNTHAK', stage: 'quotation_repair' },
-                    { id: 'log-4', date: '2026-10-12', action: 'เปิดใบขอซื้อ PR-69-10902 ส่งฝ่ายจัดซื้อและผู้บริหารอนุมัติ', actor: 'PORNTHAK', stage: 'pr_repair' }
-                ]
-            },
-            history: [
-                {
-                    id: 'hist-pds-1002-res-1',
-                    equipmentId: 'eq-pds-1002',
-                    equipmentNo: 'PDS-1002',
-                    equipmentName: 'LUMOS',
-                    reportedDate: '2025-08-10',
-                    reportedBy: 'PORNTHAK',
-                    symptom: 'สัญญาณเลเซอร์บอกพิกัดอ่อนลง ไม่สามารถ Autofocus บนผิวตัวอย่างสีเข้มได้',
-                    rootCause: 'ฝุ่นเกาะที่หน้าเลนส์สะท้อนและชุดกระจกโฟกัสภายใน',
-                    impactLevel: 'Moderate',
-                    stage: 'repaired_verified',
-                    vendorOrTechnician: 'Bruker Service Engineer',
-                    quotationNo: 'QT-2025-4421',
-                    repairPrNo: 'PR-68-08119',
-                    costEstimate: 18000,
-                    targetResolutionDate: '2025-08-20',
-                    resolvedDate: '2025-08-18',
-                    resolutionNote: 'ทำความสะอาดชุด Optical assembly และตั้งค่า Calibration Alignment ผ่านเกณฑ์มาตรฐาน 100%'
-                }
-            ]
-        },
-        history: [
-            {
-                id: 'hist-pds-1002-1',
-                date: '2025-11-20',
-                type: 'calibration',
-                title: 'สอบเทียบประจำปี 2025 (Annual Calibration)',
-                description: 'สอบเทียบค่า Wavenumber Accuracy & Repeatability ด้วย Polystyrene Standard Film',
-                technician: 'Bruker Service Engineer',
-                vendor: 'Bruker Thailand Ltd.',
-                docRef: 'CERT-2025-BR991',
-                result: 'Pass',
-                resolutionNote: 'ค่าความคลาดเคลื่อน ±0.4 cm⁻¹ อยู่ในเกณฑ์มาตรฐาน'
-            },
-            {
-                id: 'hist-pds-1002-2',
-                date: '2025-06-15',
-                type: 'repair',
-                title: 'เปลี่ยนหลอดไฟกำเนิดสัญญาณ Infrared Source',
-                description: 'สัญญาณ IR อ่อนลงจากการหมดอายุการใช้งานของ Globar Source ตามรอบชั่วโมงการทำงาน',
-                partsReplaced: 'Mid-IR Ceramic Source Lamp (P/N 102938)',
-                technician: 'สมศักดิ์ ช่างเทคนิคภายนอก',
-                vendor: 'Bruker Thailand',
-                cost: 28500,
-                docRef: 'PR-68-06214',
-                result: 'Resolved',
-                resolutionNote: 'เปลี่ยนแหล่งกำเนิดแสงใหม่และปรับ Alignment เรียบร้อย วัดค่า Energy ผ่าน 100%'
-            }
-        ],
-        subEquipments: []
-    },
-    {
-        id: 'eq-pds-1003',
-        equipmentNo: 'PDS-1003',
-        equipmentName: 'Optical Microscope (กล้องจุลทรรศน์แบบใช้แสง)',
-        name: 'Optical Microscope',
-        code: 'PDS-1003',
-        owner: 'PORNTHAK',
-        department: 'PCRD Lab',
-        location: 'Microscopy Suite',
-        status: 'ready',
-        pm: {
-            freqYear: 1,
-            lastPM: 'Apr',
-            nextPM: 'Apr',
-            pmBy: 'Vender',
-            items: '1. ทำความสะอาดเลนส์และกระจกสะท้อน 2. หล่อลื่นแกนปรับโฟกัส Fine/Coarse 3. ตรวจสอบระบบหลอดไฟส่องสว่าง',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: 1,
-            lastCal: 'Apr',
-            nextCal: 'Apr',
-            calBy: 'Vender',
-            items: 'สอบเทียบความถูกต้องของสเกลวัดขนาด (Stage Micrometer Calibration)',
-            tolerance: '± 5 µm'
-        },
-        trackingStatus: {
-            quotationRequested: true,
-            quotationDate: '2026-03-10',
-            prIssued: true,
-            prNo: 'PR-69-03412',
-            vendorScheduled: true,
-            scheduledDate: '2026-04-18',
-            certReceived: true,
-            certReceivedDate: '2026-04-25',
-            certDelivered: true,
-            certDeliveredDate: '2026-04-28',
-            result: 'Pass',
-            resultNote: 'ผลสอบเทียบผ่านเกณฑ์มาตรฐาน ± 5 µm'
-        },
-        subEquipments: []
-    },
-    {
-        id: 'eq-pds-1004',
-        equipmentNo: 'PDS-1004',
-        equipmentName: 'Melt Flow Index',
-        name: 'Melt Flow Index',
-        code: 'PDS-1004',
-        owner: 'Channarong',
-        department: 'PCRD Lab',
-        location: 'Polymer Testing Lab',
-        status: 'ready',
-        pm: {
-            freqYear: 1,
-            lastPM: 'Jan',
-            nextPM: 'Jan',
-            pmBy: 'Owner',
-            items: '1.ตรวจสอบสภาพสายไฟ 2.เช็ด ดูดฝุ่น ทำความสะอาดภายในและภายนอกเครื่อง 3.ตรวจสอบสายลมเข้าเครื่อง 4.ตรวจสภาพผิวใน Barrel , Piston',
-            tolerance: 'Pass/Fail'
-        },
-        cal: {
-            freqYear: '-',
-            lastCal: '-',
-            nextCal: '-',
-            calBy: '-',
-            items: '-',
-            tolerance: '-'
-        },
-        trackingStatus: {
-            quotationRequested: true,
-            quotationDate: '2026-09-15',
-            prIssued: true,
-            prNo: 'PR-69-09311',
-            vendorScheduled: false,
-            certReceived: false,
-            certDelivered: false,
-            result: 'Pending'
-        },
-        subEquipments: [
-            {
-                id: 'sub-pds-1004-01',
-                equipmentNo: 'PDS-1004/01',
-                equipmentName: 'Weight 400 g',
-                owner: 'Channarong',
-                cal: { freqYear: 1, lastCal: 'Jan', nextCal: 'Jan', calBy: 'Vender', items: 'Weight', tolerance: '±0.5%' },
-                trackingStatus: { quotationRequested: true, prIssued: true, vendorScheduled: false, certReceived: false, certDelivered: false, result: 'Pending' }
-            },
-            {
-                id: 'sub-pds-1004-02',
-                equipmentNo: 'PDS-1004/02',
-                equipmentName: 'Weight 2060 g',
-                owner: 'Channarong',
-                cal: { freqYear: 1, lastCal: 'Jan', nextCal: 'Jan', calBy: 'Vender', items: 'Weight', tolerance: '±0.5%' },
-                trackingStatus: { quotationRequested: true, prIssued: true, vendorScheduled: false, certReceived: false, certDelivered: false, result: 'Pending' }
-            },
-            {
-                id: 'sub-pds-1004-03',
-                equipmentNo: 'PDS-1004/03',
-                equipmentName: 'Weight 4900 g',
-                owner: 'Channarong',
-                cal: { freqYear: 1, lastCal: 'Jan', nextCal: 'Jan', calBy: 'Vender', items: 'Weight', tolerance: '±0.5%' },
-                trackingStatus: { quotationRequested: true, prIssued: true, vendorScheduled: false, certReceived: false, certDelivered: false, result: 'Pending' }
-            },
-            {
-                id: 'sub-pds-1004-04',
-                equipmentNo: 'PDS-1004/04',
-                equipmentName: 'Weight 5000 g',
-                owner: 'Channarong',
-                cal: { freqYear: 1, lastCal: 'Jan', nextCal: 'Jan', calBy: 'Vender', items: 'Weight', tolerance: '±0.5%' },
-                trackingStatus: { quotationRequested: true, prIssued: true, vendorScheduled: false, certReceived: false, certDelivered: false, result: 'Pending' }
-            },
-            {
-                id: 'sub-pds-1004-05',
-                equipmentNo: 'PDS-1004/05',
-                equipmentName: 'Weight 21500 g',
-                owner: 'Channarong',
-                cal: { freqYear: 1, lastCal: 'Jan', nextCal: 'Jan', calBy: 'Vender', items: 'Weight', tolerance: '±0.5%' },
-                trackingStatus: { quotationRequested: true, prIssued: true, vendorScheduled: false, certReceived: false, certDelivered: false, result: 'Pending' }
-            },
-            {
-                id: 'sub-pds-1004-06',
-                equipmentNo: 'PDS-1004/06',
-                equipmentName: 'Piston',
-                owner: 'Channarong',
-                cal: {
-                    freqYear: 1,
-                    lastCal: 'Jan',
-                    nextCal: 'Jan',
-                    calBy: 'Vender',
-                    items: 'เส้นผ่านศูนย์กลางหัวลูกสูบ (Head Diameter) & ความยาวของหัวลูกสูบ (Head Length)',
-                    tolerance: '9.474 mm ±0.007 mm / 6.35 mm ±0.10 mm (ISO 1133)'
-                },
-                trackingStatus: { quotationRequested: true, prIssued: true, vendorScheduled: false, certReceived: false, certDelivered: false, result: 'Pending' }
-            }
-        ]
-    }
-];
+export const STANDARD_EQUIPMENT_OWNERS: Record<string, string> = {
+    ...MASTER_EQUIPMENT_OWNERS
+};
 
+// Map equipment numbers and machine names to standard designated responsible persons from master data
+export const getStandardOwner = (eqNo: string, eqName?: string): string => {
+    const cleanNo = normalizeEquipmentNo(eqNo);
+    if (cleanNo && STANDARD_EQUIPMENT_OWNERS[cleanNo]) {
+        return STANDARD_EQUIPMENT_OWNERS[cleanNo];
+    }
+    if (cleanNo && cleanNo.includes('/')) {
+        const parentNo = cleanNo.split('/')[0];
+        if (STANDARD_EQUIPMENT_OWNERS[parentNo]) {
+            return STANDARD_EQUIPMENT_OWNERS[parentNo];
+        }
+    }
+    if (cleanNo && cleanNo.includes('-')) {
+        const parts = cleanNo.split('-');
+        if (parts.length >= 3) {
+            const baseNo = `${parts[0]}-${parts[1]}`;
+            if (STANDARD_EQUIPMENT_OWNERS[baseNo]) {
+                return STANDARD_EQUIPMENT_OWNERS[baseNo];
+            }
+        }
+    }
+
+    const nameLower = String(eqName || '').toLowerCase();
+    if (nameLower.includes('ftir') || nameLower.includes('tensor') || nameLower.includes('lumos')) return 'PORNTHAK';
+    if (nameLower.includes('microscope') || nameLower.includes('optical') || nameLower.includes('opticla')) return 'PORNTHAK';
+    if (nameLower.includes('melt') || nameLower.includes('mfi')) return 'Channarong';
+    if (nameLower.includes('balance') || nameLower.includes('ชั่ง')) return 'Weerawat';
+    if (nameLower.includes('density') || nameLower.includes('ความหนาแน่น')) return 'Pornthawit';
+    if (nameLower.includes('universal') || nameLower.includes('utm') || nameLower.includes('tensile')) return 'Channarong';
+    if (nameLower.includes('oven') || nameLower.includes('ตู้อบ')) return 'Thawatchai';
+    if (nameLower.includes('ph') || nameLower.includes('conductivity')) return 'Weerawat';
+    if (nameLower.includes('moisture') || nameLower.includes('ความชื้น')) return 'Pornthawit';
+    if (nameLower.includes('dsc') || nameLower.includes('calorimeter')) return 'THAWAPHO';
+    if (nameLower.includes('spectro') || nameLower.includes('วัดสี')) return 'Mark';
+
+    return 'PORNTHAK';
+};
+
+// Standardize equipment code (e.g. "PDF 1-001" -> "PDS-1001", "PDF 1-029-01" -> "PDS-1029-01", rejects bare "PDF" or header labels)
+export const normalizeEquipmentNo = (eqNo: string): string => {
+    if (!eqNo) return '';
+    const raw = String(eqNo || '').trim();
+    if (!raw) return '';
+
+    const upperNoSpaces = raw.toUpperCase().replace(/[^A-Z0-9ก-๙]/g, '');
+    const junkTokens = [
+        'PDF', 'PDS', 'EQUIPMENTNO', 'EQUIPMENT', 'EQUIPMENTNAME', 
+        'NO', 'NO.', 'ITEM', 'ITEMNO', 'ITEMNO.', 'ลำดับ', 'ลำดับที่', 
+        'รหัสเครื่อง', 'รหัสเครื่องมือ', 'เครื่องมือ', 'เครื่อง', 'ชื่อเครื่อง', 
+        'CODE', 'ID', 'DOCNO', 'PDFNO', 'PDSNO'
+    ];
+    if (junkTokens.includes(upperNoSpaces)) {
+        return '';
+    }
+
+    // 1. Exact standard formats: PDS-XXXX, PDS-XXXX/YY, PDS-XXXX-YY (e.g. PDS-1001, PDS-1001/02, PDS-1029-01, PDS-1048-01, PDS-1009/1)
+    const exactMatch = raw.match(/^PDS-(\d{4})(?:([/-])(\d{1,2}))?$/i);
+    if (exactMatch) {
+        const main = exactMatch[1];
+        const sep = exactMatch[2];
+        const sub = exactMatch[3];
+        if (!sep) return `PDS-${main}`;
+        const subPadded = sub.length === 1 && sep === '/' ? `0${sub}` : sub;
+        return `PDS-${main}${sep}${subPadded}`;
+    }
+
+    // 2. Sub-equipment with slash from raw inputs (e.g. "PDF 1-001/01", "1-001/02", "PDF 1-009/1", "PDS-1004/03")
+    const subMatch = raw.match(/(?:PDS|PDF)?\s*[-_]?\s*(?:1\s*[-_]\s*0*|10)?(\d{1,4})\s*\/\s*0*(\d+)/i);
+    if (subMatch) {
+        let mainNum = parseInt(subMatch[1], 10);
+        let subNum = parseInt(subMatch[2], 10);
+        if (mainNum < 1000) mainNum += 1000;
+        const subPadded = subNum < 10 ? `0${subNum}` : `${subNum}`;
+        return `PDS-${mainNum}/${subPadded}`;
+    }
+
+    // 3. Equipment with sub-dash e.g. "PDF 1-029-01" or "PDS 1-029-01"
+    const dashSubMatch = raw.match(/(?:PDS|PDF)?\s*[-_]?\s*(?:1\s*[-_]\s*0*|10)?(\d{1,4})\s*-\s*0*(\d{1,2})/i);
+    if (dashSubMatch) {
+        let mainNum = parseInt(dashSubMatch[1], 10);
+        let subNum = parseInt(dashSubMatch[2], 10);
+        if (mainNum < 1000) mainNum += 1000;
+        const subPadded = subNum < 10 ? `0${subNum}` : `${subNum}`;
+        return `PDS-${mainNum}-${subPadded}`;
+    }
+
+    // 4. Primary equipment e.g. "PDF 1-001", "PDF1-001", "1-001", "PDS 1001"
+    const priMatch = raw.match(/(?:PDS|PDF)?\s*[-_]?\s*(?:1\s*[-_]\s*0*|10)?(\d{1,4})/i);
+    if (priMatch) {
+        let num = parseInt(priMatch[1], 10);
+        if (!isNaN(num) && num > 0) {
+            if (num < 1000) num += 1000;
+            if (num >= 1001 && num <= 1099) {
+                return `PDS-${num}`;
+            }
+        }
+    }
+
+    return '';
+};
+
+// Sort equipments in clean natural numerical order (PDS-1001 ... PDS-1048-01, with sub-equipments properly nested)
+export const sortEquipmentsNaturally = (list: Equipment[]): Equipment[] => {
+    return [...list].sort((a, b) => {
+        const noA = String(a.equipmentNo || a.code || '').trim();
+        const noB = String(b.equipmentNo || b.code || '').trim();
+
+        const parseCode = (str: string) => {
+            const match = str.match(/PDS-(\d{4})(?:([/-])(\d+))?/i);
+            if (!match) return { main: 99999, isSub: false, sep: '', sub: 0, raw: str };
+            return {
+                main: parseInt(match[1], 10),
+                isSub: !!match[2],
+                sep: match[2] || '',
+                sub: match[3] ? parseInt(match[3], 10) : 0,
+                raw: str
+            };
+        };
+
+        const pA = parseCode(noA);
+        const pB = parseCode(noB);
+
+        if (pA.main !== pB.main) return pA.main - pB.main;
+        if (!pA.isSub && pB.isSub) return -1;
+        if (pA.isSub && !pB.isSub) return 1;
+        if (pA.isSub && pB.isSub) {
+            if (pA.sub !== pB.sub) return pA.sub - pB.sub;
+        }
+        return noA.localeCompare(noB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+};
+
+export const INITIAL_EQUIPMENTS: Equipment[] = MASTER_EQUIPMENTS;
 const sanitizePmDetails = (pm: any, raw?: any) => {
     let rawLastPM = pm?.lastPM || raw?.pmMonth || '';
     let tolerance = pm?.tolerance || raw?.pmTolerance || 'Pass/Fail';
@@ -853,13 +268,25 @@ const sanitizeCalDetails = (cal: any, raw?: any) => {
 };
 
 const normalizeEquipment = (raw: any): Equipment => {
+    const rawNo = String(raw.equipmentNo || raw.code || raw.name || '').trim();
+    const cleanNo = normalizeEquipmentNo(rawNo);
+    const equipName = String(raw.equipmentName || raw.name || 'Unnamed Equipment');
+    const stdOwner = cleanNo ? getStandardOwner(cleanNo, equipName) : getStandardOwner('', equipName);
+    const rawOwner = String(raw.owner || raw.custodian || raw.custodianName || '').trim();
+
+    let owner = rawOwner;
+    const rawUpper = rawOwner.toUpperCase();
+    if (!rawOwner || rawUpper === 'PDF' || rawUpper === 'EQUIPMENTNO' || rawOwner.includes('ลำดับ') || rawUpper === 'PORNTHAK') {
+        owner = stdOwner;
+    }
+
     return {
         ...raw,
         id: raw.id || 'eq_' + Math.random().toString(36).substr(2, 9),
-        equipmentNo: String(raw.equipmentNo || raw.code || raw.name || 'EQ-UNKNOWN'),
-        equipmentName: String(raw.equipmentName || raw.name || 'Unnamed Equipment'),
-        name: String(raw.equipmentName || raw.name || 'Unnamed Equipment'),
-        owner: String(raw.owner || raw.custodian || raw.custodianName || 'PORNTHAK'),
+        equipmentNo: cleanNo || rawNo,
+        equipmentName: equipName,
+        name: equipName,
+        owner,
         department: raw.department || 'PCRD Lab',
         location: raw.location || '',
         status: raw.status || 'ready',
@@ -874,28 +301,56 @@ const normalizeEquipment = (raw: any): Equipment => {
             result: 'Pending'
         },
         history: Array.isArray(raw.history) ? raw.history : [],
-        subEquipments: (raw.subEquipments || []).map((s: any) => ({
-            ...s,
-            id: s.id || 'sub_' + Math.random().toString(36).substr(2, 9),
-            equipmentNo: String(s.equipmentNo || s.code || 'SUB-EQ'),
-            equipmentName: String(s.equipmentName || s.name || 'Sub-Equipment'),
-            owner: String(s.owner || raw.owner || 'PORNTHAK'),
-            pm: s.pm ? sanitizePmDetails(s.pm) : undefined,
-            cal: s.cal ? sanitizeCalDetails(s.cal) : undefined,
-            trackingStatus: s.trackingStatus || {
-                quotationRequested: false,
-                prIssued: false,
-                vendorScheduled: false,
-                certReceived: false,
-                certDelivered: false,
-                result: 'Pending'
-            }
-        }))
+        subEquipments: (raw.subEquipments || [])
+            .filter((s: any) => {
+                const sRaw = String(s.equipmentNo || s.code || '').trim();
+                const sClean = normalizeEquipmentNo(sRaw);
+                const sUpper = sRaw.toUpperCase();
+                return sClean !== '' && sUpper !== 'PDF' && !sUpper.includes('ลำดับ');
+            })
+            .map((s: any, sIdx: number) => {
+                const subRawNo = String(s.equipmentNo || s.code || '').trim();
+                const subCleanNo = normalizeEquipmentNo(subRawNo) || (cleanNo ? `${cleanNo}/0${sIdx + 1}` : 'SUB-EQ');
+                const subStdOwner = getStandardOwner(subCleanNo, s.equipmentName || s.name) || owner;
+                const subRawOwner = String(s.owner || '').trim();
+                let subOwner = subRawOwner;
+                const subUpper = subRawOwner.toUpperCase();
+                if (!subRawOwner || subUpper === 'PDF' || subUpper === 'EQUIPMENTNO' || subUpper === 'PORNTHAK') {
+                    subOwner = subStdOwner;
+                }
+
+                return {
+                    ...s,
+                    id: s.id || 'sub_' + Math.random().toString(36).substr(2, 9),
+                    equipmentNo: subCleanNo,
+                    equipmentName: String(s.equipmentName || s.name || 'Sub-Equipment'),
+                    owner: subOwner,
+                    pm: s.pm ? sanitizePmDetails(s.pm) : undefined,
+                    cal: s.cal ? sanitizeCalDetails(s.cal) : undefined,
+                    trackingStatus: s.trackingStatus || {
+                        quotationRequested: false,
+                        prIssued: false,
+                        vendorScheduled: false,
+                        certReceived: false,
+                        certDelivered: false,
+                        result: 'Pending'
+                    }
+                };
+            })
     };
 };
 
+export const CURRENT_MASTER_VERSION = 'v2026_10_master_161_tsv_v3';
+
 // --- Equipment Management ---
 export const getEquipments = async (): Promise<Equipment[]> => {
+    // If client cache is from an older version, refresh to master file data
+    const clientVersion = localStorage.getItem('master_version_key');
+    if (clientVersion !== CURRENT_MASTER_VERSION) {
+        localStorage.removeItem('backup_equipments');
+        localStorage.setItem('master_version_key', CURRENT_MASTER_VERSION);
+    }
+
     let rawList: any[] = [];
     if (!firestore) {
         const backup = localStorage.getItem('backup_equipments');
@@ -918,7 +373,7 @@ export const getEquipments = async (): Promise<Equipment[]> => {
             });
             if (list.length > 0) {
                 rawList = list;
-                // Merge with local backup so user mutations (like resolve breakdown) take precedence over stale server docs
+                // Merge with local backup so user mutations take precedence
                 const backup = localStorage.getItem('backup_equipments');
                 if (backup) {
                     try {
@@ -964,17 +419,25 @@ export const getEquipments = async (): Promise<Equipment[]> => {
         }
     }
 
-    // Merge any missing standard master equipments (e.g. PDF 1-001 series) into list
-    const existingEqNos = new Set(rawList.map(e => String(e.equipmentNo || e.code || '').trim()));
-    INITIAL_EQUIPMENTS.forEach(initEq => {
-        if (!existingEqNos.has(initEq.equipmentNo)) {
-            rawList.push(initEq);
-            existingEqNos.add(initEq.equipmentNo);
-        }
+    // If the list in storage or firestore is the old small mock (<= 25 items)
+    // or has the single-owner bug where almost all items have owner "PORNTHAK" or empty,
+    // seed directly with MASTER_EQUIPMENTS from the uploaded master file!
+    const uniqueOwnersInRaw = new Set(rawList.map((e: any) => String(e.owner || '').trim()).filter(Boolean));
+    if (rawList.length <= 25 || uniqueOwnersInRaw.size <= 2) {
+        rawList = JSON.parse(JSON.stringify(MASTER_EQUIPMENTS));
+    }
+
+    // Filter out phantom items (like "PDF" or header labels)
+    const validRaw = rawList.filter(r => {
+        if (!r) return false;
+        const no = String(r.equipmentNo || r.code || '').trim();
+        const clean = normalizeEquipmentNo(no);
+        if (!clean) return false;
+        return true;
     });
 
     // Normalize and strictly DEDUPLICATE by ID and Equipment Number
-    const normalized = rawList.map(normalizeEquipment);
+    const normalized = validRaw.map(normalizeEquipment);
     const seenIds = new Set<string>();
     const seenEqNos = new Map<string, Equipment>();
     const uniqueList: Equipment[] = [];
@@ -983,8 +446,11 @@ export const getEquipments = async (): Promise<Equipment[]> => {
         const eq = { ...normalized[i] };
         const eqNo = String(eq.equipmentNo || '').trim();
 
+        // If eqNo became empty after normalization, skip
+        if (!eqNo || eqNo.toUpperCase() === 'PDF') continue;
+
         // If duplicate primary equipment number, merge subEquipments
-        if (eqNo && !eqNo.includes('/') && seenEqNos.has(eqNo)) {
+        if (!eqNo.includes('/') && seenEqNos.has(eqNo)) {
             const existing = seenEqNos.get(eqNo)!;
             if (eq.subEquipments && eq.subEquipments.length > 0) {
                 const existingSubNos = new Set((existing.subEquipments || []).map(s => s.equipmentNo));
@@ -1000,35 +466,136 @@ export const getEquipments = async (): Promise<Equipment[]> => {
         }
         seenIds.add(eq.id);
 
-        if (eqNo && !eqNo.includes('/')) {
+        if (!eqNo.includes('/')) {
             seenEqNos.set(eqNo, eq);
         }
 
-        // Guarantee sub-equipments have unique IDs
+        // Guarantee sub-equipments have unique IDs and clean codes
         if (eq.subEquipments) {
             const seenSubIds = new Set<string>();
-            eq.subEquipments = eq.subEquipments.map((sub, sIdx) => {
-                let subId = sub.id;
-                if (!subId || seenSubIds.has(subId)) {
-                    subId = `sub_${sIdx}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-                }
-                seenSubIds.add(subId);
-                return { ...sub, id: subId };
-            });
+            eq.subEquipments = eq.subEquipments
+                .filter(sub => {
+                    const sNo = normalizeEquipmentNo(String(sub.equipmentNo || ''));
+                    return sNo !== '';
+                })
+                .map((sub, sIdx) => {
+                    let subId = sub.id;
+                    if (!subId || seenSubIds.has(subId)) {
+                        subId = `sub_${sIdx}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                    }
+                    seenSubIds.add(subId);
+                    return { ...sub, id: subId };
+                });
         }
 
         uniqueList.push(eq);
     }
 
-    // Sort naturally (e.g. PDF 1-001 ... PDF 1-005, PDS-1001 ... PDS-1004)
-    uniqueList.sort((a, b) => {
-        const noA = String(a.equipmentNo || '').trim();
-        const noB = String(b.equipmentNo || '').trim();
-        return noA.localeCompare(noB, undefined, { numeric: true, sensitivity: 'base' });
+    // Reconcile owners to ensure every instrument matches its designated laboratory owner
+    uniqueList.forEach(eq => {
+        const clean = normalizeEquipmentNo(eq.equipmentNo);
+        if (clean) eq.equipmentNo = clean;
+        const stdOwner = getStandardOwner(clean, eq.equipmentName);
+        if (stdOwner) {
+            // Update owner if empty, invalid, or matching legacy single-owner fallback
+            if (!eq.owner || eq.owner === 'PORNTHAK' || eq.owner === 'PDF' || eq.owner === 'EQ-UNKNOWN') {
+                eq.owner = stdOwner;
+            }
+        }
+        if (eq.subEquipments) {
+            eq.subEquipments.forEach((s, sIdx) => {
+                const sClean = normalizeEquipmentNo(s.equipmentNo) || `${clean}/0${sIdx + 1}`;
+                s.equipmentNo = sClean;
+                const sStdOwner = getStandardOwner(sClean, s.equipmentName) || eq.owner;
+                if (sStdOwner && (!s.owner || s.owner === 'PORNTHAK' || s.owner === 'PDF')) {
+                    s.owner = sStdOwner;
+                }
+            });
+        }
     });
 
-    safeSetItem('backup_equipments', JSON.stringify(uniqueList));
-    return uniqueList;
+    // Sort naturally: PDS-1001 ... PDS-1048-01
+    const sortedList = sortEquipmentsNaturally(uniqueList);
+    safeSetItem('backup_equipments', JSON.stringify(sortedList));
+    return sortedList;
+};
+
+// Reconcile and auto-align all equipment numbers and responsible owners with master standards
+export const reconcileEquipmentStandards = async (): Promise<Equipment[]> => {
+    let list = await getEquipments();
+    if (list.length <= 25) {
+        list = JSON.parse(JSON.stringify(MASTER_EQUIPMENTS));
+    }
+    const cleanList = list
+        .filter(eq => {
+            const clean = normalizeEquipmentNo(eq.equipmentNo);
+            return clean !== '' && clean.toUpperCase() !== 'PDF';
+        })
+        .map(eq => {
+            const cleanNo = normalizeEquipmentNo(eq.equipmentNo) || eq.equipmentNo;
+            const targetOwner = getStandardOwner(cleanNo, eq.equipmentName) || eq.owner || 'PORNTHAK';
+            const cleanSubs = (eq.subEquipments || [])
+                .filter(s => {
+                    const sc = normalizeEquipmentNo(s.equipmentNo);
+                    return sc !== '' && sc.toUpperCase() !== 'PDF';
+                })
+                .map((sub, sIdx) => {
+                    const subCleanNo = normalizeEquipmentNo(sub.equipmentNo) || `${cleanNo}/0${sIdx + 1}`;
+                    return {
+                        ...sub,
+                        equipmentNo: subCleanNo,
+                        owner: getStandardOwner(subCleanNo, sub.equipmentName) || targetOwner
+                    };
+                });
+            return {
+                ...eq,
+                equipmentNo: cleanNo,
+                owner: targetOwner,
+                subEquipments: cleanSubs
+            };
+        });
+
+    const sorted = sortEquipmentsNaturally(cleanList);
+    safeSetItem('backup_equipments', JSON.stringify(sorted));
+
+    if (firestore) {
+        try {
+            const batch = firestore.batch();
+            const col = getCollection('equipments');
+            sorted.forEach(eq => {
+                batch.set(col.doc(eq.id), JSON.parse(JSON.stringify(eq)));
+            });
+            await batch.commit();
+        } catch (e) {
+            console.warn("Firestore reconcile commit error:", e);
+        }
+    }
+
+    return sorted;
+};
+
+// Explicitly reset the system 100% to the exact data from the uploaded Master Plan file
+export const resetToMasterEquipments = async (): Promise<Equipment[]> => {
+    localStorage.removeItem('backup_equipments');
+    localStorage.setItem('master_version_key', CURRENT_MASTER_VERSION);
+    const freshList: Equipment[] = JSON.parse(JSON.stringify(MASTER_EQUIPMENTS));
+    const sorted = sortEquipmentsNaturally(freshList);
+    safeSetItem('backup_equipments', JSON.stringify(sorted));
+
+    if (firestore) {
+        try {
+            const batch = firestore.batch();
+            const col = getCollection('equipments');
+            sorted.forEach(eq => {
+                batch.set(col.doc(eq.id), JSON.parse(JSON.stringify(eq)));
+            });
+            await batch.commit();
+        } catch (e) {
+            console.warn("Firestore reset commit error:", e);
+        }
+    }
+
+    return sorted;
 };
 
 export const saveEquipment = async (equipment: Omit<Equipment, 'id'> & { id?: string }): Promise<void> => {

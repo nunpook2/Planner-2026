@@ -1,0 +1,68 @@
+/* Enhanced Typography & Sharp Contrast Stylesheet */
+@layer base {
+  html {
+    font-family: 'Inter', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  body {
+    color: #1e293b;
+    line-height: 1.5;
+  }
+}
+
+/* Ensure small text is razor sharp, with bold contrast and legible Thai tone marks */
+.text-sharp {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* High contrast badges and chips */
+.badge-sharp {
+  font-weight: 700 !important;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Crisp mono equipment numbers */
+.eq-code {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em;
+}
+
+/* Improve contrast of muted texts across the board */
+.text-slate-400 {
+  color: #64748b !important; /* darkened from 94a3b8 for sharp legibility */
+}
+.text-slate-500 {
+  color: #475569 !important; /* darkened from 64748b */
+}
+.dark .text-slate-400 {
+  color: #94a3b8 !important;
+}
+.dark .text-slate-500 {
+  color: #cbd5e1 !important;
+}
+
+/* Table readability */
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+th {
+  font-weight: 800 !important;
+  color: #334155 !important;
+}
+.dark th {
+  color: #e2e8f0 !important;
+}
+
+td {
+  vertical-align: middle;
+}

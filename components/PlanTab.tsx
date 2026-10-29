@@ -224,53 +224,50 @@ export const PlanTab: React.FC<PlanTabProps> = ({ equipments, onEquipmentUpdated
     }, [vendorTasks]);
 
     return (
-        <div className="space-y-6 animate-fade-in w-full">
-            {/* Header Section */}
-            <div className="bg-white dark:bg-base-900 p-6 rounded-3xl border border-base-200 dark:border-base-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1">
+        <div className="space-y-3.5 animate-fade-in w-full">
+            {/* Header Section - Compact & Crisp */}
+            <div className="bg-white dark:bg-base-900 p-4 rounded-2xl border border-slate-200 dark:border-base-800 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-primary-600 bg-primary-50 dark:bg-primary-950/40 px-2.5 py-1 rounded-full">
-                            Annual Master Timeline & Lead-time Cockpit
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-400">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-primary-700 bg-primary-50 dark:bg-primary-950 px-2 py-0.5 rounded-md border border-primary-200">
                             ปฏิทิน 12 เดือน & ระบบเตือนเตรียมตัวล่วงหน้า
                         </span>
                     </div>
-                    <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
                         แผนปฏิบัติการ PM & Calibration ประจำปี (รายเดือน)
                     </h2>
-                    <p className="text-xs text-slate-500 font-medium">
-                        เลือกดูแต่ละเดือนได้ทันที รู้ล่วงหน้าว่าต้องเตรียมขอ Quotation, ออก PR, หรือนัด Vendor เดือนไหน แยกชัดเจนระหว่าง Vendor และ Owner
+                    <p className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
+                        เลือกดูแต่ละเดือนได้ทันที รู้ล่วงหน้าว่าต้องขอ Quotation, ออก PR, หรือนัด Vendor เดือนไหน แยกชัดเจนระหว่าง Vendor และ Owner
                     </p>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 flex-wrap">
                     <button
                         onClick={() => setSelectedMonth('Nov')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
                             selectedMonth === 'Nov' 
-                                ? 'bg-primary-600 text-white shadow-md' 
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-base-800 dark:text-white'
+                                ? 'bg-primary-600 text-white shadow-sm ring-2 ring-primary-500/20' 
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-base-800 dark:text-white border border-slate-200'
                         }`}
                     >
                         🎯 เดือน 11 (พ.ย. / Nov)
                     </button>
                     <button
                         onClick={() => setSelectedMonth('Jan')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
                             selectedMonth === 'Jan' 
-                                ? 'bg-primary-600 text-white shadow-md' 
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-base-800 dark:text-white'
+                                ? 'bg-primary-600 text-white shadow-sm ring-2 ring-primary-500/20' 
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-base-800 dark:text-white border border-slate-200'
                         }`}
                     >
                         🗓️ เดือน 1 (ม.ค. / Jan)
                     </button>
                     <button
                         onClick={() => setSelectedMonth('all')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
                             selectedMonth === 'all' 
-                                ? 'bg-primary-600 text-white shadow-md' 
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-base-800 dark:text-white'
+                                ? 'bg-primary-600 text-white shadow-sm ring-2 ring-primary-500/20' 
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-base-800 dark:text-white border border-slate-200'
                         }`}
                     >
                         แสดงทุกเดือน (All Months)
@@ -330,73 +327,115 @@ export const PlanTab: React.FC<PlanTabProps> = ({ equipments, onEquipmentUpdated
                 </div>
             </div>
 
-            {/* LEAD-TIME ROADMAP & ADVANCE PREPARATION BANNER */}
+            {/* LEAD-TIME ROADMAP & ADVANCE PREPARATION BANNER (CLEAN & SOOTHING THEME) */}
             {timelineInfo && (
-                <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-primary-950 text-white p-6 rounded-3xl shadow-xl space-y-5 border border-indigo-700/40">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-white/10 pb-4">
+                <div className="bg-white dark:bg-base-900 rounded-3xl border border-slate-200/90 dark:border-base-800 p-5 shadow-xs space-y-4">
+                    {/* Header Bar */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 dark:border-base-800 pb-3.5">
                         <div className="flex items-center gap-3">
-                            <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md text-amber-300">
-                                <ClockIcon className="h-6 w-6" />
+                            <div className="p-2.5 bg-primary-50 dark:bg-primary-950/60 text-primary-600 dark:text-primary-300 rounded-2xl border border-primary-200 dark:border-primary-800/60">
+                                <ClockIcon className="h-5 w-5" />
                             </div>
                             <div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-black uppercase tracking-widest bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] font-black uppercase tracking-wider bg-primary-100/80 text-primary-800 dark:bg-primary-900/60 dark:text-primary-200 px-2.5 py-0.5 rounded-full">
                                         ระบบแจ้งเตือนการเตรียมตัวล่วงหน้า (Lead Time Roadmap)
                                     </span>
-                                    <span className="text-xs text-indigo-200 font-bold">
-                                        สำหรับรอบงานเดือน {timelineInfo.target.thFull} ({timelineInfo.target.key} - เดือน {timelineInfo.target.index})
+                                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                                        รอบงานเดือน {timelineInfo.target.thFull} ({timelineInfo.target.key} - เดือน {timelineInfo.target.index})
                                     </span>
                                 </div>
-                                <h3 className="text-xl font-black mt-1">
-                                    📅 แผนเตรียมความพร้อมเพื่อไม่ให้งานหลุดกำหนดการ (Due Date)
+                                <h3 className="text-base md:text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                                    แผนเตรียมความพร้อมเพื่อไม่ให้งานหลุดกำหนดการ (Due Date)
                                 </h3>
                             </div>
                         </div>
 
-                        {/* Summary prep badges */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <div className="bg-white/10 px-3 py-2 rounded-xl backdrop-blur-sm text-center">
-                                <span className="text-[10px] text-indigo-200 block font-bold">งาน Vendor ทั้งหมด</span>
-                                <span className="text-base font-black text-white">{prepStats.totalVendor} รายการ</span>
+                        {/* Summary prep status pills */}
+                        <div className="flex items-center gap-2 flex-wrap self-start md:self-center">
+                            <div className="bg-slate-50 dark:bg-base-950 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-base-800 text-center">
+                                <span className="text-[10px] text-slate-400 block font-bold">งาน Vendor ทั้งหมด</span>
+                                <span className="text-sm font-black text-slate-900 dark:text-white">{prepStats.totalVendor} รายการ</span>
                             </div>
-                            <div className={`px-3 py-2 rounded-xl backdrop-blur-sm text-center ${prepStats.quotePending > 0 ? 'bg-rose-500/20 border border-rose-400/40' : 'bg-emerald-500/20'}`}>
-                                <span className="text-[10px] text-indigo-200 block font-bold">รอขอ Quotation</span>
-                                <span className={`text-base font-black ${prepStats.quotePending > 0 ? 'text-rose-300' : 'text-emerald-300'}`}>
-                                    {prepStats.quotePending} รายการ
-                                </span>
+                            <div className={`px-3 py-1.5 rounded-xl border text-center ${
+                                prepStats.quotePending > 0 
+                                    ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-rose-300' 
+                                    : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                            }`}>
+                                <span className="text-[10px] opacity-75 block font-bold">รอขอ Quotation</span>
+                                <span className="text-sm font-black">{prepStats.quotePending} รายการ</span>
                             </div>
-                            <div className={`px-3 py-2 rounded-xl backdrop-blur-sm text-center ${prepStats.prPending > 0 ? 'bg-amber-500/20 border border-amber-400/40' : 'bg-emerald-500/20'}`}>
-                                <span className="text-[10px] text-indigo-200 block font-bold">รอออกใบ PR</span>
-                                <span className={`text-base font-black ${prepStats.prPending > 0 ? 'text-amber-300' : 'text-emerald-300'}`}>
-                                    {prepStats.prPending} รายการ
-                                </span>
+                            <div className={`px-3 py-1.5 rounded-xl border text-center ${
+                                prepStats.prPending > 0 
+                                    ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300' 
+                                    : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                            }`}>
+                                <span className="text-[10px] opacity-75 block font-bold">รอออกใบ PR</span>
+                                <span className="text-sm font-black">{prepStats.prPending} รายการ</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Step-by-Step Roadmap Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                        {timelineInfo.steps.map((st) => (
-                            <div key={st.step} className="bg-white/5 border border-white/10 hover:border-white/20 p-4 rounded-2xl space-y-2 backdrop-blur-sm transition-all">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-indigo-500/30 text-indigo-200">
-                                        สเต็ปที่ {st.step}
-                                    </span>
-                                    <span className="text-[10px] font-bold text-amber-300">
-                                        ⏱️ {st.timeframe}
-                                    </span>
+                    {/* Step-by-Step Clean Roadmap Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {timelineInfo.steps.map((st) => {
+                            const stepStyles: Record<number, { bg: string, border: string, badge: string, tag: string, startBox: string }> = {
+                                1: {
+                                    bg: 'bg-sky-50/50 dark:bg-sky-950/20',
+                                    border: 'border-sky-200/80 dark:border-sky-900/40',
+                                    badge: 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200',
+                                    tag: 'text-sky-700 dark:text-sky-300',
+                                    startBox: 'bg-sky-100/70 dark:bg-sky-900/40 text-sky-900 dark:text-sky-200'
+                                },
+                                2: {
+                                    bg: 'bg-indigo-50/50 dark:bg-indigo-950/20',
+                                    border: 'border-indigo-200/80 dark:border-indigo-900/40',
+                                    badge: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200',
+                                    tag: 'text-indigo-700 dark:text-indigo-300',
+                                    startBox: 'bg-indigo-100/70 dark:bg-indigo-900/40 text-indigo-900 dark:text-indigo-200'
+                                },
+                                3: {
+                                    bg: 'bg-amber-50/50 dark:bg-amber-950/20',
+                                    border: 'border-amber-200/80 dark:border-amber-900/40',
+                                    badge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200',
+                                    tag: 'text-amber-700 dark:text-amber-300',
+                                    startBox: 'bg-amber-100/70 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200'
+                                },
+                                4: {
+                                    bg: 'bg-emerald-50/50 dark:bg-emerald-950/20',
+                                    border: 'border-emerald-200/80 dark:border-emerald-900/40',
+                                    badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200',
+                                    tag: 'text-emerald-700 dark:text-emerald-300',
+                                    startBox: 'bg-emerald-100/70 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200'
+                                }
+                            };
+                            const style = stepStyles[st.step] || stepStyles[1];
+
+                            return (
+                                <div 
+                                    key={st.step} 
+                                    className={`${style.bg} border ${style.border} p-4 rounded-2xl space-y-2.5 transition-all hover:shadow-xs`}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${style.badge}`}>
+                                            สเต็ปที่ {st.step}
+                                        </span>
+                                        <span className={`text-[11px] font-bold ${style.tag}`}>
+                                            ⏱️ {st.timeframe}
+                                        </span>
+                                    </div>
+                                    <h4 className="font-black text-xs text-slate-900 dark:text-white">
+                                        {st.name}
+                                    </h4>
+                                    <div className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${style.startBox}`}>
+                                        🗓️ ต้องเริ่มใน: <strong>{st.suggestedMonth.thFull} ({st.suggestedMonth.key})</strong>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                                        {st.desc}
+                                    </p>
                                 </div>
-                                <h4 className="font-bold text-sm text-white">
-                                    {st.name}
-                                </h4>
-                                <div className="bg-white/10 px-2.5 py-1 rounded-lg text-[11px] font-black text-amber-300">
-                                    🗓️ ต้องเริ่มใน: {st.suggestedMonth.thFull} ({st.suggestedMonth.key})
-                                </div>
-                                <p className="text-[11px] text-indigo-200 leading-relaxed">
-                                    {st.desc}
-                                </p>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             )}

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import type { Equipment, BreakdownRecord, BreakdownStage, BreakdownActionLog } from '../types';
-import { saveEquipment } from '../services/dataService';
+import { saveEquipment, sortEquipmentsNaturally, normalizeEquipmentNo } from '../services/dataService';
 import { 
     AlertTriangleIcon, CheckCircleIcon, ClockIcon, SearchIcon, 
     PlusIcon, PencilIcon, DocumentTextIcon, RefreshIcon, 
@@ -22,10 +22,15 @@ const STAGES: { stage: BreakdownStage; stepNumber: number; title: string; shortT
     { stage: 'repaired_verified', stepNumber: 6, title: '6. ตรวจรับ & พร้อมใช้งาน', shortTitle: '6. ตรวจรับเสร็จ', desc: 'ทดสอบระบบ ตรวจรับ และเปิดใช้งาน', badgeColor: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' }
 ];
 
-// Helper to sort equipment naturally (e.g. PDF 1-001, PDF 1-002, 1-003, PDS-1001, PDS-1002...)
+// Helper to sort equipment naturally (PDS-1001, PDS-1002 ... PDS-1014)
 const naturalEquipmentCompare = (a: Equipment, b: Equipment): number => {
-    const noA = String(a.equipmentNo || a.code || a.name || '').trim();
-    const noB = String(b.equipmentNo || b.code || b.name || '').trim();
+    const noA = normalizeEquipmentNo(String(a.equipmentNo || a.code || '')) || String(a.equipmentNo || '').trim();
+    const noB = normalizeEquipmentNo(String(b.equipmentNo || b.code || '')) || String(b.equipmentNo || '').trim();
+    const matchA = noA.match(/(\d+)/);
+    const matchB = noB.match(/(\d+)/);
+    const numA = matchA ? parseInt(matchA[1], 10) : 0;
+    const numB = matchB ? parseInt(matchB[1], 10) : 0;
+    if (numA !== numB) return numA - numB;
     return noA.localeCompare(noB, undefined, { numeric: true, sensitivity: 'base' });
 };
 
@@ -495,7 +500,7 @@ export const BreakdownTab: React.FC<BreakdownTabProps> = ({ equipments, onEquipm
                         <SearchIcon className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
                         <input
                             type="text"
-                            placeholder="ค้นหารหัส เช่น PDF 1-001, PDS-1001..."
+                            placeholder="ค้นหารหัส เช่น PDS-1001, PDS-1002..."
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-base-950/40 border border-slate-200 dark:border-base-700 rounded-xl text-xs font-bold dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:border-primary-500"
