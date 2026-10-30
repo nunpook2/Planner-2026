@@ -5,6 +5,7 @@ import WorkflowTab from './components/WorkflowTab';
 import PlanTab from './components/PlanTab';
 import WalkthroughTab from './components/WalkthroughTab';
 import ProficiencyTab from './components/ProficiencyTab';
+import DistillationTab from './components/DistillationTab';
 import AiAssistantTab from './components/AiAssistantTab';
 import ImportTab from './components/ImportTab';
 import SettingsTab from './components/SettingsTab';
@@ -28,7 +29,7 @@ const LoadingSpinner = () => (
 );
 
 const App: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'equipment' | 'breakdown' | 'workflow' | 'plan' | 'walkthrough' | 'proficiency' | 'ai' | 'import' | 'settings'>('equipment');
+    const [activeTab, setActiveTab] = useState<'equipment' | 'breakdown' | 'workflow' | 'plan' | 'walkthrough' | 'proficiency' | 'distillation' | 'ai' | 'import' | 'settings'>('equipment');
     const [equipments, setEquipments] = useState<Equipment[]>([]);
     const [testers, setTesters] = useState<Tester[]>([]);
     const [walkthroughs, setWalkthroughs] = useState<Walkthrough[]>([]);
@@ -108,6 +109,8 @@ const App: React.FC = () => {
                 return <WalkthroughTab testers={testers} onWalkthroughUpdated={triggerRefresh} />;
             case 'proficiency':
                 return <ProficiencyTab testers={testers} />;
+            case 'distillation':
+                return <DistillationTab testers={testers} onDataUpdated={triggerRefresh} />;
             case 'ai':
                 return <AiAssistantTab equipments={equipments} onEquipmentUpdated={triggerRefresh} />;
             case 'import':
@@ -262,11 +265,17 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Group 2: บุคลากร & คุณภาพ Lab */}
+                        {/* Group 2: คุณภาพ & สารเคมี Lab */}
                         <div className="space-y-1 pt-1 border-t border-slate-100 dark:border-base-800/80">
                             <span className="px-3 text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
-                                คุณภาพ & บุคลากร (Quality & Team)
+                                คุณภาพ & สารเคมี (Quality & Recovery)
                             </span>
+                            <NavButton
+                                tab="distillation"
+                                label="บันทึกการกลั่นสารเคมี"
+                                subtitle="Solvent Recovery & % Yield"
+                                icon={<BeakerIcon className="h-4 w-4 text-cyan-600" />}
+                            />
                             <NavButton
                                 tab="walkthrough"
                                 label="Walkthrough กิจกรรมใหม่"

@@ -1218,26 +1218,202 @@ export const clearAllTaskData = async () => {
     }
 };
 
-// --- Distillation Logic ---
+// --- Distillation Logic & Initial Seed Records ---
+const DEFAULT_DISTILLATION_LOGS: DistillationLog[] = [
+    {
+        id: 'dist_seed_1',
+        chemicalName: 'Ethanol',
+        inputAmount: 5000,
+        outputAmount: 4800,
+        yieldPercent: 96.0,
+        date: '2026-10-24',
+        recorderName: 'เบน',
+        notes: 'กลั่นรีไซเคิลรอบเช้า นำกลับมาใช้ล้างเครื่องแก้วและเตรียมตัวอย่าง',
+        createdAt: '2026-10-24T10:30:00.000Z'
+    },
+    {
+        id: 'dist_seed_2',
+        chemicalName: 'Methanol',
+        inputAmount: 4000,
+        outputAmount: 3880,
+        yieldPercent: 97.0,
+        date: '2026-10-22',
+        recorderName: 'โต้',
+        notes: 'กลั่นบริสุทธิ์ HPLC grade สำหรับ Mobile Phase',
+        createdAt: '2026-10-22T14:15:00.000Z'
+    },
+    {
+        id: 'dist_seed_3',
+        chemicalName: 'Hexane',
+        inputAmount: 6000,
+        outputAmount: 5640,
+        yieldPercent: 94.0,
+        date: '2026-10-18',
+        recorderName: 'ทีม',
+        notes: 'กลั่นคืนสารจากแล็บ Fat Extraction ตรวจสอบความบริสุทธิ์ผ่านเกณฑ์',
+        createdAt: '2026-10-18T11:00:00.000Z'
+    },
+    {
+        id: 'dist_seed_4',
+        chemicalName: 'Acetone',
+        inputAmount: 3500,
+        outputAmount: 3360,
+        yieldPercent: 96.0,
+        date: '2026-10-15',
+        recorderName: 'กิตติศักดิ์',
+        notes: 'กลั่นรีไซเคิลตัวทำละลายล้างคราบไขมันในแล็บ',
+        createdAt: '2026-10-15T16:20:00.000Z'
+    },
+    {
+        id: 'dist_seed_5',
+        chemicalName: 'Acetonitrile',
+        inputAmount: 2500,
+        outputAmount: 2420,
+        yieldPercent: 96.8,
+        date: '2026-10-10',
+        recorderName: 'ชัยกร',
+        notes: 'กลั่นสารรีไซเคิลเกรดวิเคราะห์ ค่า UV absorbance ผ่านเกณฑ์สเปก',
+        createdAt: '2026-10-10T13:45:00.000Z'
+    },
+    {
+        id: 'dist_seed_6',
+        chemicalName: 'Isopropanol',
+        inputAmount: 3000,
+        outputAmount: 2850,
+        yieldPercent: 95.0,
+        date: '2026-10-05',
+        recorderName: 'เบน',
+        notes: 'กลั่นสารฆ่าเชื้อและทำความสะอาดตู้ดูดควัน Clean bench',
+        createdAt: '2026-10-05T09:30:00.000Z'
+    }
+];
+
 export const getDistillationLogs = async (): Promise<DistillationLog[]> => {
-    if (!firestore) return [];
-    const snapshot = await safeGet(getCollection('distillationLogs').orderBy('createdAt', 'desc'));
-    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as DistillationLog));
+    // 1. Try Firestore first
+    if (firestore) {
+        try {
+            const snapshot = await safeGet(getCollection('distillationLogs').orderBy('createdAt', 'desc'));
+            const logs = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as DistillationLog));
+            if (logs.length > 0) {
+                safeSetItem('backup_distillationLogs', JSON.stringify(logs));
+                return logs;
+            }
+        } catch (err) {
+            console.warn("getDistillationLogs firestore error, falling back to local storage:", err);
+        }
+    }
+
+    // 2. Fallback to localStorage backup
+    const backupStr = localStorage.getItem('backup_distillationLogs');
+    if (backupStr) {
+        try {
+            const parsed = JSON.parse(backupStr);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed;
+            }
+        } catch (e) {
+            console.error("Error parsing backup_distillationLogs:", e);
+        }
+    }
+
+    // 3. Fallback to initial realistic seed logs
+    safeSetItem('backup_distillationLogs', JSON.stringify(DEFAULT_DISTILLATION_LOGS));
+    
+    // Seed to Firestore in background if online
+    if (firestore) {
+        try {
+            const batch = firestore.batch();
+            const col = getCollection('distillationLogs');
+            DEFAULT_DISTILLATION_LOGS.forEach(log => {
+                const docRef = col.doc(log.id || ('dist_' + Math.random().toString(36).substring(2, 9)));
+                batch.set(docRef, log);
+            });
+            batch.commit().catch(e => console.warn("Firestore seed distillation commit error:", e));
+        } catch (e) {
+            // Ignore background seed error
+        }
+    }
+
+    return DEFAULT_DISTILLATION_LOGS;
 };
 
-export const addDistillationLog = async (log: Omit<DistillationLog, 'id' | 'createdAt'>): Promise<void> => {
-    await getCollection('distillationLogs').add({
+export const addDistillationLog = async (log: Omit<DistillationLog, 'id' | 'createdAt'>): Promise<DistillationLog> => {
+    const createdAt = new Date().toISOString();
+    const newId = 'dist_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
+    const newRecord: DistillationLog = {
         ...log,
-        createdAt: new Date().toISOString()
-    });
+        id: newId,
+        createdAt
+    };
+
+    // Save to local backup first for instant responsiveness
+    try {
+        const backupStr = localStorage.getItem('backup_distillationLogs');
+        const currentList: DistillationLog[] = backupStr ? JSON.parse(backupStr) : [...DEFAULT_DISTILLATION_LOGS];
+        const updatedList = [newRecord, ...currentList];
+        safeSetItem('backup_distillationLogs', JSON.stringify(updatedList));
+    } catch (e) {
+        console.error("Error saving distillation log to local backup:", e);
+    }
+
+    // Also persist to Firestore if available
+    if (firestore) {
+        try {
+            const docRef = await getCollection('distillationLogs').add({
+                ...log,
+                createdAt
+            });
+            newRecord.id = docRef.id;
+        } catch (e) {
+            console.warn("Could not save distillation log to firestore:", e);
+        }
+    }
+
+    return newRecord;
 };
 
 export const updateDistillationLog = async (id: string, updates: Partial<DistillationLog>): Promise<void> => {
-    await getCollection('distillationLogs').doc(id).update(updates);
+    // Update local backup
+    try {
+        const backupStr = localStorage.getItem('backup_distillationLogs');
+        if (backupStr) {
+            const currentList: DistillationLog[] = JSON.parse(backupStr);
+            const updatedList = currentList.map(item => item.id === id ? { ...item, ...updates } : item);
+            safeSetItem('backup_distillationLogs', JSON.stringify(updatedList));
+        }
+    } catch (e) {
+        console.error("Error updating local backup_distillationLogs:", e);
+    }
+
+    if (firestore && !id.startsWith('dist_seed_') && !id.startsWith('dist_')) {
+        try {
+            await getCollection('distillationLogs').doc(id).update(updates);
+        } catch (e) {
+            console.warn("Could not update distillation log on firestore:", e);
+        }
+    }
 };
 
 export const deleteDistillationLog = async (id: string): Promise<void> => {
-    await getCollection('distillationLogs').doc(id).delete();
+    // Remove from local backup
+    try {
+        const backupStr = localStorage.getItem('backup_distillationLogs');
+        if (backupStr) {
+            const currentList: DistillationLog[] = JSON.parse(backupStr);
+            const updatedList = currentList.filter(item => item.id !== id);
+            safeSetItem('backup_distillationLogs', JSON.stringify(updatedList));
+        }
+    } catch (e) {
+        console.error("Error deleting from local backup_distillationLogs:", e);
+    }
+
+    if (firestore && !id.startsWith('dist_seed_') && !id.startsWith('dist_')) {
+        try {
+            await getCollection('distillationLogs').doc(id).delete();
+        } catch (e) {
+            console.warn("Could not delete distillation log on firestore:", e);
+        }
+    }
 };
 
 // --- Booking System Logic ---
@@ -1326,24 +1502,61 @@ export const deleteEnvironmentLog = async (id: string): Promise<void> => {
     await getCollection('environmentLogs').doc(id).delete();
 };
 
+const DEFAULT_CHEMICAL_PRICES: Record<string, number> = {
+    'Ethanol': 350,       // ฿/Liter
+    'Methanol': 280,      // ฿/Liter
+    'Hexane': 420,        // ฿/Liter
+    'Acetone': 320,       // ฿/Liter
+    'Acetonitrile': 1450, // ฿/Liter
+    'Isopropanol': 380,   // ฿/Liter
+    'Xylene': 490,        // ฿/Liter
+    'Toluene': 460        // ฿/Liter
+};
+
 export const getChemicalPrices = async (): Promise<Record<string, number>> => {
-    try {
-        const docSnap = await getCollection('settings').doc('chemicalPrices').get();
-        if (docSnap.exists) {
-            return docSnap.data() as Record<string, number>;
+    let prices: Record<string, number> = { ...DEFAULT_CHEMICAL_PRICES };
+    
+    // Check local storage backup
+    const backupStr = localStorage.getItem('backup_chemicalPrices');
+    if (backupStr) {
+        try {
+            const parsed = JSON.parse(backupStr);
+            prices = { ...prices, ...parsed };
+        } catch (e) {
+            console.error("Error parsing backup_chemicalPrices:", e);
         }
-        return {};
-    } catch (error) {
-        console.error("Error fetching chemical prices:", error);
-        return {};
     }
+
+    if (firestore) {
+        try {
+            const docSnap = await getCollection('settings').doc('chemicalPrices').get();
+            if (docSnap.exists) {
+                const firestorePrices = docSnap.data() as Record<string, number>;
+                prices = { ...prices, ...firestorePrices };
+                safeSetItem('backup_chemicalPrices', JSON.stringify(prices));
+            }
+        } catch (error) {
+            console.warn("Error fetching chemical prices from firestore:", error);
+        }
+    }
+
+    return prices;
 };
 
 export const saveChemicalPrices = async (prices: Record<string, number>): Promise<void> => {
+    // Save to local backup
     try {
-        await getCollection('settings').doc('chemicalPrices').set(prices, { merge: true });
-    } catch (error) {
-        console.error("Error saving chemical prices:", error);
+        safeSetItem('backup_chemicalPrices', JSON.stringify(prices));
+    } catch (e) {
+        console.error("Error saving backup_chemicalPrices:", e);
+    }
+
+    if (firestore) {
+        try {
+            await getCollection('settings').doc('chemicalPrices').set(prices, { merge: true });
+        } catch (error) {
+            console.warn("Error saving chemical prices to firestore:", error);
+        }
     }
 };
 
