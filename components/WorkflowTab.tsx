@@ -61,46 +61,55 @@ export const WorkflowTab: React.FC<WorkflowTabProps> = ({ equipments, onEquipmen
 
         (equipments || []).forEach(eq => {
             if (!eq) return;
-            const pmMonth = normalizeMonth(eq.pm?.lastPM || eq.pm?.nextPM);
-            const calMonth = normalizeMonth(eq.cal?.lastCal || eq.cal?.nextCal);
-            const displayMonth = pmMonth || calMonth || 'Oct';
+            const rawPM = eq.pm?.lastPM !== undefined ? eq.pm.lastPM : eq.pm?.nextPM;
+            const rawCal = eq.cal?.lastCal !== undefined ? eq.cal.lastCal : eq.cal?.nextCal;
+            const pmMonth = (rawPM === '-' || eq.pm?.freqYear === '-') ? '' : normalizeMonth(rawPM);
+            const calMonth = (rawCal === '-' || eq.cal?.freqYear === '-') ? '' : normalizeMonth(rawCal);
+            const displayMonth = pmMonth || calMonth || '-';
 
-            list.push({
-                id: eq.id,
-                isSub: false,
-                equipmentNo: eq.equipmentNo,
-                equipmentName: eq.equipmentName,
-                owner: eq.owner || 'Unassigned',
-                location: eq.location || 'Main Lab',
-                department: eq.department || 'Lab',
-                month: displayMonth,
-                assignee: eq.pm?.pmBy || eq.cal?.calBy || 'Vender',
-                trackingStatus: eq.trackingStatus || {
-                    quotationRequested: false, prIssued: false, vendorScheduled: false,
-                    certReceived: false, certDelivered: false, result: 'Pending'
-                }
-            });
-
-            (eq.subEquipments || []).forEach(sub => {
-                if (!sub) return;
-                const subPMMonth = normalizeMonth(sub.pm?.lastPM || sub.pm?.nextPM);
-                const subCalMonth = normalizeMonth(sub.cal?.lastCal || sub.cal?.nextCal);
+            if (displayMonth !== '-') {
                 list.push({
-                    id: sub.id,
-                    parentId: eq.id,
-                    isSub: true,
-                    equipmentNo: sub.equipmentNo,
-                    equipmentName: sub.equipmentName,
-                    owner: sub.owner || eq.owner || 'Unassigned',
+                    id: eq.id,
+                    isSub: false,
+                    equipmentNo: eq.equipmentNo,
+                    equipmentName: eq.equipmentName,
+                    owner: eq.owner || 'Unassigned',
                     location: eq.location || 'Main Lab',
                     department: eq.department || 'Lab',
-                    month: subPMMonth || subCalMonth || displayMonth,
-                    assignee: sub.pm?.pmBy || sub.cal?.calBy || 'Vender',
-                    trackingStatus: sub.trackingStatus || {
+                    month: displayMonth,
+                    assignee: eq.pm?.pmBy || eq.cal?.calBy || 'Vender',
+                    trackingStatus: eq.trackingStatus || {
                         quotationRequested: false, prIssued: false, vendorScheduled: false,
                         certReceived: false, certDelivered: false, result: 'Pending'
                     }
                 });
+            }
+
+            (eq.subEquipments || []).forEach(sub => {
+                if (!sub) return;
+                const rawSubPM = sub.pm?.lastPM !== undefined ? sub.pm.lastPM : sub.pm?.nextPM;
+                const rawSubCal = sub.cal?.lastCal !== undefined ? sub.cal.lastCal : sub.cal?.nextCal;
+                const subPMMonth = (rawSubPM === '-' || sub.pm?.freqYear === '-') ? '' : normalizeMonth(rawSubPM);
+                const subCalMonth = (rawSubCal === '-' || sub.cal?.freqYear === '-') ? '' : normalizeMonth(rawSubCal);
+                const subMonth = subPMMonth || subCalMonth || '-';
+                if (subMonth !== '-') {
+                    list.push({
+                        id: sub.id,
+                        parentId: eq.id,
+                        isSub: true,
+                        equipmentNo: sub.equipmentNo,
+                        equipmentName: sub.equipmentName,
+                        owner: sub.owner || eq.owner || 'Unassigned',
+                        location: eq.location || 'Main Lab',
+                        department: eq.department || 'Lab',
+                        month: subMonth,
+                        assignee: sub.pm?.pmBy || sub.cal?.calBy || 'Vender',
+                        trackingStatus: sub.trackingStatus || {
+                            quotationRequested: false, prIssued: false, vendorScheduled: false,
+                            certReceived: false, certDelivered: false, result: 'Pending'
+                        }
+                    });
+                }
             });
         });
 

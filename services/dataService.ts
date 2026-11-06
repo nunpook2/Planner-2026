@@ -2,7 +2,7 @@
 import { firestore } from './firebase';
 import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, AssignedPrepareTask, TestMapping, ShiftReport, Equipment, DistillationLog, Booking, ProficiencyTest, ProficiencyRecord, SupportRequest, Walkthrough, BorrowRecord } from '../types';
 import { TaskCategory } from '../types';
-import { normalizeMonth, isToleranceString } from '../utils/monthUtils';
+import { normalizeMonth, isToleranceString, inferEquipmentSetGroup } from '../utils/monthUtils';
 import { MASTER_EQUIPMENTS, MASTER_EQUIPMENT_OWNERS } from './masterEquipments';
 
 // Export firestore for use in components
@@ -216,31 +216,74 @@ export const sortEquipmentsNaturally = (list: Equipment[]): Equipment[] => {
 };
 
 export const INITIAL_EQUIPMENTS: Equipment[] = MASTER_EQUIPMENTS;
+
+const getDeterministicEquipId = (eqNo: string, fallbackId?: string): string => {
+    const clean = normalizeEquipmentNo(eqNo);
+    if (clean) {
+        return 'eq_' + clean.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    }
+    return fallbackId || 'eq_' + Math.random().toString(36).substr(2, 9);
+};
+
+const getDeterministicSubId = (subNo: string, fallbackId?: string): string => {
+    const clean = normalizeEquipmentNo(subNo);
+    if (clean) {
+        return 'sub_' + clean.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    }
+    return fallbackId || 'sub_' + Math.random().toString(36).substr(2, 9);
+};
+
 const sanitizePmDetails = (pm: any, raw?: any) => {
-    let rawLastPM = pm?.lastPM || raw?.pmMonth || '';
+    const explicitLast = (pm?.lastPM !== undefined && String(pm.lastPM).trim() !== '')
+        ? pm.lastPM
+        : (pm?.nextPM !== undefined ? pm.nextPM : (raw?.pmMonth ?? ''));
+    let rawLastPM = String(explicitLast ?? '').trim();
     let tolerance = pm?.tolerance || raw?.pmTolerance || 'Pass/Fail';
     if (isToleranceString(rawLastPM)) {
         if (!tolerance || tolerance === 'Pass/Fail') tolerance = String(rawLastPM);
         rawLastPM = '';
     }
+
+    const lowerPM = rawLastPM.toLowerCase();
+    // Explicitly check if PM is cancelled / set to None
+    // Note: Do NOT check nextPM === '-' because MASTER_EQUIPMENTS can have a valid lastPM alongside nextPM: '-'
+    const isNoPM = !rawLastPM || rawLastPM === '-' || lowerPM === 'none' || lowerPM === 'ไม่มี' || lowerPM === 'n/a' ||
+                   String(pm?.lastPM ?? '').trim() === '-' ||
+                   String(pm?.freqYear ?? '').trim() === '-' || pm?.freqYear === 0;
+
+    if (isNoPM) {
+        return {
+            freqYear: '-',
+            lastPM: '-',
+            nextPM: '-',
+            pmBy: pm?.pmBy || raw?.pmBy || 'Vender',
+            items: pm?.items || raw?.pmItems || 'ตามรายการ Vender',
+            tolerance: tolerance || 'Pass/Fail',
+            ...(pm?.intervalYears ? { intervalYears: Number(pm.intervalYears) } : {}),
+            ...(pm?.baseYear ? { baseYear: Number(pm.baseYear) } : {})
+        };
+    }
+
     let lastPM = normalizeMonth(rawLastPM);
     let nextPM = normalizeMonth(pm?.nextPM || rawLastPM) || lastPM;
-    
-    // Check if explicitly no PM
-    const isNoPM = String(rawLastPM).trim() === '-' || String(pm?.freqYear).trim() === '-' || pm?.freqYear === 0;
 
     return {
-        freqYear: isNoPM ? '-' : (pm?.freqYear ?? raw?.pmFreq ?? 1),
-        lastPM: isNoPM ? '-' : (lastPM || 'Nov'),
-        nextPM: isNoPM ? '-' : (nextPM || lastPM || 'Nov'),
+        freqYear: pm?.freqYear ?? raw?.pmFreq ?? 1,
+        lastPM: lastPM || '-',
+        nextPM: nextPM || lastPM || '-',
         pmBy: pm?.pmBy || raw?.pmBy || 'Vender',
         items: pm?.items || raw?.pmItems || 'ตามรายการ Vender',
-        tolerance: tolerance || 'Pass/Fail'
+        tolerance: tolerance || 'Pass/Fail',
+        ...(pm?.intervalYears ? { intervalYears: Number(pm.intervalYears) } : {}),
+        ...(pm?.baseYear ? { baseYear: Number(pm.baseYear) } : {})
     };
 };
 
 const sanitizeCalDetails = (cal: any, raw?: any) => {
-    let rawLastCal = cal?.lastCal || raw?.calMonth || '';
+    const explicitLast = (cal?.lastCal !== undefined && String(cal.lastCal).trim() !== '')
+        ? cal.lastCal
+        : (cal?.nextCal !== undefined ? cal.nextCal : (raw?.calMonth ?? ''));
+    let rawLastCal = String(explicitLast ?? '').trim();
     let tolerance = cal?.tolerance || raw?.tolerance || '';
 
     // If lastCal contains tolerance (e.g. ± 5 um), heal and move it into tolerance
@@ -251,19 +294,38 @@ const sanitizeCalDetails = (cal: any, raw?: any) => {
         rawLastCal = '';
     }
 
+    const lowerCal = rawLastCal.toLowerCase();
+    // Explicitly check if Cal is cancelled / set to None
+    // Note: Do NOT check nextCal === '-' because MASTER_EQUIPMENTS has 49 items with a valid lastCal alongside nextCal: '-'
+    const isNoCal = !rawLastCal || rawLastCal === '-' || lowerCal === 'none' || lowerCal === 'ไม่มี' || lowerCal === 'n/a' ||
+                    String(cal?.lastCal ?? '').trim() === '-' ||
+                    String(cal?.freqYear ?? '').trim() === '-' || cal?.freqYear === 0;
+
+    if (isNoCal) {
+        return {
+            freqYear: '-',
+            lastCal: '-',
+            nextCal: '-',
+            calBy: cal?.calBy || raw?.calBy || 'Vender',
+            items: cal?.items || raw?.calItems || 'ตามรายการ Vender',
+            tolerance: tolerance || 'Pass/Fail',
+            ...(cal?.intervalYears ? { intervalYears: Number(cal.intervalYears) } : {}),
+            ...(cal?.baseYear ? { baseYear: Number(cal.baseYear) } : {})
+        };
+    }
+
     let lastCal = normalizeMonth(rawLastCal);
     let nextCal = normalizeMonth(cal?.nextCal || rawLastCal) || lastCal;
 
-    // Check if explicitly no Cal
-    const isNoCal = String(rawLastCal).trim() === '-' || String(cal?.freqYear).trim() === '-' || cal?.freqYear === 0;
-
     return {
-        freqYear: isNoCal ? '-' : (cal?.freqYear ?? raw?.calFreq ?? 1),
-        lastCal: isNoCal ? '-' : (lastCal || 'Nov'),
-        nextCal: isNoCal ? '-' : (nextCal || lastCal || 'Nov'),
+        freqYear: cal?.freqYear ?? raw?.calFreq ?? 1,
+        lastCal: lastCal || '-',
+        nextCal: nextCal || lastCal || '-',
         calBy: cal?.calBy || raw?.calBy || 'Vender',
         items: cal?.items || raw?.calItems || 'ตามรายการ Vender',
-        tolerance: tolerance || 'Pass/Fail'
+        tolerance: tolerance || 'Pass/Fail',
+        ...(cal?.intervalYears ? { intervalYears: Number(cal.intervalYears) } : {}),
+        ...(cal?.baseYear ? { baseYear: Number(cal.baseYear) } : {})
     };
 };
 
@@ -280,9 +342,13 @@ const normalizeEquipment = (raw: any): Equipment => {
         owner = stdOwner;
     }
 
+    const sanitizedPM = sanitizePmDetails(raw.pm, raw);
+    const sanitizedCal = sanitizeCalDetails(raw.cal, raw);
+    const primarySetGroup = raw.setGroup || inferEquipmentSetGroup(equipName, raw.setGroup);
+
     return {
         ...raw,
-        id: raw.id || 'eq_' + Math.random().toString(36).substr(2, 9),
+        id: getDeterministicEquipId(cleanNo || rawNo, raw.id),
         equipmentNo: cleanNo || rawNo,
         equipmentName: equipName,
         name: equipName,
@@ -290,8 +356,11 @@ const normalizeEquipment = (raw: any): Equipment => {
         department: raw.department || 'PCRD Lab',
         location: raw.location || '',
         status: raw.status || 'ready',
-        pm: sanitizePmDetails(raw.pm, raw),
-        cal: sanitizeCalDetails(raw.cal, raw),
+        pmMonth: sanitizedPM.lastPM,
+        calMonth: sanitizedCal.lastCal,
+        pm: sanitizedPM,
+        cal: sanitizedCal,
+        ...(primarySetGroup ? { setGroup: primarySetGroup } : {}),
         trackingStatus: raw.trackingStatus || {
             quotationRequested: false,
             prIssued: false,
@@ -311,20 +380,23 @@ const normalizeEquipment = (raw: any): Equipment => {
             .map((s: any, sIdx: number) => {
                 const subRawNo = String(s.equipmentNo || s.code || '').trim();
                 const subCleanNo = normalizeEquipmentNo(subRawNo) || (cleanNo ? `${cleanNo}/0${sIdx + 1}` : 'SUB-EQ');
-                const subStdOwner = getStandardOwner(subCleanNo, s.equipmentName || s.name) || owner;
+                const subName = String(s.equipmentName || s.name || 'Sub-Equipment');
+                const subStdOwner = getStandardOwner(subCleanNo, subName) || owner;
                 const subRawOwner = String(s.owner || '').trim();
                 let subOwner = subRawOwner;
                 const subUpper = subRawOwner.toUpperCase();
                 if (!subRawOwner || subUpper === 'PDF' || subUpper === 'EQUIPMENTNO' || subUpper === 'PORNTHAK') {
                     subOwner = subStdOwner;
                 }
+                const subSetGroup = s.setGroup || inferEquipmentSetGroup(subName, s.setGroup);
 
                 return {
                     ...s,
-                    id: s.id || 'sub_' + Math.random().toString(36).substr(2, 9),
+                    id: getDeterministicSubId(subCleanNo, s.id),
                     equipmentNo: subCleanNo,
-                    equipmentName: String(s.equipmentName || s.name || 'Sub-Equipment'),
+                    equipmentName: subName,
                     owner: subOwner,
+                    ...(subSetGroup ? { setGroup: subSetGroup } : {}),
                     pm: s.pm ? sanitizePmDetails(s.pm) : undefined,
                     cal: s.cal ? sanitizeCalDetails(s.cal) : undefined,
                     trackingStatus: s.trackingStatus || {
@@ -340,96 +412,154 @@ const normalizeEquipment = (raw: any): Equipment => {
     };
 };
 
-export const CURRENT_MASTER_VERSION = 'v2026_10_master_161_tsv_v3';
+export const CURRENT_MASTER_VERSION = 'v2026_11_master_162_restored_v5';
+
+const hasActiveTrackingProgress = (st: any): boolean => {
+    if (!st) return false;
+    return Boolean(
+        st.quotationRequested ||
+        st.prIssued ||
+        st.vendorScheduled ||
+        st.certReceived ||
+        st.certDelivered ||
+        (st.result && st.result !== 'Pending') ||
+        st.appointmentDate ||
+        st.prNo ||
+        st.vendorName
+    );
+};
 
 // --- Equipment Management ---
 export const getEquipments = async (): Promise<Equipment[]> => {
-    // If client cache is from an older version, refresh to master file data
     const clientVersion = localStorage.getItem('master_version_key');
     if (clientVersion !== CURRENT_MASTER_VERSION) {
         localStorage.removeItem('backup_equipments');
+        localStorage.removeItem('deleted_equipment_nos');
         localStorage.setItem('master_version_key', CURRENT_MASTER_VERSION);
     }
 
-    let rawList: any[] = [];
-    if (!firestore) {
-        const backup = localStorage.getItem('backup_equipments');
-        if (backup) {
-            try {
-                const parsed = JSON.parse(backup);
-                if (Array.isArray(parsed) && parsed.length > 0) rawList = parsed;
-            } catch (e) {}
+    // 1. Start with all 70 Master Equipments (+ 92 Sub-Equipments = 162 items) as canonical baseline
+    const mergedMap = new Map<string, any>();
+    MASTER_EQUIPMENTS.forEach(item => {
+        const cleanNo = normalizeEquipmentNo(item.equipmentNo);
+        if (cleanNo) {
+            mergedMap.set(cleanNo, JSON.parse(JSON.stringify(item)));
         }
-        if (rawList.length === 0) rawList = INITIAL_EQUIPMENTS;
-    } else {
+    });
+
+    // Track deleted equipment numbers
+    const deletedSet = new Set<string>();
+    try {
+        const deletedRaw = localStorage.getItem('deleted_equipment_nos');
+        if (deletedRaw) {
+            const parsedDel = JSON.parse(deletedRaw);
+            if (Array.isArray(parsedDel)) parsedDel.forEach(no => deletedSet.add(String(no)));
+        }
+    } catch (e) {}
+
+    // 2. Overlay localStorage backup (for offline / immediate local state)
+    const backup = localStorage.getItem('backup_equipments');
+    if (backup) {
+        try {
+            const localList = JSON.parse(backup);
+            if (Array.isArray(localList)) {
+                localList.forEach((localEq: any) => {
+                    if (!localEq) return;
+                    const cleanNo = normalizeEquipmentNo(localEq.equipmentNo || localEq.code || '');
+                    if (!cleanNo) return;
+                    if (localEq.isDeleted) {
+                        deletedSet.add(cleanNo);
+                        mergedMap.delete(cleanNo);
+                        return;
+                    }
+                    const existing = mergedMap.get(cleanNo);
+                    mergedMap.set(cleanNo, existing ? { ...existing, ...localEq } : localEq);
+                });
+            }
+        } catch (e) {}
+    }
+
+    // 3. Overlay Firestore documents (Cloud shared state across Dev & Deployed URLs)
+    if (firestore) {
         try {
             const snapshot = await safeGet(getCollection('equipments'));
-            const list = snapshot.docs.map((doc: any) => {
-                const data = doc.data();
-                return {
-                    ...data,
-                    id: doc.id || data.id
-                };
+            const serverDocs = snapshot.docs.map((doc: any) => ({
+                ...doc.data(),
+                id: doc.id || doc.data()?.id
+            }));
+
+            serverDocs.forEach((serverEq: any) => {
+                if (!serverEq) return;
+                const cleanNo = normalizeEquipmentNo(serverEq.equipmentNo || serverEq.code || '');
+                if (!cleanNo || cleanNo.includes('/')) return;
+
+                const isCurrentVersionDoc = serverEq.syncVersion === CURRENT_MASTER_VERSION;
+
+                if (isCurrentVersionDoc && serverEq.isDeleted) {
+                    deletedSet.add(cleanNo);
+                    mergedMap.delete(cleanNo);
+                    return;
+                }
+
+                const currentInMap = mergedMap.get(cleanNo);
+                if (!currentInMap) {
+                    if (isCurrentVersionDoc) {
+                        mergedMap.set(cleanNo, serverEq);
+                    }
+                } else if (isCurrentVersionDoc) {
+                    const localTime = currentInMap.lastUpdated ? new Date(currentInMap.lastUpdated).getTime() : 0;
+                    const serverTime = serverEq.lastUpdated ? new Date(serverEq.lastUpdated).getTime() : 0;
+
+                    if (serverTime >= localTime || !currentInMap.lastUpdated) {
+                        mergedMap.set(cleanNo, { ...currentInMap, ...serverEq });
+                    }
+                } else {
+                    // Legacy Firestore document (before CURRENT_MASTER_VERSION):
+                    // Never allow legacy docs to wipe out PM/Cal months or subEquipments list,
+                    // but DO preserve any active 6-step trackingStatus, breakdownStatus, or history!
+                    const mergedLegacy = { ...currentInMap };
+                    if (hasActiveTrackingProgress(serverEq.trackingStatus) && !hasActiveTrackingProgress(mergedLegacy.trackingStatus)) {
+                        mergedLegacy.trackingStatus = serverEq.trackingStatus;
+                    }
+                    if (serverEq.breakdownStatus && (serverEq.breakdownStatus.isBroken || (serverEq.breakdownStatus.history && serverEq.breakdownStatus.history.length > 0))) {
+                        mergedLegacy.breakdownStatus = serverEq.breakdownStatus;
+                        if (serverEq.status) mergedLegacy.status = serverEq.status;
+                    }
+                    if (Array.isArray(serverEq.history) && serverEq.history.length > 0 && (!mergedLegacy.history || mergedLegacy.history.length === 0)) {
+                        mergedLegacy.history = serverEq.history;
+                    }
+                    if (Array.isArray(serverEq.subEquipments) && Array.isArray(mergedLegacy.subEquipments)) {
+                        const serverSubMap = new Map<string, any>();
+                        serverEq.subEquipments.forEach((s: any) => {
+                            const sNo = normalizeEquipmentNo(s?.equipmentNo || '');
+                            if (sNo) serverSubMap.set(sNo, s);
+                        });
+                        mergedLegacy.subEquipments = mergedLegacy.subEquipments.map((mSub: any) => {
+                            const mSubNo = normalizeEquipmentNo(mSub?.equipmentNo || '');
+                            const sSub = serverSubMap.get(mSubNo);
+                            if (sSub && hasActiveTrackingProgress(sSub.trackingStatus) && !hasActiveTrackingProgress(mSub.trackingStatus)) {
+                                return { ...mSub, trackingStatus: sSub.trackingStatus };
+                            }
+                            return mSub;
+                        });
+                    }
+                    mergedMap.set(cleanNo, mergedLegacy);
+                }
             });
-            if (list.length > 0) {
-                rawList = list;
-                // Merge with local backup so user mutations take precedence
-                const backup = localStorage.getItem('backup_equipments');
-                if (backup) {
-                    try {
-                        const localList = JSON.parse(backup);
-                        if (Array.isArray(localList)) {
-                            const localMap = new Map<string, any>();
-                            localList.forEach((e: any) => {
-                                if (e.equipmentNo) localMap.set(String(e.equipmentNo).trim(), e);
-                                if (e.id) localMap.set(String(e.id), e);
-                            });
-                            rawList = rawList.map(serverEq => {
-                                const keyNo = String(serverEq.equipmentNo || serverEq.code || '').trim();
-                                const localEq = (keyNo ? localMap.get(keyNo) : null) || (serverEq.id ? localMap.get(serverEq.id) : null);
-                                if (localEq) {
-                                    return { ...serverEq, ...localEq };
-                                }
-                                return serverEq;
-                            });
-                        }
-                    } catch (e) {}
-                }
-            } else {
-                const backup = localStorage.getItem('backup_equipments');
-                if (backup) {
-                    try {
-                        const parsed = JSON.parse(backup);
-                        if (Array.isArray(parsed) && parsed.length > 0) rawList = parsed;
-                    } catch (e) {}
-                }
-                if (rawList.length === 0) rawList = INITIAL_EQUIPMENTS;
-            }
         } catch (err) {
             (window as any).firestoreQuotaExceeded = true;
-            console.error("getEquipments error, loading backup:", err);
-            const backup = localStorage.getItem('backup_equipments');
-            if (backup) {
-                try {
-                    const parsed = JSON.parse(backup);
-                    if (Array.isArray(parsed) && parsed.length > 0) rawList = parsed;
-                } catch (e) {}
-            }
-            if (rawList.length === 0) rawList = INITIAL_EQUIPMENTS;
+            console.warn("getEquipments firestore read fallback to local:", err);
         }
     }
 
-    // If the list in storage or firestore is the old small mock (<= 25 items)
-    // or has the single-owner bug where almost all items have owner "PORNTHAK" or empty,
-    // seed directly with MASTER_EQUIPMENTS from the uploaded master file!
-    const uniqueOwnersInRaw = new Set(rawList.map((e: any) => String(e.owner || '').trim()).filter(Boolean));
-    if (rawList.length <= 25 || uniqueOwnersInRaw.size <= 2) {
-        rawList = JSON.parse(JSON.stringify(MASTER_EQUIPMENTS));
-    }
+    // Remove any explicitly deleted items
+    deletedSet.forEach(no => mergedMap.delete(no));
+
+    const rawList = Array.from(mergedMap.values());
 
     // Filter out phantom items (like "PDF" or header labels)
     const validRaw = rawList.filter(r => {
-        if (!r) return false;
+        if (!r || r.isDeleted) return false;
         const no = String(r.equipmentNo || r.code || '').trim();
         const clean = normalizeEquipmentNo(no);
         if (!clean) return false;
@@ -446,10 +576,8 @@ export const getEquipments = async (): Promise<Equipment[]> => {
         const eq = { ...normalized[i] };
         const eqNo = String(eq.equipmentNo || '').trim();
 
-        // If eqNo became empty after normalization, skip
         if (!eqNo || eqNo.toUpperCase() === 'PDF') continue;
 
-        // If duplicate primary equipment number, merge subEquipments
         if (!eqNo.includes('/') && seenEqNos.has(eqNo)) {
             const existing = seenEqNos.get(eqNo)!;
             if (eq.subEquipments && eq.subEquipments.length > 0) {
@@ -460,17 +588,13 @@ export const getEquipments = async (): Promise<Equipment[]> => {
             continue;
         }
 
-        // Guarantee strictly unique ID
-        if (!eq.id || seenIds.has(eq.id)) {
-            eq.id = `eq_${i}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        }
+        eq.id = getDeterministicEquipId(eqNo, eq.id);
         seenIds.add(eq.id);
 
         if (!eqNo.includes('/')) {
             seenEqNos.set(eqNo, eq);
         }
 
-        // Guarantee sub-equipments have unique IDs and clean codes
         if (eq.subEquipments) {
             const seenSubIds = new Set<string>();
             eq.subEquipments = eq.subEquipments
@@ -479,26 +603,26 @@ export const getEquipments = async (): Promise<Equipment[]> => {
                     return sNo !== '';
                 })
                 .map((sub, sIdx) => {
-                    let subId = sub.id;
-                    if (!subId || seenSubIds.has(subId)) {
-                        subId = `sub_${sIdx}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                    const sNo = normalizeEquipmentNo(String(sub.equipmentNo || '')) || `${eqNo}/0${sIdx + 1}`;
+                    let subId = getDeterministicSubId(sNo, sub.id);
+                    if (seenSubIds.has(subId)) {
+                        subId = `${subId}_${sIdx}`;
                     }
                     seenSubIds.add(subId);
-                    return { ...sub, id: subId };
+                    return { ...sub, equipmentNo: sNo, id: subId };
                 });
         }
 
         uniqueList.push(eq);
     }
 
-    // Reconcile owners to ensure every instrument matches its designated laboratory owner
+    // Reconcile owners to ensure every instrument matches its designated laboratory owner if unset
     uniqueList.forEach(eq => {
         const clean = normalizeEquipmentNo(eq.equipmentNo);
         if (clean) eq.equipmentNo = clean;
         const stdOwner = getStandardOwner(clean, eq.equipmentName);
         if (stdOwner) {
-            // Update owner if empty, invalid, or matching legacy single-owner fallback
-            if (!eq.owner || eq.owner === 'PORNTHAK' || eq.owner === 'PDF' || eq.owner === 'EQ-UNKNOWN') {
+            if (!eq.owner || eq.owner === 'PDF' || eq.owner === 'EQ-UNKNOWN') {
                 eq.owner = stdOwner;
             }
         }
@@ -507,14 +631,13 @@ export const getEquipments = async (): Promise<Equipment[]> => {
                 const sClean = normalizeEquipmentNo(s.equipmentNo) || `${clean}/0${sIdx + 1}`;
                 s.equipmentNo = sClean;
                 const sStdOwner = getStandardOwner(sClean, s.equipmentName) || eq.owner;
-                if (sStdOwner && (!s.owner || s.owner === 'PORNTHAK' || s.owner === 'PDF')) {
+                if (sStdOwner && (!s.owner || s.owner === 'PDF')) {
                     s.owner = sStdOwner;
                 }
             });
         }
     });
 
-    // Sort naturally: PDS-1001 ... PDS-1048-01
     const sortedList = sortEquipmentsNaturally(uniqueList);
     safeSetItem('backup_equipments', JSON.stringify(sortedList));
     return sortedList;
@@ -526,6 +649,7 @@ export const reconcileEquipmentStandards = async (): Promise<Equipment[]> => {
     if (list.length <= 25) {
         list = JSON.parse(JSON.stringify(MASTER_EQUIPMENTS));
     }
+    const nowIso = new Date().toISOString();
     const cleanList = list
         .filter(eq => {
             const clean = normalizeEquipmentNo(eq.equipmentNo);
@@ -543,15 +667,19 @@ export const reconcileEquipmentStandards = async (): Promise<Equipment[]> => {
                     const subCleanNo = normalizeEquipmentNo(sub.equipmentNo) || `${cleanNo}/0${sIdx + 1}`;
                     return {
                         ...sub,
+                        id: getDeterministicSubId(subCleanNo, sub.id),
                         equipmentNo: subCleanNo,
                         owner: getStandardOwner(subCleanNo, sub.equipmentName) || targetOwner
                     };
                 });
             return {
                 ...eq,
+                id: getDeterministicEquipId(cleanNo, eq.id),
                 equipmentNo: cleanNo,
                 owner: targetOwner,
-                subEquipments: cleanSubs
+                subEquipments: cleanSubs,
+                syncVersion: CURRENT_MASTER_VERSION,
+                lastUpdated: nowIso
             };
         });
 
@@ -563,7 +691,7 @@ export const reconcileEquipmentStandards = async (): Promise<Equipment[]> => {
             const batch = firestore.batch();
             const col = getCollection('equipments');
             sorted.forEach(eq => {
-                batch.set(col.doc(eq.id), JSON.parse(JSON.stringify(eq)));
+                batch.set(col.doc(eq.id), JSON.parse(JSON.stringify(eq)), { merge: true });
             });
             await batch.commit();
         } catch (e) {
@@ -577,8 +705,14 @@ export const reconcileEquipmentStandards = async (): Promise<Equipment[]> => {
 // Explicitly reset the system 100% to the exact data from the uploaded Master Plan file
 export const resetToMasterEquipments = async (): Promise<Equipment[]> => {
     localStorage.removeItem('backup_equipments');
+    localStorage.removeItem('deleted_equipment_nos');
     localStorage.setItem('master_version_key', CURRENT_MASTER_VERSION);
-    const freshList: Equipment[] = JSON.parse(JSON.stringify(MASTER_EQUIPMENTS));
+    const nowIso = new Date().toISOString();
+    const freshList: Equipment[] = JSON.parse(JSON.stringify(MASTER_EQUIPMENTS)).map((eq: any) => ({
+        ...normalizeEquipment(eq),
+        syncVersion: CURRENT_MASTER_VERSION,
+        lastUpdated: nowIso
+    }));
     const sorted = sortEquipmentsNaturally(freshList);
     safeSetItem('backup_equipments', JSON.stringify(sorted));
 
@@ -599,48 +733,52 @@ export const resetToMasterEquipments = async (): Promise<Equipment[]> => {
 };
 
 export const saveEquipment = async (equipment: Omit<Equipment, 'id'> & { id?: string }): Promise<void> => {
+    const cleanEqNo = normalizeEquipmentNo(equipment.equipmentNo || '');
+    const deterministicId = getDeterministicEquipId(cleanEqNo || equipment.equipmentNo || '', equipment.id);
+    const nowIso = new Date().toISOString();
+
+    const stampedEquipment: any = {
+        ...(equipment as Equipment),
+        id: deterministicId,
+        equipmentNo: cleanEqNo || equipment.equipmentNo,
+        syncVersion: CURRENT_MASTER_VERSION,
+        lastUpdated: nowIso
+    };
+
     try {
         const backupStr = localStorage.getItem('backup_equipments') || '[]';
         let list = JSON.parse(backupStr) as Equipment[];
-        const targetEqNo = equipment.equipmentNo ? String(equipment.equipmentNo).trim() : '';
-        const targetId = equipment.id ? String(equipment.id) : '';
+        const targetEqNo = stampedEquipment.equipmentNo ? String(stampedEquipment.equipmentNo).trim() : '';
         
         const existingIdx = list.findIndex(e => 
-            (targetId && String(e.id) === targetId) || 
-            (targetEqNo && String(e.equipmentNo || '').trim() === targetEqNo)
+            String(e.id) === deterministicId || 
+            (targetEqNo && normalizeEquipmentNo(e.equipmentNo || '') === targetEqNo)
         );
 
         if (existingIdx >= 0) {
             list[existingIdx] = { 
                 ...list[existingIdx], 
-                ...equipment, 
-                id: list[existingIdx].id || targetId || 'eq_local_' + Math.random().toString(36).substr(2, 9)
+                ...stampedEquipment
             };
         } else {
-            list.push({ 
-                ...equipment, 
-                id: targetId || 'eq_local_' + Math.random().toString(36).substr(2, 9) 
-            } as Equipment);
+            list.push(stampedEquipment);
         }
         safeSetItem('backup_equipments', JSON.stringify(list));
     } catch (e) {
         console.error("Error backing up equipment:", e);
     }
 
-    const { id, ...data } = equipment;
     // Deep clean all undefined values at any level to prevent Firestore setDoc crashes
-    const cleanData = JSON.parse(JSON.stringify(data));
+    const cleanData = JSON.parse(JSON.stringify(stampedEquipment));
 
     if (firestore) {
         try {
-            const writePromise = (id && !String(id).startsWith('eq_local_'))
-                ? getCollection('equipments').doc(id).set(cleanData)
-                : getCollection('equipments').add(cleanData);
+            const writePromise = getCollection('equipments').doc(deterministicId).set(cleanData, { merge: true });
             
-            // Timeout after 2000ms so Firestore never freezes the application UI
+            // Timeout after 3500ms so Firestore never freezes the application UI
             await Promise.race([
                 writePromise,
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 2000))
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 3500))
             ]);
         } catch (err) {
             console.warn("Firestore saveEquipment warning, data preserved in local backup:", err);

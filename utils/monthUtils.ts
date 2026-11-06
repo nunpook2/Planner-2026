@@ -278,3 +278,91 @@ export function getPreparationTimeline(targetMonthKey: string) {
         ]
     };
 }
+
+/**
+ * Automatically detects whether an equipment or sub-equipment belongs to Alternating Set A or Set B
+ * based on explicit designation or standard naming conventions (e.g. "Test SIEVE 45um(No.325)A", "Float C2-1B").
+ */
+export function inferEquipmentSetGroup(equipmentName?: string, explicitGroup?: string): 'A' | 'B' | undefined {
+    if (explicitGroup === 'A' || explicitGroup === 'B') return explicitGroup;
+    if (explicitGroup === 'None') return undefined;
+    if (!equipmentName) return undefined;
+    const s = String(equipmentName).trim();
+    if (/\)\s*A$/i.test(s) || /-\d+A\b/i.test(s) || /\bSet\s*A\b/i.test(s) || /ชุด\s*A\b/i.test(s)) {
+        return 'A';
+    }
+    if (/\)\s*B$/i.test(s) || /-\d+B\b/i.test(s) || /\bSet\s*B\b/i.test(s) || /ชุด\s*B\b/i.test(s)) {
+        return 'B';
+    }
+    return undefined;
+}
+
+export interface MultiYearCycleInfo {
+    intervalYears: number;      // 1 = ทุกปี, 2 = ทุก 2 ปี, 3 = ทุก 3 ปี
+    baseYear: number;           // ปีอ้างอิงที่ถึงกำหนดส่งทำ เช่น 2026 หรือ 2027
+    isMultiYear: boolean;       // true เมื่อ intervalYears > 1
+    isDueInYear: boolean;       // true เมื่อถึงกำหนดส่งทำในปี planningYear ที่เลือกดู
+    nextDueYear: number;        // ปีที่ถึงกำหนดส่งทำ (ถ้าปีนี้เว้นรอบ จะแสดงปีถัดไปที่ต้องส่ง เช่น 2027)
+    followingCycleYear: number; // รอบปีถัดไปหลังจากส่งรอบนี้ (เช่น ส่ง 2026 -> รอบหน้า 2028)
+    cycleBadge: string;         // ป้ายกำกับสั้นในตาราง
+    roleLabel: string;          // คำอธิบายสถานะสำหรับ Planner
+}
+
+/**
+ * Computes whether a PM or Calibration item is due in the selected planningYear
+ * when configured for multi-year or alternating A/B set cycles (e.g. every 2 or 3 years).
+ */
+export function getMultiYearCycleStatus(
+    details: { intervalYears?: number; baseYear?: number; freqYear?: string | number } | undefined,
+    planningYear: number = 2026,
+    setGroup?: 'A' | 'B' | string
+): MultiYearCycleInfo {
+    let interval = Number(details?.intervalYears) || 1;
+    if (details?.freqYear === 0.5 && interval === 1) {
+        interval = 2;
+    }
+    if (interval <= 1) {
+        return {
+            intervalYears: 1,
+            baseYear: planningYear,
+            isMultiYear: false,
+            isDueInYear: true,
+            nextDueYear: planningYear,
+            followingCycleYear: planningYear + 1,
+            cycleBadge: setGroup === 'A' || setGroup === 'B' ? `ชุด ${setGroup} · ทุกปี` : 'ทุกปี',
+            roleLabel: 'ส่งตามรอบปกติทุกปี'
+        };
+    }
+
+    const baseYear = Number(details?.baseYear) || 2026;
+    const diff = ((planningYear - baseYear) % interval + interval) % interval;
+    const isDueInYear = diff === 0;
+    const nextDueYear = isDueInYear ? planningYear : planningYear + (interval - diff);
+    const followingCycleYear = nextDueYear + interval;
+    const setPrefix = (setGroup === 'A' || setGroup === 'B') ? `ชุด ${setGroup} · ` : '';
+
+    if (isDueInYear) {
+        return {
+            intervalYears: interval,
+            baseYear,
+            isMultiYear: true,
+            isDueInYear: true,
+            nextDueYear: planningYear,
+            followingCycleYear,
+            cycleBadge: `${setPrefix}ถึงรอบปี ${planningYear} (ทุก ${interval} ปี)`,
+            roleLabel: `${setPrefix}ถึงกำหนดส่งในปี ${planningYear} (รอบถัดไปปี ${followingCycleYear})`
+        };
+    } else {
+        return {
+            intervalYears: interval,
+            baseYear,
+            isMultiYear: true,
+            isDueInYear: false,
+            nextDueYear,
+            followingCycleYear,
+            cycleBadge: `${setPrefix}เว้นปี ${planningYear} → Cal ปี ${nextDueYear}`,
+            roleLabel: `${setPrefix}ปี ${planningYear} เว้นส่ง Cal (ใช้งานสลับ · ส่ง Cal ปี ${nextDueYear})`
+        };
+    }
+}
+

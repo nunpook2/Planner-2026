@@ -81,8 +81,9 @@ export const PlanTab: React.FC<PlanTabProps> = ({ equipments, onEquipmentUpdated
             };
 
             // Check PM Month
-            const rawPMMonth = pm?.lastPM || pm?.nextPM;
-            const normPMMonth = normalizeMonth(rawPMMonth);
+            const rawPMMonth = pm?.lastPM !== undefined ? pm.lastPM : pm?.nextPM;
+            const isNoPM = !rawPMMonth || rawPMMonth === '-' || pm?.freqYear === '-' || pm?.freqYear === 0;
+            const normPMMonth = isNoPM ? '' : normalizeMonth(rawPMMonth);
             if (normPMMonth && result[normPMMonth]) {
                 result[normPMMonth].push({
                     id: isSub ? `${subId}-pm` : `${eqId}-pm`,
@@ -102,8 +103,9 @@ export const PlanTab: React.FC<PlanTabProps> = ({ equipments, onEquipmentUpdated
             }
 
             // Check Cal Month
-            const rawCalMonth = cal?.lastCal || cal?.nextCal;
-            const normCalMonth = normalizeMonth(rawCalMonth);
+            const rawCalMonth = cal?.lastCal !== undefined ? cal.lastCal : cal?.nextCal;
+            const isNoCal = !rawCalMonth || rawCalMonth === '-' || cal?.freqYear === '-' || cal?.freqYear === 0;
+            const normCalMonth = isNoCal ? '' : normalizeMonth(rawCalMonth);
             if (normCalMonth && result[normCalMonth]) {
                 result[normCalMonth].push({
                     id: isSub ? `${subId}-cal` : `${eqId}-cal`,

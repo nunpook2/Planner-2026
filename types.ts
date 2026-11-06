@@ -176,6 +176,8 @@ export interface PMDetails {
     pmBy?: 'Vender' | 'Owner' | string;
     items?: string;             // รายการที่ทำ PM
     tolerance?: string;         // Tolerance e.g. "Pass/Fail"
+    intervalYears?: number;     // 1 = ทุกปี, 2 = ทุก 2 ปี (สลับชุด), 3 = ทุก 3 ปี
+    baseYear?: number;          // ปีที่มีกำหนดรอบทำ เช่น 2025, 2026, 2027
 }
 
 export interface CalDetails {
@@ -185,6 +187,8 @@ export interface CalDetails {
     calBy?: 'Vender' | 'Owner' | string;
     items?: string;             // รายการที่สอบเทียบ
     tolerance?: string;         // e.g. "± 5°C", "±0.5%"
+    intervalYears?: number;     // 1 = ทุกปี, 2 = ทุก 2 ปี (สลับชุด A/B), 3 = ทุก 3 ปี
+    baseYear?: number;          // ปีที่มีกำหนดส่ง Cal เช่น 2025, 2026, 2027
 }
 
 export interface EquipmentSubComponent {
@@ -196,6 +200,7 @@ export interface EquipmentSubComponent {
     cal?: CalDetails;
     trackingStatus: TrackingWorkflowStatus;
     notes?: string;
+    setGroup?: 'A' | 'B' | 'None' | string; // ชุดสลับใช้งาน/สลับ Cal เช่น ชุด A, ชุด B
 }
 
 export interface Equipment {
@@ -209,6 +214,8 @@ export interface Equipment {
     cal?: CalDetails;
     trackingStatus: TrackingWorkflowStatus;
     subEquipments?: EquipmentSubComponent[]; // รายการเครื่องพ่วงย่อยที่มี /
+    setGroup?: 'A' | 'B' | 'None' | string;  // ชุดสลับใช้งาน/สลับ Cal เช่น ชุด A, ชุด B
+    contactVender?: string;
     
     // Legacy & compatibility props
     code?: string;

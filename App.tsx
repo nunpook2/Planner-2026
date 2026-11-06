@@ -41,8 +41,8 @@ const App: React.FC = () => {
         setRefreshKey(prev => prev + 1);
     }, []);
 
-    const fetchAllData = useCallback(async () => {
-        setIsLoading(true);
+    const fetchAllData = useCallback(async (silent = false) => {
+        if (!silent) setIsLoading(true);
         try {
             const [fetchedEquips, fetchedTesters, fetchedSettings, fetchedWalkthroughs] = await Promise.all([
                 getEquipments(),
@@ -57,19 +57,27 @@ const App: React.FC = () => {
         } catch (err) {
             console.error('Failed to load data:', err);
         } finally {
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        fetchAllData();
+        fetchAllData(false);
     }, [fetchAllData]);
 
     useEffect(() => {
         if (refreshKey > 0) {
-            fetchAllData();
+            fetchAllData(true);
         }
     }, [refreshKey, fetchAllData]);
+
+    useEffect(() => {
+        const handleWindowFocus = () => {
+            fetchAllData(true);
+        };
+        window.addEventListener('focus', handleWindowFocus);
+        return () => window.removeEventListener('focus', handleWindowFocus);
+    }, [fetchAllData]);
 
     // Calculate bottlenecks for badge
     const bottleneckCount = React.useMemo(() => {
