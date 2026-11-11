@@ -222,8 +222,34 @@ export const EquipmentHistoryModal: React.FC<EquipmentHistoryModalProps> = ({
             };
 
             const updatedHistory = [newEntry, ...(equipment.history || [])];
+            const shouldResolveMachine =
+                (equipment.status === 'issue' || equipment.breakdownStatus?.isBroken) &&
+                (formResult === 'Resolved' || formResult === 'Pass');
+
+            const curInc = equipment.breakdownStatus?.currentIncident;
+            const resolvedBreakdownHistory = shouldResolveMachine && curInc
+                ? [
+                      {
+                          ...curInc,
+                          stage: 'repaired_verified' as const,
+                          resolvedDate: formDate,
+                          resolutionNote: formResolutionNote.trim() || formDescription.trim() || 'ซ่อมเสร็จและคืนสภาพพร้อมใช้งานปกติ 100%'
+                      },
+                      ...(equipment.breakdownStatus?.history || [])
+                  ]
+                : (equipment.breakdownStatus?.history || []);
+
             const updatedEquipment: Equipment = {
                 ...equipment,
+                ...(shouldResolveMachine
+                    ? {
+                          status: 'ready',
+                          breakdownStatus: {
+                              isBroken: false,
+                              history: resolvedBreakdownHistory
+                          }
+                      }
+                    : {}),
                 history: updatedHistory
             };
 
@@ -242,7 +268,11 @@ export const EquipmentHistoryModal: React.FC<EquipmentHistoryModalProps> = ({
             setFormResolutionNote('');
             setIsAddFormOpen(false);
 
-            setToastMessage("✅ บันทึกประวัติเครื่องมือเรียบร้อยแล้ว");
+            setToastMessage(
+                shouldResolveMachine
+                    ? "✅ บันทึกประวัติและคืนสภาพเครื่องเป็นปกติพร้อมใช้งาน (Ready 100%) เรียบร้อยแล้ว"
+                    : "✅ บันทึกประวัติเครื่องมือเรียบร้อยแล้ว"
+            );
             setTimeout(() => setToastMessage(null), 4000);
         } catch (err) {
             console.error("Failed to save history:", err);
@@ -366,10 +396,50 @@ export const EquipmentHistoryModal: React.FC<EquipmentHistoryModalProps> = ({
                                 {equipment.equipmentNo}
                             </span>
                             {isBroken ? (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-rose-600 text-white animate-pulse shadow-xs">
-                                    <AlertTriangleIcon className="h-3.5 w-3.5" />
-                                    <span>🚨 สถานะ: ชำรุด/แจ้งซ่อมอยู่</span>
-                                </span>
+                                <div className="inline-flex items-center gap-2 flex-wrap">
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-rose-600 text-white animate-pulse shadow-xs">
+                                        <AlertTriangleIcon className="h-3.5 w-3.5" />
+                                        <span>🚨 สถานะ: ชำรุด/แจ้งซ่อมอยู่</span>
+                                    </span>
+                                    <button
+                                        type="button"
+                                        disabled={isSaving}
+                                        onClick={async () => {
+                                            setIsSaving(true);
+                                            try {
+                                                const resolveDate = new Date().toISOString().split('T')[0];
+                                                const curInc = equipment.breakdownStatus?.currentIncident;
+                                                const resolvedInc = curInc
+                                                    ? {
+                                                          ...curInc,
+                                                          stage: 'repaired_verified' as const,
+                                                          resolvedDate: resolveDate,
+                                                          resolutionNote: curInc.resolutionNote || 'ตรวจรับการซ่อมแซมสมบูรณ์ เครื่องกลับคืนสู่สภาพพร้อมใช้งานปกติ 100%'
+                                                      }
+                                                    : null;
+                                                const updatedEq: Equipment = {
+                                                    ...equipment,
+                                                    status: 'ready',
+                                                    breakdownStatus: {
+                                                        isBroken: false,
+                                                        history: resolvedInc
+                                                            ? [resolvedInc, ...(equipment.breakdownStatus?.history || [])]
+                                                            : (equipment.breakdownStatus?.history || [])
+                                                    }
+                                                };
+                                                await onSaveEquipment(updatedEq);
+                                                setToastMessage(`✅ บันทึกว่าเครื่อง ${equipment.equipmentNo} ปกติพร้อมใช้งานแล้ว (Ready 100%)`);
+                                                setTimeout(() => setToastMessage(null), 4000);
+                                            } finally {
+                                                setIsSaving(false);
+                                            }
+                                        }}
+                                        className="px-3 py-1 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                                    >
+                                        <CheckCircleIcon className="h-3.5 w-3.5" />
+                                        <span>บันทึกว่าเครื่องปกติแล้ว 🟢</span>
+                                    </button>
+                                </div>
                             ) : (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                                     <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-600" />

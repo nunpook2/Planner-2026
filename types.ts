@@ -31,6 +31,7 @@ export interface Tester {
     name: string;
     team?: 'testers_3_3' | 'assistants_4_2' | null;
     requiresProficiencyCheck?: boolean;
+    role?: string;
 }
 
 export interface CategorizedTask {
@@ -148,6 +149,7 @@ export interface TrackingWorkflowStatus {
     // 4. ใบ Cert / Service Report จาก Vendor
     certReceived: boolean;
     certReceivedDate?: string;
+    certDate?: string;
     certNo?: string;
     certStatus?: 'waiting' | 'received' | 'revision_needed' | string;
     certNote?: string;
@@ -201,6 +203,7 @@ export interface EquipmentSubComponent {
     trackingStatus: TrackingWorkflowStatus;
     notes?: string;
     setGroup?: 'A' | 'B' | 'None' | string; // ชุดสลับใช้งาน/สลับ Cal เช่น ชุด A, ชุด B
+    contactVender?: string;
 }
 
 export interface Equipment {

@@ -30,11 +30,13 @@ export function getMonthsForPlan(details?: PMDetails | CalDetails, fallbackMonth
     const months = new Set<string>();
     if (!details && !fallbackMonth) return months;
 
-    const explicitVal = (details as any)?.lastPM !== undefined
-        ? (details as any).lastPM
-        : (details as any)?.lastCal !== undefined
-            ? (details as any).lastCal
-            : ((details as any)?.nextPM ?? (details as any)?.nextCal ?? fallbackMonth);
+    const lastVal = (details as any)?.lastPM ?? (details as any)?.lastCal;
+    const nextVal = (details as any)?.nextPM ?? (details as any)?.nextCal;
+    const explicitVal = (lastVal !== undefined && String(lastVal).trim() !== '')
+        ? lastVal
+        : (nextVal !== undefined && String(nextVal).trim() !== '')
+            ? nextVal
+            : fallbackMonth;
 
     const rawStr = String(explicitVal ?? '').trim();
     const lower = rawStr.toLowerCase();
@@ -62,13 +64,16 @@ export function getMonthsForPlan(details?: PMDetails | CalDetails, fallbackMonth
     }
 
     const freq = typeof details?.freqYear === 'number' ? details.freqYear : parseFloat(String(details?.freqYear || '1'));
-    if (!isNaN(freq) && freq > 1 && months.size > 0) {
+    if (!isNaN(freq) && freq > 1 && months.size === 1) {
         const baseMonths = Array.from(months);
         for (const base of baseMonths) {
             const baseIdx = MONTH_KEYS.indexOf(base as any);
             if (baseIdx !== -1) {
                 if (freq === 2) {
                     months.add(MONTH_KEYS[(baseIdx + 6) % 12]);
+                } else if (freq === 3) {
+                    months.add(MONTH_KEYS[(baseIdx + 4) % 12]);
+                    months.add(MONTH_KEYS[(baseIdx + 8) % 12]);
                 } else if (freq === 4) {
                     for (let step = 1; step < 4; step++) {
                         months.add(MONTH_KEYS[(baseIdx + step * 3) % 12]);
@@ -93,28 +98,50 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
     
     // Multi-Year & Alternating Set (A/B) Planning State
     const [planningYear, setPlanningYear] = useState<number>(2026);
-    const [filterSetCycle, setFilterSetCycle] = useState<'all' | 'due_this_year' | 'off_cycle' | 'set_a' | 'set_b'>('all');
+    const [filterSetCycle, setFilterSetCycle] = useState<'all' | 'due_this_year' | 'standby_this_year' | 'off_cycle' | 'set_a' | 'set_b'>('all');
     const [isRotationModalOpen, setIsRotationModalOpen] = useState<boolean>(false);
     const [selectedRotationEqId, setSelectedRotationEqId] = useState<string>('');
 
-    // Drag-and-Drop & Batch Group Move State
+    // Drag-and-Drop, Click-to-Move (Quick Move), and Batch Group Move State
     const [dragPayload, setDragPayload] = useState<{
         eqId: string;
         subId?: string;
+        equipmentNo: string;
+        equipmentName: string;
+        fromMonth: string;
         planType: 'pm' | 'cal' | 'both';
-        sourceMonth: string;
+        hasSubEquipments: boolean;
         isGroupBadge?: boolean;
-        label: string;
     } | null>(null);
-    const [dragOverCell, setDragOverCell] = useState<{ rowKey: string; monthKey: string } | null>(null);
+    const [dragOverCell, setDragOverCell] = useState<{ eqId: string; subId?: string; month: string } | null>(null);
+
+    // Click-to-Move mode (New alternative to dragging: click badge -> click destination month cell!)
+    const [isQuickMoveMode, setIsQuickMoveMode] = useState<boolean>(false);
+    const [quickMoveSource, setQuickMoveSource] = useState<{
+        eqId: string;
+        subId?: string;
+        equipmentNo: string;
+        equipmentName: string;
+        fromMonth: string;
+        planType: 'pm' | 'cal' | 'both';
+        hasSubEquipments: boolean;
+        includeSubs: boolean;
+    } | null>(null);
+
+    // Follow-up offer banner after moving a Primary Equipment that has sub-equipments
+    const [recentPrimaryMoveOffer, setRecentPrimaryMoveOffer] = useState<{
+        equipment: Equipment;
+        toMonth: string;
+        planType: 'pm' | 'cal' | 'both';
+    } | null>(null);
 
     const [batchMoveModal, setBatchMoveModal] = useState<{
         equipment: Equipment;
-        targetMonth: string;
+        toMonth: string;
         planType: 'pm' | 'cal' | 'both';
         scope: 'all' | 'primary_only' | 'subs_all' | 'set_a' | 'set_b' | 'custom';
         selectedSubIds: Set<string>;
-        includePrimary: boolean;
+        includePrimaryInCustom: boolean;
     } | null>(null);
 
     // Accordion states:
@@ -308,7 +335,7 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
         const isOffCycle = (hasPM && !pmCycle.isDueInYear) || (hasCal && !calCycle.isDueInYear);
 
         if (filterSetCycle === 'due_this_year') return isDue;
-        if (filterSetCycle === 'off_cycle') return isOffCycle;
+        if (filterSetCycle === 'off_cycle' || filterSetCycle === 'standby_this_year') return isOffCycle;
         return true;
     };
 
@@ -751,19 +778,19 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
         onEquipmentUpdated();
     };
 
-    // Quick change PM/Cal month or cancel ('-') directly from drawer or inspection modal
+    // Quick change PM/Cal month or cancel ('-') with immediate optimistic UI update
     const handleQuickChangePlanMonth = async (
         eqId: string,
         planType: 'pm' | 'cal',
         newMonthValue: string,
         isSub: boolean = false,
         subId?: string
-    ) => {
+    ): Promise<Equipment | null> => {
         const targetEq = equipments.find(e => e.id === eqId);
-        if (!targetEq) return;
+        if (!targetEq) return null;
 
         const cleanMonth = (!newMonthValue || newMonthValue === '-') ? '-' : (normalizeMonth(newMonthValue) || '-');
-        const updatedEq = { ...targetEq };
+        const updatedEq: Equipment = { ...targetEq };
 
         if (isSub && subId && updatedEq.subEquipments) {
             updatedEq.subEquipments = updatedEq.subEquipments.map(s => {
@@ -810,8 +837,9 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
             }
         }
 
-        await saveEquipment(updatedEq);
-        await loadData();
+        // Optimistic immediate update so UI moves in 0ms without waiting for network
+        setEquipments(prev => prev.map(item => item.id === updatedEq.id ? updatedEq : item));
+
         if (inspectionTarget && inspectionTarget.equipment.id === eqId) {
             const refreshedSub = isSub && subId
                 ? updatedEq.subEquipments?.find(s => s.id === subId)
@@ -823,80 +851,168 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                 highlightMonth: cleanMonth === '-' ? undefined : cleanMonth
             });
         }
+
+        await saveEquipment(updatedEq);
         onEquipmentUpdated();
+        return updatedEq;
     };
 
-    // Open Batch Group Move Modal for an equipment (optionally pre-filled with a dropped target month)
+    // Open Batch Group Move Modal for an equipment (pre-filled with target month)
     const openBatchMoveForEquipment = (
         eq: Equipment,
         defaultMonth?: string,
         defaultPlanType: 'pm' | 'cal' | 'both' = 'both'
     ) => {
-        const fallbackM = defaultMonth
-            || normalizeMonth(eq.cal?.lastCal || eq.pm?.lastPM || (eq.subEquipments?.[0]?.cal?.lastCal) || 'Jan')
-            || 'Jan';
+        const resolvedMonth = defaultMonth === '-'
+            ? '-'
+            : (normalizeMonth(defaultMonth || eq.cal?.lastCal || eq.pm?.lastPM || (eq.subEquipments?.[0]?.cal?.lastCal) || 'Jan') || 'Jan');
         const allSubIds = new Set((eq.subEquipments || []).map(s => s.id));
         setBatchMoveModal({
             equipment: eq,
-            targetMonth: fallbackM,
+            toMonth: resolvedMonth,
             planType: defaultPlanType,
             scope: (eq.subEquipments?.length || 0) > 0 ? 'all' : 'primary_only',
             selectedSubIds: allSubIds,
-            includePrimary: true
+            includePrimaryInCustom: true
         });
     };
 
-    // Handle dropping a dragged PM / Cal / Group badge onto a Month Cell or Cancel Zone
-    const handleCalendarCellDrop = async (targetMonth: string, dropEq?: Equipment, dropSub?: EquipmentSubComponent) => {
+    // Move all sub-equipments of a primary equipment to match the primary's newly moved month in 1 click
+    const handleMoveAllSubsToMonth = async (eq: Equipment, targetMonth: string, planType: 'pm' | 'cal' | 'both') => {
+        const cleanMonth = (!targetMonth || targetMonth === '-') ? '-' : (normalizeMonth(targetMonth) || '-');
+        const currentEq = equipments.find(e => e.id === eq.id) || eq;
+        if (!currentEq.subEquipments || currentEq.subEquipments.length === 0) return;
+
+        const updatedSubs = currentEq.subEquipments.map(sub => {
+            const nextSub = { ...sub };
+            const subHadPM = getMonthsForPlan(sub.pm).size > 0;
+            if (planType === 'pm' || (planType === 'both' && subHadPM)) {
+                nextSub.pm = {
+                    ...(sub.pm || { pmBy: 'Vender', items: '', tolerance: '' }),
+                    freqYear: cleanMonth === '-' ? '-' : (Number(sub.pm?.freqYear) || 1),
+                    lastPM: cleanMonth,
+                    nextPM: cleanMonth
+                };
+            }
+            if (planType === 'cal' || planType === 'both') {
+                nextSub.cal = {
+                    ...(sub.cal || { calBy: 'Vender', items: '', tolerance: '' }),
+                    freqYear: cleanMonth === '-' ? '-' : (Number(sub.cal?.freqYear) || 1),
+                    lastCal: cleanMonth,
+                    nextCal: cleanMonth
+                };
+            }
+            return nextSub;
+        });
+
+        const updatedEq: Equipment = { ...currentEq, subEquipments: updatedSubs };
+        setEquipments(prev => prev.map(item => item.id === updatedEq.id ? updatedEq : item));
+        setRecentPrimaryMoveOffer(null);
+
+        await saveEquipment(updatedEq);
+        onEquipmentUpdated();
+
+        const destLabel = cleanMonth === '-' ? 'ยกเลิกแผน (-)' : `เดือน ${formatMonthName(cleanMonth, 'short')}`;
+        setResolveToast(`ย้ายเครื่องพ่วงย่อยทั้งหมด (${updatedSubs.length} รายการ) ของ "${currentEq.equipmentNo}" ตามไปที่ ${destLabel} สำเร็จ`);
+        setTimeout(() => setResolveToast(null), 4000);
+    };
+
+    // Handle dropping a dragged PM / Cal / Group badge onto a Month Column (mKey or '-')
+    const handleCalendarCellDrop = async (targetMonth: string) => {
         const payload = dragPayload;
         setDragPayload(null);
         setDragOverCell(null);
         if (!payload) return;
 
-        const sourceEq = equipments.find(e => e.id === payload.eqId) || dropEq;
+        const sourceEq = equipments.find(e => e.id === payload.eqId);
         if (!sourceEq) return;
 
         const cleanTarget = (!targetMonth || targetMonth === '-') ? '-' : (normalizeMonth(targetMonth) || '-');
-        if (cleanTarget === payload.sourceMonth && !payload.isGroupBadge) return;
+        if (cleanTarget === payload.fromMonth && !payload.isGroupBadge) return;
 
-        // Case 1: Dragged a specific Sub-Equipment's PM or Cal badge -> move that sub-equipment immediately
+        // Case 1: User dragged the "+N พ่วง" group badge -> open Batch Move Modal pre-set to cleanTarget
+        if (payload.isGroupBadge) {
+            openBatchMoveForEquipment(sourceEq, cleanTarget, 'both');
+            return;
+        }
+
+        // Case 2: User dragged a specific Sub-Equipment's PM or Cal badge -> move that sub-equipment immediately!
         if (payload.subId) {
-            const subObj = (sourceEq.subEquipments || []).find(s => s.id === payload.subId) || dropSub;
-            if (payload.planType === 'pm' || payload.planType === 'cal') {
-                await handleQuickChangePlanMonth(sourceEq.id, payload.planType, cleanTarget, true, payload.subId);
-                const mLabel = cleanTarget === '-' ? 'ยกเลิกแผน (-)' : formatMonthName(cleanTarget, 'short');
-                setResolveToast(`ย้ายแผน ${payload.planType.toUpperCase()} ของ "${subObj?.equipmentNo || payload.label}" ไปที่ ${mLabel} เรียบร้อยแล้ว`);
-                setTimeout(() => setResolveToast(null), 3500);
-            }
-            return;
-        }
-
-        // Case 2: Dragged a Primary Equipment that has Sub-Equipments (or dragged the "+N พ่วง" badge)
-        // -> Open the Smart Batch Move Modal pre-set to cleanTarget so user can move the whole set or Set A/B in 1 click!
-        if ((sourceEq.subEquipments?.length || 0) > 0) {
-            openBatchMoveForEquipment(sourceEq, cleanTarget, payload.planType);
-            return;
-        }
-
-        // Case 3: Dragged a Primary Equipment with NO sub-equipments -> move immediately
-        if (payload.planType === 'pm' || payload.planType === 'cal') {
-            await handleQuickChangePlanMonth(sourceEq.id, payload.planType, cleanTarget, false);
+            const pType = payload.planType === 'pm' ? 'pm' : 'cal';
+            await handleQuickChangePlanMonth(sourceEq.id, pType, cleanTarget, true, payload.subId);
             const mLabel = cleanTarget === '-' ? 'ยกเลิกแผน (-)' : formatMonthName(cleanTarget, 'short');
-            setResolveToast(`ย้ายแผน ${payload.planType.toUpperCase()} ของ "${sourceEq.equipmentNo}" ไปที่ ${mLabel} เรียบร้อยแล้ว`);
-            setTimeout(() => setResolveToast(null), 3500);
+            setResolveToast(`✅ ย้ายแผน ${pType.toUpperCase()} ของเครื่องพ่วง "${payload.equipmentNo}" ไปที่ ${mLabel} เรียบร้อยแล้ว`);
+            setTimeout(() => setResolveToast(null), 4000);
+            return;
+        }
+
+        // Case 3: User dragged a Primary Equipment's PM or Cal badge -> move the Primary Equipment IMMEDIATELY!
+        // And if it has sub-equipments, show a 1-click banner asking if they want to move sub-equipments too.
+        const pType = payload.planType === 'pm' ? 'pm' : 'cal';
+        const updatedPrimary = await handleQuickChangePlanMonth(sourceEq.id, pType, cleanTarget, false);
+        const mLabel = cleanTarget === '-' ? 'ยกเลิกแผน (-)' : formatMonthName(cleanTarget, 'short');
+
+        if (updatedPrimary && (updatedPrimary.subEquipments?.length || 0) > 0) {
+            setRecentPrimaryMoveOffer({
+                equipment: updatedPrimary,
+                toMonth: cleanTarget,
+                planType: pType
+            });
+        } else {
+            setResolveToast(`✅ ย้ายแผน ${pType.toUpperCase()} ของ "${sourceEq.equipmentNo}" ไปที่ ${mLabel} เรียบร้อยแล้ว`);
+            setTimeout(() => setResolveToast(null), 4000);
+        }
+    };
+
+    // Execute Click-to-Move (Quick Move) when user clicks a badge and then clicks a destination month
+    const handleExecuteQuickMove = async (targetMonth: string) => {
+        if (!quickMoveSource) return;
+        const src = quickMoveSource;
+        setQuickMoveSource(null);
+
+        const sourceEq = equipments.find(e => e.id === src.eqId);
+        if (!sourceEq) return;
+
+        const cleanTarget = (!targetMonth || targetMonth === '-') ? '-' : (normalizeMonth(targetMonth) || '-');
+        const mLabel = cleanTarget === '-' ? 'ยกเลิกแผน (-)' : formatMonthName(cleanTarget, 'short');
+
+        if (src.subId) {
+            const pType = src.planType === 'pm' ? 'pm' : 'cal';
+            await handleQuickChangePlanMonth(sourceEq.id, pType, cleanTarget, true, src.subId);
+            setResolveToast(`✅ ย้ายแผน ${pType.toUpperCase()} ของ "${src.equipmentNo}" ไปที่ ${mLabel} สำเร็จ`);
+            setTimeout(() => setResolveToast(null), 4000);
+            return;
+        }
+
+        const pType = src.planType === 'pm' ? 'pm' : 'cal';
+        const updatedPrimary = await handleQuickChangePlanMonth(sourceEq.id, pType, cleanTarget, false);
+
+        if (updatedPrimary && (updatedPrimary.subEquipments?.length || 0) > 0) {
+            if (src.includeSubs) {
+                await handleMoveAllSubsToMonth(updatedPrimary, cleanTarget, pType);
+            } else {
+                setRecentPrimaryMoveOffer({
+                    equipment: updatedPrimary,
+                    toMonth: cleanTarget,
+                    planType: pType
+                });
+            }
+        } else {
+            setResolveToast(`✅ ย้ายแผน ${pType.toUpperCase()} ของ "${sourceEq.equipmentNo}" ไปที่ ${mLabel} สำเร็จ`);
+            setTimeout(() => setResolveToast(null), 4000);
         }
     };
 
     // Execute Batch Move across Primary + Selected Sub-Equipments (or Set A / Set B)
     const handleExecuteBatchMove = async () => {
         if (!batchMoveModal) return;
-        const { equipment, targetMonth, planType, scope, selectedSubIds, includePrimary } = batchMoveModal;
-        const cleanMonth = (!targetMonth || targetMonth === '-') ? '-' : (normalizeMonth(targetMonth) || '-');
+        const { equipment, toMonth, planType, scope, selectedSubIds, includePrimaryInCustom } = batchMoveModal;
+        const cleanMonth = (!toMonth || toMonth === '-') ? '-' : (normalizeMonth(toMonth) || '-');
 
         const shouldMovePrimary =
             scope === 'all' ||
             scope === 'primary_only' ||
-            (scope === 'custom' && includePrimary);
+            (scope === 'custom' && includePrimaryInCustom);
 
         const shouldMoveSub = (sub: EquipmentSubComponent): boolean => {
             if (scope === 'primary_only') return false;
@@ -908,7 +1024,8 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
             return false;
         };
 
-        const updatedEq: Equipment = { ...equipment };
+        const currentEq = equipments.find(e => e.id === equipment.id) || equipment;
+        const updatedEq: Equipment = { ...currentEq };
         let movedCount = 0;
 
         if (shouldMovePrimary) {
@@ -938,8 +1055,6 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                 if (!shouldMoveSub(sub)) return sub;
                 movedCount++;
                 const nextSub = { ...sub };
-                // Notice: if a sub-equipment originally only had Cal (no PM), and planType === 'both',
-                // only update PM if it already had PM or if planType === 'pm' explicitly, so we don't accidentally add PM to weights/sieves!
                 const subHadPM = getMonthsForPlan(sub.pm).size > 0;
                 if (planType === 'pm' || (planType === 'both' && subHadPM)) {
                     nextSub.pm = {
@@ -961,13 +1076,16 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
             });
         }
 
-        await saveEquipment(updatedEq);
-        await loadData();
+        // Optimistic immediate UI update
+        setEquipments(prev => prev.map(item => item.id === updatedEq.id ? updatedEq : item));
         setBatchMoveModal(null);
+        setRecentPrimaryMoveOffer(null);
+
+        await saveEquipment(updatedEq);
         onEquipmentUpdated();
 
         const destLabel = cleanMonth === '-' ? 'ยกเลิกแผน (-)' : `เดือน ${formatMonthName(cleanMonth, 'short')}`;
-        setResolveToast(`ย้ายแผนของชุดเครื่องมือ "${equipment.equipmentNo}" จำนวน ${movedCount} รายการ ไปยัง ${destLabel} สำเร็จ`);
+        setResolveToast(`✅ ย้ายแผนของชุดเครื่องมือ "${equipment.equipmentNo}" จำนวน ${movedCount} รายการ ไปยัง ${destLabel} สำเร็จ`);
         setTimeout(() => setResolveToast(null), 4000);
     };
 
@@ -1140,6 +1258,22 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                     <div className="flex items-center gap-2 flex-wrap">
                         <button
                             type="button"
+                            onClick={() => {
+                                setIsQuickMoveMode(prev => !prev);
+                                if (isQuickMoveMode) setQuickMoveSource(null);
+                            }}
+                            className={`px-3 py-1.5 font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer border ${
+                                isQuickMoveMode || quickMoveSource
+                                    ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/25 ring-2 ring-amber-300'
+                                    : 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700'
+                            }`}
+                            title="โหมดจิ้มย้ายเดือนด่วน (ไม่ต้องลากเมาส์): คลิกที่ป้าย PM หรือ Cal แล้วคลิกเลือกเดือนปลายทางได้ทันที 100% แม่นยำ"
+                        >
+                            <span>⚡ {isQuickMoveMode || quickMoveSource ? 'โหมดจิ้มย้ายเดือน: เปิดอยู่ (คลิกป้าย PM/Cal ได้เลย)' : 'โหมดจิ้มย้ายเดือนด่วน (ไม่ต้องลาก)'}</span>
+                        </button>
+
+                        <button
+                            type="button"
                             onClick={() => openRotationManager()}
                             className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition-all active:scale-95 shadow-sm shadow-purple-500/20 cursor-pointer"
                             title="ตั้งค่าเครื่องมือที่ผลัดกันใช้งาน ชุด A / ชุด B หรือรอบ Cal ทุก 2-3 ปี"
@@ -1210,13 +1344,13 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                 {showGuide && (
                     <div className="bg-slate-50 dark:bg-base-950 p-3.5 rounded-xl border border-slate-200 dark:border-base-800 text-xs animate-fade-in space-y-1.5">
                         <div className="flex items-center justify-between font-bold text-slate-900 dark:text-white">
-                            <span>📌 คู่มือการวางลากย้ายเดือน (Drag & Drop), ย้ายยกชุด และการจัดการชุดสลับ A/B (ISO/IEC 17025):</span>
+                            <span>📌 คู่มือการย้ายเดือนแบบแม่นยำ 100% (ทั้งแบบจิ้มย้าย 2 คลิก & ลากวางล็อกคอลัมน์) และการจัดการชุดสลับ A/B:</span>
                             <button onClick={() => setShowGuide(false)} className="text-slate-400 hover:text-slate-600 text-xs font-bold">ปิด ✕</button>
                         </div>
                         <ul className="text-slate-600 dark:text-slate-300 space-y-1 font-medium text-xs">
-                            <li>• <strong>✋ จับวางลากย้ายเดือน (Drag & Drop):</strong> ใช้เมาส์คลิกค้างที่กล่อง <code>🛠️ PM</code>, <code>🎯 Cal</code> หรือ <code>+N พ่วง</code> แล้วลากไปวางในคอลัมน์เดือนที่ต้องการได้ทันที!</li>
-                            <li>• <strong>⇄ ย้ายยกชุด / เลือกเฉพาะชุด A หรือ B:</strong> เมื่อลากเครื่องหลักที่มีเครื่องพ่วงย่อย หรือกดปุ่ม <code>⇄ ย้ายยกชุด</code> ระบบจะเปิดหน้าต่างให้เลือกว่าจะย้าย <strong>ทั้งชุดพร้อมกัน</strong>, <strong>เฉพาะเครื่องหลัก</strong>, <strong>เฉพาะชุด A</strong>, <strong>เฉพาะชุด B</strong> หรือ <strong>ติ๊กเลือกรายการย่อยเอง</strong></li>
-                            <li>• <strong>🔄 ระบบสลับชุด A / ชุด B & รอบหลายปี (เช่น Test Sieve / Density Float):</strong> กดสลับ <strong>ปีแผนงาน (2025 | 2026 | 2027 | 2028)</strong> ด้านล่างเพื่อดูว่าปีนี้ต้องส่งชุดไหน รายการที่ถึงรอบส่งจะขึ้นกล่องสีเขียว <code>🎯 Cal</code> ส่วนชุดที่เว้นรอบใช้งานสลับจะขึ้นป้ายเส้นประ <code>⏸️ เว้นปี 2026 · Cal ปี 2027</code> ชัดเจนไม่สับสน</li>
+                            <li>• <strong>⚡ วิธีที่ 1: โหมดจิ้มย้ายเดือนด่วน (เสถียรและแม่นยำ 100% ไม่ต้องลากเมาส์):</strong> คลิกที่ปุ่ม <code>⇄</code> บนกล่อง <code>🛠️ PM</code> หรือ <code>🎯 Cal</code> (หรือเปิดปุ่ม <strong>โหมดจิ้มย้ายเดือนด่วน</strong> ด้านบน) จากนั้นคลิกเลือกเดือนปลายทาง <code>[👉 ย้ายมา ...]</code> ในแถวเดียวกัน หรือจากแถบเลือกเดือนด้านบนได้ทันที!</li>
+                            <li>• <strong>✋ วิธีที่ 2: ลากวางแบบล็อกคอลัมน์อัตโนมัติ (Column-Locked Drag & Drop):</strong> ลากกล่อง <code>🛠️ PM</code> หรือ <code>🎯 Cal</code> ไปปล่อยที่คอลัมน์เดือนไหนก็ได้ (แม้เมาส์ขยับขึ้นลงข้ามแถว ระบบจะล็อกเครื่องมือต้นทางให้อัตโนมัติและย้ายเข้าเดือนที่ปล่อยเมาส์ทันทีโดยไม่เพี้ยนตำแหน่ง)</li>
+                            <li>• <strong>⇄ ย้ายยกชุด / เลือกเฉพาะชุด A หรือ B:</strong> ลากป้าย <code>+N พ่วง</code> หรือกดปุ่ม <code>⇄ ย้ายยกชุด</code> เพื่อเลือกย้ายพร้อมกันทั้งเครื่องหลัก+พ่วง, เฉพาะชุด A หรือเฉพาะชุด B</li>
                         </ul>
                     </div>
                 )}
@@ -1229,6 +1363,55 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                             <span>{resolveToast}</span>
                         </div>
                         <button onClick={() => setResolveToast(null)} className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 rounded-md text-[10px]">✕</button>
+                    </div>
+                )}
+
+                {/* 1-CLICK FOLLOW-UP BANNER AFTER MOVING PRIMARY MACHINE WITH SUB-EQUIPMENTS */}
+                {recentPrimaryMoveOffer && (
+                    <div className="p-3 bg-indigo-950 text-white rounded-xl border border-indigo-400 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-fade-in text-xs">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="px-2 py-0.5 bg-emerald-500 text-white font-black rounded text-[11px]">✓ ย้ายเครื่องหลักสำเร็จ</span>
+                            <span>
+                                ย้าย <strong>{recentPrimaryMoveOffer.equipment.equipmentNo}</strong> ไปที่เดือน{' '}
+                                <strong className="text-amber-300 underline">
+                                    {recentPrimaryMoveOffer.toMonth === '-' ? 'ยกเลิกแผน (-)' : formatMonthName(recentPrimaryMoveOffer.toMonth, 'short')}
+                                </strong>{' '}
+                                แล้ว — เครื่องนี้มีเครื่องพ่วงย่อย <strong>{recentPrimaryMoveOffer.equipment.subEquipments?.length || 0} รายการ</strong> ต้องการย้ายตามไปด้วยไหม?
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                            <button
+                                type="button"
+                                onClick={() => handleMoveAllSubsToMonth(
+                                    recentPrimaryMoveOffer.equipment,
+                                    recentPrimaryMoveOffer.toMonth,
+                                    recentPrimaryMoveOffer.planType
+                                )}
+                                className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-xs cursor-pointer transition-all shadow-sm"
+                            >
+                                ⚡ ย้ายเครื่องพ่วงทั้งหมด ({recentPrimaryMoveOffer.equipment.subEquipments?.length}) ตามไปเดือน {recentPrimaryMoveOffer.toMonth === '-' ? '-' : formatMonthName(recentPrimaryMoveOffer.toMonth, 'short')} ทันที
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const eq = recentPrimaryMoveOffer.equipment;
+                                    const tm = recentPrimaryMoveOffer.toMonth;
+                                    const pt = recentPrimaryMoveOffer.planType;
+                                    setRecentPrimaryMoveOffer(null);
+                                    openBatchMoveForEquipment(eq, tm, pt);
+                                }}
+                                className="px-2.5 py-1.5 bg-indigo-800 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs border border-indigo-500 cursor-pointer"
+                            >
+                                ⇄ เลือกเฉพาะชุด A / B
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setRecentPrimaryMoveOffer(null)}
+                                className="px-2 py-1 text-indigo-300 hover:text-white font-bold text-xs cursor-pointer"
+                            >
+                                ปิด ✕
+                            </button>
+                        </div>
                     </div>
                 )}
 
@@ -1288,7 +1471,7 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                     <div className="flex items-center justify-between text-xs flex-wrap gap-2">
                         <span className="font-extrabold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                             <span>📅 ภาพรวมแผนประจำปี {planningYear} (12 เดือน)</span>
-                            <span className="text-[11px] font-normal text-slate-400">(คลิกที่เดือนเพื่อกรอง · หรือลากกล่อง PM/Cal ในตารางไปวางข้ามเดือนได้เลย)</span>
+                            <span className="text-[11px] font-normal text-slate-400">(คลิกที่เดือนเพื่อกรอง · ลากวางข้ามเดือน · หรือกด ⇄ บนป้าย PM/Cal เพื่อจิ้มย้ายเดือนทันที)</span>
                         </span>
                         {filterMonth !== 'all' && (
                             <button 
@@ -1411,6 +1594,82 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                 </div>
             </div>
 
+            {/* STICKY QUICK-MOVE BAR (CLICK-TO-MOVE WITHOUT DRAGGING - 100% STABLE) */}
+            {quickMoveSource && (
+                <div className="sticky top-2 z-40 bg-amber-950/95 text-white p-3.5 rounded-2xl border-2 border-amber-400 shadow-2xl space-y-2.5 animate-fade-in">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap text-xs">
+                            <span className="px-2 py-0.5 bg-amber-400 text-slate-950 font-black rounded-md">
+                                ⚡ โหมดจิ้มย้ายเดือนทันใจ
+                            </span>
+                            <span>กำลังเลือกย้ายแผน</span>
+                            <span className="px-2 py-0.5 bg-amber-800 text-amber-100 font-black rounded">
+                                {quickMoveSource.planType === 'pm' ? '🛠️ PM' : quickMoveSource.planType === 'cal' ? '🎯 Cal' : '🛠️ PM + 🎯 Cal'}
+                            </span>
+                            <span>ของ</span>
+                            <span className="font-mono font-black bg-white/15 px-2 py-0.5 rounded text-amber-200">
+                                {quickMoveSource.equipmentNo}
+                            </span>
+                            <span className="font-bold text-slate-200">({quickMoveSource.equipmentName})</span>
+                            <span className="text-amber-300">
+                                จากเดือน <strong>{formatMonthName(quickMoveSource.fromMonth, 'short')}</strong> 👉 คลิกเลือกเดือนปลายทางด้านล่าง หรือคลิกในช่องเดือนของแถวได้ทันที:
+                            </span>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                            {quickMoveSource.hasSubEquipments && !quickMoveSource.subId && (
+                                <label className="flex items-center gap-1.5 text-xs font-extrabold text-amber-200 cursor-pointer bg-amber-900/80 px-2.5 py-1 rounded-lg border border-amber-500/60">
+                                    <input
+                                        type="checkbox"
+                                        checked={quickMoveSource.includeSubs}
+                                        onChange={e => setQuickMoveSource(prev => prev ? { ...prev, includeSubs: e.target.checked } : null)}
+                                        className="rounded accent-amber-400"
+                                    />
+                                    <span>ย้ายเครื่องพ่วงย่อยทั้งหมดตามไปด้วย</span>
+                                </label>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => setQuickMoveSource(null)}
+                                className="px-2.5 py-1 bg-amber-900 hover:bg-amber-800 text-amber-200 rounded-lg text-xs font-bold cursor-pointer"
+                            >
+                                ยกเลิก ✕
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 sm:grid-cols-7 md:grid-cols-13 gap-1.5">
+                        {MONTH_KEYS.map(mKey => {
+                            const isFrom = quickMoveSource.fromMonth === mKey;
+                            return (
+                                <button
+                                    key={mKey}
+                                    type="button"
+                                    onClick={() => handleExecuteQuickMove(mKey)}
+                                    className={`py-1.5 px-2 rounded-xl text-xs font-black transition-all cursor-pointer border ${
+                                        isFrom
+                                            ? 'bg-amber-900/50 text-amber-300 border-amber-700 opacity-60'
+                                            : 'bg-amber-400 hover:bg-amber-300 text-slate-950 border-white shadow-sm hover:scale-105'
+                                    }`}
+                                >
+                                    <div>{MONTH_INFO_MAP[mKey].thShort}</div>
+                                    <div className="text-[9px] font-mono opacity-75">{mKey}</div>
+                                </button>
+                            );
+                        })}
+                        <button
+                            type="button"
+                            onClick={() => handleExecuteQuickMove('-')}
+                            className="py-1.5 px-2 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-500 text-white border border-rose-300 transition-all cursor-pointer shadow-sm"
+                            title="ยกเลิกแผน PM/Cal (-)"
+                        >
+                            <div>🗑️ ยกเลิก</div>
+                            <div className="text-[9px] opacity-80">(- ไม่มี -)</div>
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* DRAG-AND-DROP ACTIVE HELPER BAR & CANCEL DROP ZONE */}
             {dragPayload && (
                 <div className="sticky top-2 z-40 bg-indigo-950/95 text-white p-3 rounded-2xl border-2 border-indigo-400 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
@@ -1425,7 +1684,7 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                             </span>{' '}
                             <span className="font-bold text-slate-200">{dragPayload.equipmentName}</span>
                             <p className="text-[11px] text-indigo-300">
-                                ปล่อยเมาส์ลงในช่องเดือน (ม.ค. – ธ.ค.) ของแถวเครื่องมือนี้เพื่อย้ายเดือนทันที (หากมีเครื่องพ่วง ระบบจะถามว่าจะย้ายยกชุดหรือแยกชุด)
+                                ปล่อยเมาส์ลงในคอลัมน์เดือน (ม.ค. – ธ.ค.) ที่ต้องการได้เลย — ระบบล็อกแถวเครื่องมือนี้ให้อัตโนมัติแม้เมาส์เลื่อนข้ามบรรทัด!
                             </p>
                         </div>
                     </div>
@@ -1434,12 +1693,15 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                     <div
                         onDragOver={e => {
                             e.preventDefault();
-                            setDragOverCell({ eqId: dragPayload.eqId, subId: dragPayload.subId, month: '-' });
+                            e.dataTransfer.dropEffect = 'move';
+                            if (dragOverCell?.month !== '-') {
+                                setDragOverCell({ eqId: dragPayload.eqId, subId: dragPayload.subId, month: '-' });
+                            }
                         }}
-                        onDragLeave={() => setDragOverCell(null)}
                         onDrop={e => {
                             e.preventDefault();
-                            handleCalendarCellDrop(dragPayload.eqId, dragPayload.subId, '-');
+                            e.stopPropagation();
+                            handleCalendarCellDrop('-');
                         }}
                         className={`px-4 py-2 rounded-xl border-2 border-dashed text-xs font-black transition-all cursor-pointer shrink-0 ${
                             dragOverCell?.month === '-'
@@ -1474,30 +1736,47 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                     ชื่อเครื่องมือ & ผู้ดูแล
                                 </th>
 
-                                {/* 12 Monthly Calendar Columns */}
+                                {/* 12 Monthly Calendar Columns (Also valid Drop Targets for the dragged item!) */}
                                 {MONTH_KEYS.map((mKey) => {
                                     const info = MONTH_INFO_MAP[mKey];
                                     const isCurrent = currentMonthKey === mKey;
                                     const isFilterActive = filterMonth === mKey;
+                                    const isColumnDragOver = Boolean(dragPayload && dragOverCell?.month === mKey);
 
                                     return (
                                         <th
                                             key={mKey}
-                                            className={`px-2 py-2.5 min-w-[96px] max-w-[115px] text-center border-l border-slate-200 dark:border-base-800 ${
-                                                isFilterActive
-                                                    ? 'bg-indigo-100/80 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200'
-                                                    : isCurrent
-                                                        ? 'bg-indigo-50/50 dark:bg-indigo-950/30'
-                                                        : ''
+                                            onDragOver={e => {
+                                                if (!dragPayload) return;
+                                                e.preventDefault();
+                                                e.dataTransfer.dropEffect = 'move';
+                                                if (dragOverCell?.month !== mKey) {
+                                                    setDragOverCell({ eqId: dragPayload.eqId, subId: dragPayload.subId, month: mKey });
+                                                }
+                                            }}
+                                            onDrop={e => {
+                                                if (!dragPayload) return;
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleCalendarCellDrop(mKey);
+                                            }}
+                                            className={`px-2 py-2.5 min-w-[96px] max-w-[115px] text-center border-l border-slate-200 dark:border-base-800 transition-colors ${
+                                                isColumnDragOver
+                                                    ? 'bg-indigo-600 text-white ring-2 ring-inset ring-amber-300'
+                                                    : isFilterActive
+                                                        ? 'bg-indigo-100/80 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200'
+                                                        : isCurrent
+                                                            ? 'bg-indigo-50/50 dark:bg-indigo-950/30'
+                                                            : ''
                                             }`}
                                         >
                                             <div className="flex flex-col items-center">
                                                 <span className="font-extrabold text-[11px] flex items-center gap-1">
                                                     <span>{info.thShort}</span>
-                                                    {isCurrent && <span className="text-[8px] text-indigo-600 font-bold">●</span>}
+                                                    {isCurrent && !isColumnDragOver && <span className="text-[8px] text-indigo-600 font-bold">●</span>}
                                                 </span>
-                                                <span className="text-[9px] font-mono text-slate-400 lowercase">
-                                                    {info.key}
+                                                <span className={`text-[9px] font-mono lowercase ${isColumnDragOver ? 'text-indigo-100 font-bold' : 'text-slate-400'}`}>
+                                                    {isColumnDragOver ? 'ปล่อยที่นี่' : info.key}
                                                 </span>
                                             </div>
                                         </th>
@@ -1537,11 +1816,18 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                     const setBSubCount = (eq.subEquipments || []).filter(s => inferEquipmentSetGroup(s.equipmentName, s.setGroup) === 'B').length;
                                     const hasAlternatingSets = setASubCount > 0 && setBSubCount > 0;
 
+                                    const isPrimaryRowBeingDragged = Boolean(dragPayload && dragPayload.eqId === eq.id && !dragPayload.subId);
+                                    const isPrimaryRowQuickMoveActive = Boolean(quickMoveSource && quickMoveSource.eqId === eq.id && !quickMoveSource.subId);
+
                                     return (
                                         <React.Fragment key={`${eq.id || 'eq'}_${idx}`}>
                                             {/* PRIMARY EQUIPMENT ROW */}
                                             <tr className={`hover:bg-slate-50/80 dark:hover:bg-base-800/50 transition-colors ${
-                                                isDetailExpanded ? 'bg-indigo-50/30 dark:bg-indigo-950/20' : ''
+                                                isPrimaryRowBeingDragged || isPrimaryRowQuickMoveActive
+                                                    ? 'bg-amber-50/70 dark:bg-amber-950/30 ring-2 ring-inset ring-amber-400'
+                                                    : isDetailExpanded
+                                                        ? 'bg-indigo-50/30 dark:bg-indigo-950/20'
+                                                        : ''
                                             }`}>
                                                 {/* Col 1: Expand Sub-components Chevron */}
                                                 <td className="px-2 py-3 text-center sticky left-0 bg-white dark:bg-base-900 z-20">
@@ -1635,7 +1921,7 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                     </div>
                                                 </td>
 
-                                                {/* 12 MONTH CALENDAR CELLS (DRAG & DROP ENABLED) */}
+                                                {/* 12 MONTH CALENDAR CELLS (COLUMN-LOCKED DRAG & DROP + 1-CLICK QUICK MOVE) */}
                                                 {MONTH_KEYS.map((mKey) => {
                                                     const hasPM = primaryPMMonths.has(mKey);
                                                     const hasCal = primaryCalMonths.has(mKey);
@@ -1656,35 +1942,56 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
 
                                                     const subsOffCycleInMonth = subsInMonthAll.filter(s => !subsDueInMonth.includes(s));
 
-                                                    const isDropTarget = dragOverCell?.eqId === eq.id && !dragOverCell?.subId && dragOverCell?.month === mKey;
+                                                    // Highlight target cell when dragging over this month column
+                                                    const isDropTarget = Boolean(
+                                                        dragPayload &&
+                                                        dragOverCell?.month === mKey &&
+                                                        (dragPayload.eqId === eq.id || dragOverCell?.eqId === eq.id)
+                                                    );
 
                                                     return (
                                                         <td
                                                             key={mKey}
                                                             onDragOver={e => {
+                                                                if (!dragPayload) return;
                                                                 e.preventDefault();
-                                                                if (dragOverCell?.eqId !== eq.id || dragOverCell?.subId || dragOverCell?.month !== mKey) {
+                                                                e.dataTransfer.dropEffect = 'move';
+                                                                if (dragOverCell?.month !== mKey || dragOverCell?.eqId !== eq.id || dragOverCell?.subId !== undefined) {
                                                                     setDragOverCell({ eqId: eq.id, month: mKey });
                                                                 }
                                                             }}
-                                                            onDragLeave={() => {
-                                                                if (dragOverCell?.eqId === eq.id && dragOverCell?.month === mKey) {
-                                                                    setDragOverCell(null);
-                                                                }
-                                                            }}
                                                             onDrop={e => {
+                                                                if (!dragPayload) return;
                                                                 e.preventDefault();
-                                                                handleCalendarCellDrop(eq.id, undefined, mKey);
+                                                                e.stopPropagation();
+                                                                handleCalendarCellDrop(mKey);
                                                             }}
                                                             className={`px-1.5 py-2.5 text-center border-l border-slate-100 dark:border-base-800 align-top transition-colors ${
                                                                 isDropTarget
-                                                                    ? 'bg-indigo-100/90 dark:bg-indigo-900/60 ring-2 ring-inset ring-indigo-500'
-                                                                    : filterMonth === mKey
-                                                                        ? 'bg-indigo-50/40 dark:bg-indigo-950/30'
-                                                                        : ''
+                                                                    ? 'bg-indigo-100/95 dark:bg-indigo-900/70 ring-2 ring-inset ring-indigo-600'
+                                                                    : isPrimaryRowQuickMoveActive && quickMoveSource?.fromMonth !== mKey
+                                                                        ? 'bg-amber-50/70 dark:bg-amber-950/30 hover:bg-amber-100/90 cursor-pointer'
+                                                                        : filterMonth === mKey
+                                                                            ? 'bg-indigo-50/40 dark:bg-indigo-950/30'
+                                                                            : ''
                                                             }`}
                                                         >
                                                             <div className="flex flex-col gap-1 min-h-[38px] justify-center">
+                                                                {/* 1-CLICK TARGET BUTTON WHEN THIS PRIMARY ROW IS IN QUICK-MOVE MODE */}
+                                                                {isPrimaryRowQuickMoveActive && quickMoveSource && quickMoveSource.fromMonth !== mKey && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={e => {
+                                                                            e.stopPropagation();
+                                                                            handleExecuteQuickMove(mKey);
+                                                                        }}
+                                                                        className="w-full py-1 px-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-md text-[10px] shadow-xs border border-amber-600 cursor-pointer transition-all hover:scale-105"
+                                                                        title={`คลิกเพื่อย้าย ${quickMoveSource.planType.toUpperCase()} มาที่เดือน ${MONTH_INFO_MAP[mKey].thShort}`}
+                                                                    >
+                                                                        👉 ย้ายมา {MONTH_INFO_MAP[mKey].thShort}
+                                                                    </button>
+                                                                )}
+
                                                                 {/* PM Box in Month */}
                                                                 {hasPM && (
                                                                     primaryPMCycle.isDueInYear ? (
@@ -1692,6 +1999,8 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                                             draggable
                                                                             onDragStart={e => {
                                                                                 e.stopPropagation();
+                                                                                e.dataTransfer.effectAllowed = 'move';
+                                                                                try { e.dataTransfer.setData('text/plain', `${eq.id}:pm:${mKey}`); } catch (_) {}
                                                                                 setDragPayload({
                                                                                     eqId: eq.id,
                                                                                     equipmentNo: eq.equipmentNo,
@@ -1705,13 +2014,49 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                                                 setDragPayload(null);
                                                                                 setDragOverCell(null);
                                                                             }}
-                                                                            onClick={() => setInspectionTarget({ equipment: eq, highlightType: 'pm', highlightMonth: mKey })}
-                                                                            className="px-1.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 border border-indigo-200/90 dark:border-indigo-800 rounded-md text-[10px] font-bold cursor-grab active:cursor-grabbing transition-all shadow-2xs hover:scale-102 text-left select-none"
-                                                                            title={`คลิกดูรายละเอียด หรือลากกล่องนี้ไปวางเดือนอื่นเพื่อย้ายเดือน PM ของ ${eq.equipmentNo}`}
+                                                                            onClick={() => {
+                                                                                if (isQuickMoveMode) {
+                                                                                    setQuickMoveSource({
+                                                                                        eqId: eq.id,
+                                                                                        equipmentNo: eq.equipmentNo,
+                                                                                        equipmentName: eq.equipmentName,
+                                                                                        fromMonth: mKey,
+                                                                                        planType: 'pm',
+                                                                                        hasSubEquipments: subCount > 0,
+                                                                                        includeSubs: false
+                                                                                    });
+                                                                                } else {
+                                                                                    setInspectionTarget({ equipment: eq, highlightType: 'pm', highlightMonth: mKey });
+                                                                                }
+                                                                            }}
+                                                                            className={`px-1.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 border rounded-md text-[10px] font-bold cursor-grab active:cursor-grabbing transition-all shadow-2xs hover:scale-102 text-left select-none ${
+                                                                                quickMoveSource?.eqId === eq.id && !quickMoveSource?.subId && quickMoveSource?.planType === 'pm'
+                                                                                    ? 'ring-2 ring-amber-400 border-amber-500'
+                                                                                    : 'border-indigo-200/90 dark:border-indigo-800'
+                                                                            }`}
+                                                                            title={`ลากกล่องนี้ไปวางเดือนอื่น หรือกดปุ่ม ⇄ เพื่อจิ้มย้ายเดือน PM ของ ${eq.equipmentNo}`}
                                                                         >
                                                                             <div className="flex items-center justify-between gap-1">
                                                                                 <span className="font-black text-indigo-700 dark:text-indigo-300">🛠️ PM</span>
-                                                                                <span className="text-[9px] text-slate-500 font-mono truncate">{eq.pm?.pmBy || 'Vender'}</span>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={e => {
+                                                                                        e.stopPropagation();
+                                                                                        setQuickMoveSource({
+                                                                                            eqId: eq.id,
+                                                                                            equipmentNo: eq.equipmentNo,
+                                                                                            equipmentName: eq.equipmentName,
+                                                                                            fromMonth: mKey,
+                                                                                            planType: 'pm',
+                                                                                            hasSubEquipments: subCount > 0,
+                                                                                            includeSubs: false
+                                                                                        });
+                                                                                    }}
+                                                                                    className="px-1 py-0.2 bg-indigo-200/80 hover:bg-amber-400 text-indigo-900 hover:text-slate-950 rounded text-[9px] font-black cursor-pointer transition-colors"
+                                                                                    title="คลิกเพื่อจิ้มย้ายเดือน PM ทันทีโดยไม่ต้องลากเมาส์"
+                                                                                >
+                                                                                    ⇄
+                                                                                </button>
                                                                             </div>
                                                                         </div>
                                                                     ) : (
@@ -1733,6 +2078,8 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                                             draggable
                                                                             onDragStart={e => {
                                                                                 e.stopPropagation();
+                                                                                e.dataTransfer.effectAllowed = 'move';
+                                                                                try { e.dataTransfer.setData('text/plain', `${eq.id}:cal:${mKey}`); } catch (_) {}
                                                                                 setDragPayload({
                                                                                     eqId: eq.id,
                                                                                     equipmentNo: eq.equipmentNo,
@@ -1746,17 +2093,49 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                                                 setDragPayload(null);
                                                                                 setDragOverCell(null);
                                                                             }}
-                                                                            onClick={() => setInspectionTarget({ equipment: eq, highlightType: 'cal', highlightMonth: mKey })}
-                                                                            className="px-1.5 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200 border border-emerald-200/90 dark:border-emerald-800 rounded-md text-[10px] font-bold cursor-grab active:cursor-grabbing transition-all shadow-2xs hover:scale-102 text-left select-none"
-                                                                            title={`คลิกดูรายละเอียด หรือลากกล่องนี้ไปวางเดือนอื่นเพื่อย้ายเดือน Cal ของ ${eq.equipmentNo}`}
+                                                                            onClick={() => {
+                                                                                if (isQuickMoveMode) {
+                                                                                    setQuickMoveSource({
+                                                                                        eqId: eq.id,
+                                                                                        equipmentNo: eq.equipmentNo,
+                                                                                        equipmentName: eq.equipmentName,
+                                                                                        fromMonth: mKey,
+                                                                                        planType: 'cal',
+                                                                                        hasSubEquipments: subCount > 0,
+                                                                                        includeSubs: false
+                                                                                    });
+                                                                                } else {
+                                                                                    setInspectionTarget({ equipment: eq, highlightType: 'cal', highlightMonth: mKey });
+                                                                                }
+                                                                            }}
+                                                                            className={`px-1.5 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200 border rounded-md text-[10px] font-bold cursor-grab active:cursor-grabbing transition-all shadow-2xs hover:scale-102 text-left select-none ${
+                                                                                quickMoveSource?.eqId === eq.id && !quickMoveSource?.subId && quickMoveSource?.planType === 'cal'
+                                                                                    ? 'ring-2 ring-amber-400 border-amber-500'
+                                                                                    : 'border-emerald-200/90 dark:border-emerald-800'
+                                                                            }`}
+                                                                            title={`ลากกล่องนี้ไปวางเดือนอื่น หรือกดปุ่ม ⇄ เพื่อจิ้มย้ายเดือน Cal ของ ${eq.equipmentNo}`}
                                                                         >
                                                                             <div className="flex items-center justify-between gap-1">
                                                                                 <span className="font-black text-emerald-700 dark:text-emerald-300">🎯 Cal</span>
-                                                                                {eq.trackingStatus?.result === 'Pass' ? (
-                                                                                    <span className="text-[9px] font-black text-emerald-600">✓</span>
-                                                                                ) : (
-                                                                                    <span className="text-[9px] text-slate-500 font-mono truncate">{eq.cal?.calBy || 'Vender'}</span>
-                                                                                )}
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={e => {
+                                                                                        e.stopPropagation();
+                                                                                        setQuickMoveSource({
+                                                                                            eqId: eq.id,
+                                                                                            equipmentNo: eq.equipmentNo,
+                                                                                            equipmentName: eq.equipmentName,
+                                                                                            fromMonth: mKey,
+                                                                                            planType: 'cal',
+                                                                                            hasSubEquipments: subCount > 0,
+                                                                                            includeSubs: false
+                                                                                        });
+                                                                                    }}
+                                                                                    className="px-1 py-0.2 bg-emerald-200/80 hover:bg-amber-400 text-emerald-900 hover:text-slate-950 rounded text-[9px] font-black cursor-pointer transition-colors"
+                                                                                    title="คลิกเพื่อจิ้มย้ายเดือน Cal ทันทีโดยไม่ต้องลากเมาส์"
+                                                                                >
+                                                                                    ⇄
+                                                                                </button>
                                                                             </div>
                                                                             {primaryCalCycle.intervalYears > 1 && (
                                                                                 <div className="text-[8px] text-emerald-700 dark:text-emerald-300 font-extrabold mt-0.5">
@@ -1769,6 +2148,8 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                                             draggable
                                                                             onDragStart={e => {
                                                                                 e.stopPropagation();
+                                                                                e.dataTransfer.effectAllowed = 'move';
+                                                                                try { e.dataTransfer.setData('text/plain', `${eq.id}:cal:${mKey}`); } catch (_) {}
                                                                                 setDragPayload({
                                                                                     eqId: eq.id,
                                                                                     equipmentNo: eq.equipmentNo,
@@ -1803,13 +2184,16 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                                         draggable
                                                                         onDragStart={e => {
                                                                             e.stopPropagation();
+                                                                            e.dataTransfer.effectAllowed = 'move';
+                                                                            try { e.dataTransfer.setData('text/plain', `${eq.id}:group:${mKey}`); } catch (_) {}
                                                                             setDragPayload({
                                                                                 eqId: eq.id,
                                                                                 equipmentNo: eq.equipmentNo,
                                                                                 equipmentName: `${eq.equipmentName} (+${subsInMonthAll.length} พ่วง)`,
                                                                                 fromMonth: mKey,
                                                                                 planType: 'both',
-                                                                                hasSubEquipments: true
+                                                                                hasSubEquipments: true,
+                                                                                isGroupBadge: true
                                                                             });
                                                                         }}
                                                                         onDragEnd={() => {
@@ -1818,7 +2202,7 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                                         }}
                                                                         onClick={() => toggleExpandSubs(eq.id)}
                                                                         className="w-full text-center text-[9px] font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-600 bg-slate-100 dark:bg-base-800 rounded px-1 py-0.5 border border-dashed border-slate-300 hover:border-indigo-400 transition-colors cursor-grab active:cursor-grabbing select-none"
-                                                                        title={`มี ${subsInMonthAll.length} เครื่องพ่วงย่อยในเดือนนี้ (คลิกเพื่อกางดู หรือลากกล่องนี้ไปวางเดือนอื่นเพื่อย้ายทั้งชุด)`}
+                                                                        title={`มี ${subsInMonthAll.length} เครื่องพ่วงย่อยในเดือนนี้ (คลิกเพื่อกางดู หรือลากกล่องนี้ไปวางเดือนอื่นเพื่อย้ายยกชุด)`}
                                                                     >
                                                                         {subsDueInMonth.length > 0 && (
                                                                             <div className="text-emerald-700 dark:text-emerald-300 font-extrabold">
@@ -1834,7 +2218,7 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                                 )}
 
                                                                 {/* Empty Cell */}
-                                                                {!hasPM && !hasCal && (!subsInMonthAll.length || isSubsExpanded) && (
+                                                                {!hasPM && !hasCal && (!subsInMonthAll.length || isSubsExpanded) && !(isPrimaryRowQuickMoveActive && quickMoveSource?.fromMonth !== mKey) && (
                                                                     <span className="text-slate-200 dark:text-base-800 text-center font-bold text-xs select-none">
                                                                         ·
                                                                     </span>
@@ -1906,7 +2290,7 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                 </td>
                                             </tr>
 
-                                            {/* NESTED SUB-COMPONENTS ROWS (ALIGNED TO THE 12 MONTH CALENDAR + DRAG & DROP + SET A/B) */}
+                                            {/* NESTED SUB-COMPONENTS ROWS (ALIGNED TO THE 12 MONTH CALENDAR + COLUMN-LOCKED DRAG & DROP + QUICK MOVE + SET A/B) */}
                                             {isSubsExpanded && (eq.subEquipments || []).map((sub, sIdx) => {
                                                 const subPMMonths = getMonthsForPlan(sub.pm);
                                                 const subCalMonths = getMonthsForPlan(sub.cal);
@@ -1926,8 +2310,18 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                     if (!hasAnyOff) return null;
                                                 }
 
+                                                const isSubRowBeingDragged = Boolean(dragPayload && dragPayload.eqId === eq.id && dragPayload.subId === sub.id);
+                                                const isSubRowQuickMoveActive = Boolean(quickMoveSource && quickMoveSource.eqId === eq.id && quickMoveSource.subId === sub.id);
+
                                                 return (
-                                                    <tr key={sub.id || sIdx} className="bg-slate-50/70 dark:bg-base-950/40 hover:bg-slate-100/70 dark:hover:bg-base-800/40 transition-colors border-l-2 border-indigo-500">
+                                                    <tr
+                                                        key={sub.id || sIdx}
+                                                        className={`transition-colors border-l-2 border-indigo-500 ${
+                                                            isSubRowBeingDragged || isSubRowQuickMoveActive
+                                                                ? 'bg-amber-50/80 dark:bg-amber-950/35 ring-2 ring-inset ring-amber-400'
+                                                                : 'bg-slate-50/70 dark:bg-base-950/40 hover:bg-slate-100/70 dark:hover:bg-base-800/40'
+                                                        }`}
+                                                    >
                                                         {/* Sub Chevron */}
                                                         <td className="px-2 py-2 text-center text-indigo-500 font-extrabold text-xs sticky left-0 bg-slate-50/90 dark:bg-base-950/90 z-20">
                                                             ↳
@@ -1998,45 +2392,67 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                             </div>
                                                         </td>
 
-                                                        {/* Sub Monthly Calendar Cells (DRAG & DROP ENABLED) */}
+                                                        {/* Sub Monthly Calendar Cells (COLUMN-LOCKED DRAG & DROP + QUICK MOVE) */}
                                                         {MONTH_KEYS.map((mKey) => {
                                                             const subHasPM = subPMMonths.has(mKey);
                                                             const subHasCal = subCalMonths.has(mKey);
-                                                            const isSubDropTarget = dragOverCell?.eqId === eq.id && dragOverCell?.subId === sub.id && dragOverCell?.month === mKey;
+                                                            const isSubDropTarget = Boolean(
+                                                                dragPayload &&
+                                                                dragOverCell?.month === mKey &&
+                                                                ((dragPayload.eqId === eq.id && dragPayload.subId === sub.id) ||
+                                                                 (dragOverCell?.eqId === eq.id && dragOverCell?.subId === sub.id))
+                                                            );
 
                                                             return (
                                                                 <td
                                                                     key={mKey}
                                                                     onDragOver={e => {
+                                                                        if (!dragPayload) return;
                                                                         e.preventDefault();
-                                                                        if (dragOverCell?.eqId !== eq.id || dragOverCell?.subId !== sub.id || dragOverCell?.month !== mKey) {
+                                                                        e.dataTransfer.dropEffect = 'move';
+                                                                        if (dragOverCell?.month !== mKey || dragOverCell?.eqId !== eq.id || dragOverCell?.subId !== sub.id) {
                                                                             setDragOverCell({ eqId: eq.id, subId: sub.id, month: mKey });
                                                                         }
                                                                     }}
-                                                                    onDragLeave={() => {
-                                                                        if (dragOverCell?.eqId === eq.id && dragOverCell?.subId === sub.id && dragOverCell?.month === mKey) {
-                                                                            setDragOverCell(null);
-                                                                        }
-                                                                    }}
                                                                     onDrop={e => {
+                                                                        if (!dragPayload) return;
                                                                         e.preventDefault();
-                                                                        handleCalendarCellDrop(eq.id, sub.id, mKey);
+                                                                        e.stopPropagation();
+                                                                        handleCalendarCellDrop(mKey);
                                                                     }}
                                                                     className={`px-1.5 py-1.5 text-center border-l border-slate-100 dark:border-base-800 align-top transition-colors ${
                                                                         isSubDropTarget
-                                                                            ? 'bg-indigo-100/90 dark:bg-indigo-900/60 ring-2 ring-inset ring-indigo-500'
-                                                                            : filterMonth === mKey
-                                                                                ? 'bg-indigo-50/40 dark:bg-indigo-950/30'
-                                                                                : ''
+                                                                            ? 'bg-indigo-100/95 dark:bg-indigo-900/70 ring-2 ring-inset ring-indigo-600'
+                                                                            : isSubRowQuickMoveActive && quickMoveSource?.fromMonth !== mKey
+                                                                                ? 'bg-amber-50/70 dark:bg-amber-950/30 hover:bg-amber-100/90 cursor-pointer'
+                                                                                : filterMonth === mKey
+                                                                                    ? 'bg-indigo-50/40 dark:bg-indigo-950/30'
+                                                                                    : ''
                                                                     }`}
                                                                 >
                                                                     <div className="flex flex-col gap-0.5 min-h-[30px] justify-center">
+                                                                        {/* 1-CLICK TARGET BUTTON WHEN THIS SUB-EQUIPMENT ROW IS IN QUICK-MOVE MODE */}
+                                                                        {isSubRowQuickMoveActive && quickMoveSource && quickMoveSource.fromMonth !== mKey && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={e => {
+                                                                                    e.stopPropagation();
+                                                                                    handleExecuteQuickMove(mKey);
+                                                                                }}
+                                                                                className="w-full py-0.5 px-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded text-[9px] shadow-xs border border-amber-600 cursor-pointer transition-all hover:scale-105"
+                                                                            >
+                                                                                👉 {MONTH_INFO_MAP[mKey].thShort}
+                                                                            </button>
+                                                                        )}
+
                                                                         {subHasPM && (
                                                                             subPMCycle.isDueInYear ? (
                                                                                 <div 
                                                                                     draggable
                                                                                     onDragStart={e => {
                                                                                         e.stopPropagation();
+                                                                                        e.dataTransfer.effectAllowed = 'move';
+                                                                                        try { e.dataTransfer.setData('text/plain', `${eq.id}:${sub.id}:pm:${mKey}`); } catch (_) {}
                                                                                         setDragPayload({
                                                                                             eqId: eq.id,
                                                                                             subId: sub.id,
@@ -2051,11 +2467,46 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                                                         setDragPayload(null);
                                                                                         setDragOverCell(null);
                                                                                     }}
-                                                                                    onClick={() => setInspectionTarget({ equipment: eq, subComponent: sub, highlightType: 'pm', highlightMonth: mKey })}
-                                                                                    className="px-1 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 border border-indigo-200 rounded text-[9px] font-bold cursor-grab active:cursor-grabbing hover:scale-102 transition-all select-none"
-                                                                                    title={`คลิกดูรายละเอียด หรือลากไปวางเดือนอื่นเพื่อย้ายเดือน PM ของ ${sub.equipmentNo}`}
+                                                                                    onClick={() => {
+                                                                                        if (isQuickMoveMode) {
+                                                                                            setQuickMoveSource({
+                                                                                                eqId: eq.id,
+                                                                                                subId: sub.id,
+                                                                                                equipmentNo: sub.equipmentNo,
+                                                                                                equipmentName: sub.equipmentName,
+                                                                                                fromMonth: mKey,
+                                                                                                planType: 'pm',
+                                                                                                hasSubEquipments: false,
+                                                                                                includeSubs: false
+                                                                                            });
+                                                                                        } else {
+                                                                                            setInspectionTarget({ equipment: eq, subComponent: sub, highlightType: 'pm', highlightMonth: mKey });
+                                                                                        }
+                                                                                    }}
+                                                                                    className="px-1 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 border border-indigo-200 rounded text-[9px] font-bold cursor-grab active:cursor-grabbing hover:scale-102 transition-all select-none flex items-center justify-between gap-0.5"
+                                                                                    title={`ลากไปวางเดือนอื่น หรือกด ⇄ เพื่อจิ้มย้ายเดือน PM ของ ${sub.equipmentNo}`}
                                                                                 >
-                                                                                    🛠️ PM
+                                                                                    <span>🛠️ PM</span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={e => {
+                                                                                            e.stopPropagation();
+                                                                                            setQuickMoveSource({
+                                                                                                eqId: eq.id,
+                                                                                                subId: sub.id,
+                                                                                                equipmentNo: sub.equipmentNo,
+                                                                                                equipmentName: sub.equipmentName,
+                                                                                                fromMonth: mKey,
+                                                                                                planType: 'pm',
+                                                                                                hasSubEquipments: false,
+                                                                                                includeSubs: false
+                                                                                            });
+                                                                                        }}
+                                                                                        className="px-1 bg-indigo-200/80 hover:bg-amber-400 text-indigo-900 hover:text-slate-950 rounded text-[8px] font-black cursor-pointer"
+                                                                                        title="คลิกเพื่อจิ้มย้ายเดือน PM ทันที"
+                                                                                    >
+                                                                                        ⇄
+                                                                                    </button>
                                                                                 </div>
                                                                             ) : (
                                                                                 <div
@@ -2072,6 +2523,8 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                                                     draggable
                                                                                     onDragStart={e => {
                                                                                         e.stopPropagation();
+                                                                                        e.dataTransfer.effectAllowed = 'move';
+                                                                                        try { e.dataTransfer.setData('text/plain', `${eq.id}:${sub.id}:cal:${mKey}`); } catch (_) {}
                                                                                         setDragPayload({
                                                                                             eqId: eq.id,
                                                                                             subId: sub.id,
@@ -2086,18 +2539,57 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                                                         setDragPayload(null);
                                                                                         setDragOverCell(null);
                                                                                     }}
-                                                                                    onClick={() => setInspectionTarget({ equipment: eq, subComponent: sub, highlightType: 'cal', highlightMonth: mKey })}
-                                                                                    className="px-1 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 border border-emerald-200 rounded text-[9px] font-bold cursor-grab active:cursor-grabbing hover:scale-102 transition-all select-none"
-                                                                                    title={`คลิกดูรายละเอียด หรือลากไปวางเดือนอื่นเพื่อย้ายเดือน Cal ของ ${sub.equipmentNo}`}
+                                                                                    onClick={() => {
+                                                                                        if (isQuickMoveMode) {
+                                                                                            setQuickMoveSource({
+                                                                                                eqId: eq.id,
+                                                                                                subId: sub.id,
+                                                                                                equipmentNo: sub.equipmentNo,
+                                                                                                equipmentName: sub.equipmentName,
+                                                                                                fromMonth: mKey,
+                                                                                                planType: 'cal',
+                                                                                                hasSubEquipments: false,
+                                                                                                includeSubs: false
+                                                                                            });
+                                                                                        } else {
+                                                                                            setInspectionTarget({ equipment: eq, subComponent: sub, highlightType: 'cal', highlightMonth: mKey });
+                                                                                        }
+                                                                                    }}
+                                                                                    className="px-1 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 border border-emerald-200 rounded text-[9px] font-bold cursor-grab active:cursor-grabbing hover:scale-102 transition-all select-none flex items-center justify-between gap-0.5"
+                                                                                    title={`ลากไปวางเดือนอื่น หรือกด ⇄ เพื่อจิ้มย้ายเดือน Cal ของ ${sub.equipmentNo}`}
                                                                                 >
-                                                                                    <span>🎯 Cal</span>
-                                                                                    {subSetGroup && <span className="ml-1 text-[8px] font-black opacity-85">({subSetGroup})</span>}
+                                                                                    <span>
+                                                                                        🎯 Cal
+                                                                                        {subSetGroup && <span className="ml-0.5 text-[8px] font-black opacity-85">({subSetGroup})</span>}
+                                                                                    </span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={e => {
+                                                                                            e.stopPropagation();
+                                                                                            setQuickMoveSource({
+                                                                                                eqId: eq.id,
+                                                                                                subId: sub.id,
+                                                                                                equipmentNo: sub.equipmentNo,
+                                                                                                equipmentName: sub.equipmentName,
+                                                                                                fromMonth: mKey,
+                                                                                                planType: 'cal',
+                                                                                                hasSubEquipments: false,
+                                                                                                includeSubs: false
+                                                                                            });
+                                                                                        }}
+                                                                                        className="px-1 bg-emerald-200/80 hover:bg-amber-400 text-emerald-900 hover:text-slate-950 rounded text-[8px] font-black cursor-pointer"
+                                                                                        title="คลิกเพื่อจิ้มย้ายเดือน Cal ทันที"
+                                                                                    >
+                                                                                        ⇄
+                                                                                    </button>
                                                                                 </div>
                                                                             ) : (
                                                                                 <div
                                                                                     draggable
                                                                                     onDragStart={e => {
                                                                                         e.stopPropagation();
+                                                                                        e.dataTransfer.effectAllowed = 'move';
+                                                                                        try { e.dataTransfer.setData('text/plain', `${eq.id}:${sub.id}:cal:${mKey}`); } catch (_) {}
                                                                                         setDragPayload({
                                                                                             eqId: eq.id,
                                                                                             subId: sub.id,
@@ -2120,7 +2612,7 @@ export const EquipmentTab: React.FC<EquipmentTabProps> = ({ equipments: propEqui
                                                                                 </div>
                                                                             )
                                                                         )}
-                                                                        {!subHasPM && !subHasCal && (
+                                                                        {!subHasPM && !subHasCal && !(isSubRowQuickMoveActive && quickMoveSource?.fromMonth !== mKey) && (
                                                                             <span className="text-slate-200 dark:text-base-850 text-center text-[10px]">·</span>
                                                                         )}
                                                                     </div>

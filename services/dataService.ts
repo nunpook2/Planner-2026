@@ -4,6 +4,7 @@ import type { Tester, CategorizedTask, AssignedTask, DailySchedule, RawTask, Ass
 import { TaskCategory } from '../types';
 import { normalizeMonth, isToleranceString, inferEquipmentSetGroup } from '../utils/monthUtils';
 import { MASTER_EQUIPMENTS, MASTER_EQUIPMENT_OWNERS } from './masterEquipments';
+import { REAL_LAB_ROSTER, FIRESTORE_DOC_TO_STAFF, getStaffProfile, isMachineOrDocId } from '../utils/staffUtils';
 
 // Export firestore for use in components
 export { firestore };
@@ -346,6 +347,18 @@ const normalizeEquipment = (raw: any): Equipment => {
     const sanitizedCal = sanitizeCalDetails(raw.cal, raw);
     const primarySetGroup = raw.setGroup || inferEquipmentSetGroup(equipName, raw.setGroup);
 
+    const isResolvedBreakdown = raw.breakdownStatus && raw.breakdownStatus.isBroken === false;
+    const normalizedStatus = isResolvedBreakdown ? 'ready' : (raw.status || 'ready');
+    const normalizedBreakdownStatus = raw.breakdownStatus
+        ? {
+            isBroken: Boolean(raw.breakdownStatus.isBroken && normalizedStatus === 'issue'),
+            ...(raw.breakdownStatus.isBroken && normalizedStatus === 'issue' && raw.breakdownStatus.currentIncident
+                ? { currentIncident: raw.breakdownStatus.currentIncident }
+                : {}),
+            history: Array.isArray(raw.breakdownStatus.history) ? raw.breakdownStatus.history : []
+        }
+        : undefined;
+
     return {
         ...raw,
         id: getDeterministicEquipId(cleanNo || rawNo, raw.id),
@@ -355,7 +368,8 @@ const normalizeEquipment = (raw: any): Equipment => {
         owner,
         department: raw.department || 'PCRD Lab',
         location: raw.location || '',
-        status: raw.status || 'ready',
+        status: normalizedStatus,
+        ...(normalizedBreakdownStatus ? { breakdownStatus: normalizedBreakdownStatus } : {}),
         pmMonth: sanitizedPM.lastPM,
         calMonth: sanitizedCal.lastCal,
         pm: sanitizedPM,
@@ -488,7 +502,17 @@ export const getEquipments = async (): Promise<Equipment[]> => {
                 id: doc.id || doc.data()?.id
             }));
 
-            serverDocs.forEach((serverEq: any) => {
+            // Sort so legacy docs are processed BEFORE current-version docs, preventing stale legacy docs from overwriting resolved status
+            const sortedServerDocs = [...serverDocs].sort((a: any, b: any) => {
+                const aCurr = a?.syncVersion === CURRENT_MASTER_VERSION ? 1 : 0;
+                const bCurr = b?.syncVersion === CURRENT_MASTER_VERSION ? 1 : 0;
+                if (aCurr !== bCurr) return aCurr - bCurr;
+                const aTime = a?.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
+                const bTime = b?.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+                return aTime - bTime;
+            });
+
+            sortedServerDocs.forEach((serverEq: any) => {
                 if (!serverEq) return;
                 const cleanNo = normalizeEquipmentNo(serverEq.equipmentNo || serverEq.code || '');
                 if (!cleanNo || cleanNo.includes('/')) return;
@@ -511,19 +535,34 @@ export const getEquipments = async (): Promise<Equipment[]> => {
                     const serverTime = serverEq.lastUpdated ? new Date(serverEq.lastUpdated).getTime() : 0;
 
                     if (serverTime >= localTime || !currentInMap.lastUpdated) {
-                        mergedMap.set(cleanNo, { ...currentInMap, ...serverEq });
+                        const mergedDoc = { ...currentInMap, ...serverEq };
+                        if (serverEq.status === 'ready' || serverEq.breakdownStatus?.isBroken === false) {
+                            mergedDoc.status = 'ready';
+                            mergedDoc.breakdownStatus = {
+                                isBroken: false,
+                                history: serverEq.breakdownStatus?.history || currentInMap.breakdownStatus?.history || []
+                            };
+                        }
+                        mergedMap.set(cleanNo, mergedDoc);
                     }
                 } else {
                     // Legacy Firestore document (before CURRENT_MASTER_VERSION):
-                    // Never allow legacy docs to wipe out PM/Cal months or subEquipments list,
-                    // but DO preserve any active 6-step trackingStatus, breakdownStatus, or history!
+                    // Only merge legacy status if currentInMap has NOT already been updated in CURRENT_MASTER_VERSION
+                    const alreadyUpdatedInCurrentVersion =
+                        currentInMap.syncVersion === CURRENT_MASTER_VERSION || Boolean(currentInMap.lastUpdated);
+
                     const mergedLegacy = { ...currentInMap };
                     if (hasActiveTrackingProgress(serverEq.trackingStatus) && !hasActiveTrackingProgress(mergedLegacy.trackingStatus)) {
                         mergedLegacy.trackingStatus = serverEq.trackingStatus;
                     }
-                    if (serverEq.breakdownStatus && (serverEq.breakdownStatus.isBroken || (serverEq.breakdownStatus.history && serverEq.breakdownStatus.history.length > 0))) {
+                    if (!alreadyUpdatedInCurrentVersion && serverEq.breakdownStatus && (serverEq.breakdownStatus.isBroken || (serverEq.breakdownStatus.history && serverEq.breakdownStatus.history.length > 0))) {
                         mergedLegacy.breakdownStatus = serverEq.breakdownStatus;
                         if (serverEq.status) mergedLegacy.status = serverEq.status;
+                    } else if (alreadyUpdatedInCurrentVersion && serverEq.breakdownStatus?.history?.length && (!mergedLegacy.breakdownStatus?.history || mergedLegacy.breakdownStatus.history.length === 0)) {
+                        mergedLegacy.breakdownStatus = {
+                            ...(mergedLegacy.breakdownStatus || { isBroken: false }),
+                            history: serverEq.breakdownStatus.history
+                        };
                     }
                     if (Array.isArray(serverEq.history) && serverEq.history.length > 0 && (!mergedLegacy.history || mergedLegacy.history.length === 0)) {
                         mergedLegacy.history = serverEq.history;
@@ -737,10 +776,31 @@ export const saveEquipment = async (equipment: Omit<Equipment, 'id'> & { id?: st
     const deterministicId = getDeterministicEquipId(cleanEqNo || equipment.equipmentNo || '', equipment.id);
     const nowIso = new Date().toISOString();
 
+    const isResolvedOrReady =
+        equipment.status === 'ready' ||
+        (equipment.breakdownStatus !== undefined && equipment.breakdownStatus.isBroken === false);
+
+    const normalizedBreakdownForSave = equipment.breakdownStatus
+        ? isResolvedOrReady
+            ? {
+                  isBroken: false,
+                  currentIncident: null,
+                  history: Array.isArray(equipment.breakdownStatus.history) ? equipment.breakdownStatus.history : []
+              }
+            : {
+                  ...equipment.breakdownStatus,
+                  isBroken: true
+              }
+        : isResolvedOrReady
+        ? { isBroken: false, currentIncident: null, history: [] }
+        : undefined;
+
     const stampedEquipment: any = {
         ...(equipment as Equipment),
         id: deterministicId,
         equipmentNo: cleanEqNo || equipment.equipmentNo,
+        status: isResolvedOrReady ? 'ready' : (equipment.status || 'ready'),
+        ...(normalizedBreakdownForSave ? { breakdownStatus: normalizedBreakdownForSave } : {}),
         syncVersion: CURRENT_MASTER_VERSION,
         lastUpdated: nowIso
     };
@@ -749,7 +809,12 @@ export const saveEquipment = async (equipment: Omit<Equipment, 'id'> & { id?: st
         const backupStr = localStorage.getItem('backup_equipments') || '[]';
         let list = JSON.parse(backupStr) as Equipment[];
         const targetEqNo = stampedEquipment.equipmentNo ? String(stampedEquipment.equipmentNo).trim() : '';
-        
+
+        const localEntry = JSON.parse(JSON.stringify(stampedEquipment));
+        if (localEntry.breakdownStatus && localEntry.breakdownStatus.currentIncident === null) {
+            delete localEntry.breakdownStatus.currentIncident;
+        }
+
         const existingIdx = list.findIndex(e => 
             String(e.id) === deterministicId || 
             (targetEqNo && normalizeEquipmentNo(e.equipmentNo || '') === targetEqNo)
@@ -758,10 +823,10 @@ export const saveEquipment = async (equipment: Omit<Equipment, 'id'> & { id?: st
         if (existingIdx >= 0) {
             list[existingIdx] = { 
                 ...list[existingIdx], 
-                ...stampedEquipment
+                ...localEntry
             };
         } else {
-            list.push(stampedEquipment);
+            list.push(localEntry);
         }
         safeSetItem('backup_equipments', JSON.stringify(list));
     } catch (e) {
@@ -769,12 +834,19 @@ export const saveEquipment = async (equipment: Omit<Equipment, 'id'> & { id?: st
     }
 
     // Deep clean all undefined values at any level to prevent Firestore setDoc crashes
+    // Note: currentIncident: null is preserved by JSON.stringify so Firestore merge: true explicitly clears currentIncident!
     const cleanData = JSON.parse(JSON.stringify(stampedEquipment));
 
     if (firestore) {
         try {
-            const writePromise = getCollection('equipments').doc(deterministicId).set(cleanData, { merge: true });
-            
+            const col = getCollection('equipments');
+            const writePromise = col.doc(deterministicId).set(cleanData, { merge: true });
+
+            // If the incoming equipment had a different legacy document ID, also update/delete that legacy ID so it never conflicts
+            if (equipment.id && equipment.id !== deterministicId) {
+                col.doc(equipment.id).set(cleanData, { merge: true }).catch(() => {});
+            }
+
             // Timeout after 3500ms so Firestore never freezes the application UI
             await Promise.race([
                 writePromise,
@@ -847,21 +919,87 @@ export const batchImportEquipments = async (equipments: Omit<Equipment, 'id'>[])
 };
 
 // --- Tester Management ---
+const getDefaultTestersFromRoster = (): Tester[] => {
+    return REAL_LAB_ROSTER.map(prof => {
+        const isAsst = prof.team.includes('Assistants') || prof.team.includes('4:2');
+        return {
+            id: prof.docId || prof.key,
+            name: `${prof.thName} (${prof.enName})`,
+            team: isAsst ? 'assistants_4_2' : 'testers_3_3',
+            requiresProficiencyCheck: isAsst
+        };
+    });
+};
+
+const normalizeTesterList = (rawList: Tester[]): Tester[] => {
+    if (!rawList || rawList.length === 0) {
+        return getDefaultTestersFromRoster();
+    }
+    const normalized = rawList.map(t => {
+        const mappedKey = FIRESTORE_DOC_TO_STAFF[t.id];
+        const rosterMatch = mappedKey
+            ? REAL_LAB_ROSTER.find(r => r.key.toLowerCase() === mappedKey.toLowerCase())
+            : REAL_LAB_ROSTER.find(r =>
+                r.key.toLowerCase() === (t.name || '').trim().toLowerCase() ||
+                r.enName.toLowerCase() === (t.name || '').trim().toLowerCase() ||
+                r.thShort.toLowerCase() === (t.name || '').replace(/^คุณ/, '').trim().toLowerCase()
+            );
+
+        if (rosterMatch) {
+            const isAsst = rosterMatch.team.includes('Assistants') || rosterMatch.team.includes('4:2');
+            const cleanDisplay = (!t.name || isMachineOrDocId(t.name))
+                ? `${rosterMatch.thName} (${rosterMatch.enName})`
+                : t.name;
+            return {
+                ...t,
+                id: t.id || rosterMatch.docId || rosterMatch.key,
+                name: cleanDisplay,
+                team: t.team || (isAsst ? 'assistants_4_2' : 'testers_3_3'),
+                requiresProficiencyCheck: t.requiresProficiencyCheck ?? isAsst
+            };
+        }
+
+        return {
+            ...t,
+            team: t.team || 'testers_3_3'
+        };
+    });
+
+    // Also ensure all 15 official roster members exist in the list if not already present
+    const existingKeys = new Set(normalized.map(t => getStaffProfile(t.name || t.id, normalized).key.toLowerCase()));
+    REAL_LAB_ROSTER.forEach(prof => {
+        if (!existingKeys.has(prof.key.toLowerCase())) {
+            const isAsst = prof.team.includes('Assistants') || prof.team.includes('4:2');
+            normalized.push({
+                id: prof.docId || prof.key,
+                name: `${prof.thName} (${prof.enName})`,
+                team: isAsst ? 'assistants_4_2' : 'testers_3_3',
+                requiresProficiencyCheck: isAsst
+            });
+        }
+    });
+
+    return normalized;
+};
+
 export const getTesters = async (): Promise<Tester[]> => {
     if (!firestore) {
         const backup = localStorage.getItem('backup_testers');
-        return backup ? JSON.parse(backup) : [];
+        const parsed = backup ? JSON.parse(backup) : [];
+        return normalizeTesterList(parsed);
     }
     try {
         const snapshot = await safeGet(getCollection('analysts'));
         const list = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }) as Tester);
-        safeSetItem('backup_testers', JSON.stringify(list));
-        return list;
+        const normalized = normalizeTesterList(list);
+        safeSetItem('backup_testers', JSON.stringify(normalized));
+        return normalized;
     } catch (err) {
         (window as any).firestoreQuotaExceeded = true;
         console.error("getTesters error, loading backup:", err);
         const backup = localStorage.getItem('backup_testers');
-        return backup ? JSON.parse(backup) : [];
+        const parsed = backup ? JSON.parse(backup) : [];
+        return normalizeTesterList(parsed);
     }
 };
 
@@ -1376,7 +1514,7 @@ const DEFAULT_DISTILLATION_LOGS: DistillationLog[] = [
         outputAmount: 3880,
         yieldPercent: 97.0,
         date: '2026-10-22',
-        recorderName: 'โต้',
+        recorderName: 'โต้ง',
         notes: 'กลั่นบริสุทธิ์ HPLC grade สำหรับ Mobile Phase',
         createdAt: '2026-10-22T14:15:00.000Z'
     },
@@ -1398,7 +1536,7 @@ const DEFAULT_DISTILLATION_LOGS: DistillationLog[] = [
         outputAmount: 3360,
         yieldPercent: 96.0,
         date: '2026-10-15',
-        recorderName: 'กิตติศักดิ์',
+        recorderName: 'บอย',
         notes: 'กลั่นรีไซเคิลตัวทำละลายล้างคราบไขมันในแล็บ',
         createdAt: '2026-10-15T16:20:00.000Z'
     },
@@ -1409,7 +1547,7 @@ const DEFAULT_DISTILLATION_LOGS: DistillationLog[] = [
         outputAmount: 2420,
         yieldPercent: 96.8,
         date: '2026-10-10',
-        recorderName: 'ชัยกร',
+        recorderName: 'ป้อง',
         notes: 'กลั่นสารรีไซเคิลเกรดวิเคราะห์ ค่า UV absorbance ผ่านเกณฑ์สเปก',
         createdAt: '2026-10-10T13:45:00.000Z'
     },
@@ -1494,14 +1632,10 @@ export const addDistillationLog = async (log: Omit<DistillationLog, 'id' | 'crea
         console.error("Error saving distillation log to local backup:", e);
     }
 
-    // Also persist to Firestore if available
+    // Persist to Firestore with the same deterministic doc ID so updates/deletes always match
     if (firestore) {
         try {
-            const docRef = await getCollection('distillationLogs').add({
-                ...log,
-                createdAt
-            });
-            newRecord.id = docRef.id;
+            await getCollection('distillationLogs').doc(newId).set(newRecord);
         } catch (e) {
             console.warn("Could not save distillation log to firestore:", e);
         }
@@ -1523,9 +1657,9 @@ export const updateDistillationLog = async (id: string, updates: Partial<Distill
         console.error("Error updating local backup_distillationLogs:", e);
     }
 
-    if (firestore && !id.startsWith('dist_seed_') && !id.startsWith('dist_')) {
+    if (firestore && id) {
         try {
-            await getCollection('distillationLogs').doc(id).update(updates);
+            await getCollection('distillationLogs').doc(id).set(updates, { merge: true });
         } catch (e) {
             console.warn("Could not update distillation log on firestore:", e);
         }
@@ -1545,7 +1679,7 @@ export const deleteDistillationLog = async (id: string): Promise<void> => {
         console.error("Error deleting from local backup_distillationLogs:", e);
     }
 
-    if (firestore && !id.startsWith('dist_seed_') && !id.startsWith('dist_')) {
+    if (firestore && id) {
         try {
             await getCollection('distillationLogs').doc(id).delete();
         } catch (e) {

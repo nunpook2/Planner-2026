@@ -334,7 +334,8 @@ export function getMultiYearCycleStatus(
         };
     }
 
-    const baseYear = Number(details?.baseYear) || 2026;
+    const defaultBaseYear = (interval === 2 && setGroup === 'A') ? 2027 : 2026;
+    const baseYear = Number(details?.baseYear) || defaultBaseYear;
     const diff = ((planningYear - baseYear) % interval + interval) % interval;
     const isDueInYear = diff === 0;
     const nextDueYear = isDueInYear ? planningYear : planningYear + (interval - diff);
